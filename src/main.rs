@@ -172,8 +172,7 @@ fn main() -> Result<(), Error> {
         let listeners = listeners_s.await;
         let incoming = stream::select_all(listeners.iter().map(|l| l.incoming()));
 
-        // For each incoming connection start a new task to handle it and throw it on the thread
-        // pool
+        // For each incoming connection start a new task to handle it
         let handle_sockets = incoming.map(|socket| {
             // incoming.next() is an error when the underlying `accept` call yielded an error
             // In POSIX those are protocol errors we can't really handle, so we just log the error
