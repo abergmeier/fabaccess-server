@@ -17,7 +17,7 @@ use signal_hook::iterator::Signals;
 
 use clap::{App, Arg};
 
-use api::api as api_capnp;
+use api::gen as api_capnp;
 
 use futures::prelude::*;
 use futures::executor::{LocalPool, ThreadPool};

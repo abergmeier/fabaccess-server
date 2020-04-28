@@ -1,6 +1,6 @@
 // module needs to be top level for generated functions to be in scope:
 // https://github.com/capnproto/capnproto-rust/issues/16
-pub mod api {
+pub mod gen {
     include!(concat!(env!("OUT_DIR"), "/schema/api_capnp.rs"));
 }
 
@@ -29,8 +29,6 @@ use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 
 use std::ops::Deref;
-
-use api::diflouroborane;
 
 pub async fn handle_connection(log: Logger, socket: TcpStream) -> Result<(), Error> {
     unimplemented!()

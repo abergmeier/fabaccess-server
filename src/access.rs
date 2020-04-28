@@ -5,9 +5,6 @@ use slog::Logger;
 
 use casbin::prelude::*;
 
-use futures_signals::signal::Mutable;
-
-use crate::api::api;
 use crate::config::Config;
 use crate::auth::Authentication;
 use crate::error::Result;
@@ -56,10 +53,6 @@ impl Permissions {
             Ok(false)
         }
     }
-}
-
-impl api::permissions::Server for Permissions {
-
 }
 
 /// This line documents init
