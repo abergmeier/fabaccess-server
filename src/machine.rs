@@ -103,94 +103,6 @@ impl Machines {
         Self { inner, perm }
     }
 }
-impl api::machines::Server for Machines {
-    fn manage(&mut self,
-        params: api::machines::ManageParams,
-        mut results: api::machines::ManageResults)
-        -> Promise<(), Error>
-    {
-        let params = pry!(params.get());
-        let uuid_s = pry!(params.get_uuid());
-        let uuid = uuid_from_api(uuid_s);
-
-        // We need to copy the Arc here because we don't have access to it from within the closure
-        // witout moving it out of self.
-        let i = self.inner.clone();
-        let p = self.perm.clone();
-
-        let f = async move {
-            // We only need a read lock at first there's no reason to aquire a write lock.
-            let i_lock = i.read().await;
-
-            if let Some(ps) = i_lock.get_perm_req(&uuid) {
-                // drop the lock as soon as possible to prevent locking as much as possible
-                drop(i_lock);
-                if let Ok(true) = p.enforce(&ps, "manage").await {
-                    // We're here and have not returned an error yet - that means we're free to
-                    // send a successful manage back.
-                    let mut b = results.get();
-
-                    // Magic incantation to get a capability to send
-                    // Also since we move i in here we at this point *must* have dropped
-                    // all locks we may still have on it.
-                    b.set_manage(api::machines::manage::ToClient::new(
-                            MachineManager::new(uuid, i)).into_client::<Server>());
-                }
-            }
-            Ok(())
-        };
-
-        Promise::from_future(f)
-    }
-
-    fn use_(&mut self,
-        params: api::machines::UseParams,
-        mut results: api::machines::UseResults)
-        -> Promise<(), capnp::Error>
-    {
-        let params = pry!(params.get());
-        let uuid_s = pry!(params.get_uuid());
-        let uuid = uuid_from_api(uuid_s);
-
-        // We need to copy the Arc here because we don't have access to it from within the closure
-        // witout moving it out of self.
-        let i = self.inner.clone();
-        let p = self.perm.clone();
-
-        let f = async move {
-            // We only need a read lock at first there's no reason to aquire a write lock.
-            let i_lock = i.read().await;
-
-            if let Some(ps) = i_lock.get_perm_req(&uuid) {
-                // drop the lock as soon as possible to prevent locking as much as possible
-                drop(i_lock);
-                if let Ok(true) = p.enforce(&ps, "write").await {
-                    {
-                        // If use_() returns an error that is our error. If it doesn't that means we can use
-                        // the machine
-                        // Using a subscope to again make the time the lock is valid as short as
-                        // possible. Less locking == more good
-                        let mut i_lock = i.write().await;
-                        i_lock.use_(&uuid)?;
-                    }
-
-                    // We're here and have not returned an error yet - that means we're free to
-                    // send a successful use back.
-                    let mut b = results.get();
-
-                    // Magic incantation to get a capability to send
-                    // Also since we move i in here we at this point *must* have dropped
-                    // all locks we may still have on it.
-                    b.set_giveback(api::machines::give_back::ToClient::new(
-                            GiveBack::new(i, uuid)).into_client::<Server>());
-                }
-            }
-            Ok(())
-        };
-
-        Promise::from_future(f)
-    }
-}
 
 #[derive(Clone)]
 pub struct GiveBack {
@@ -200,22 +112,6 @@ pub struct GiveBack {
 impl GiveBack {
     pub fn new(mdb: Arc<RwLock<MachinesProvider>>, uuid: Uuid) -> Self {
         Self { mdb, uuid }
-    }
-}
-
-impl api::machines::give_back::Server for GiveBack {
-    fn giveback(&mut self,
-        _params: api::machines::give_back::GivebackParams,
-        _results: api::machines::give_back::GivebackResults)
-        -> Promise<(), Error>
-    {
-        let mdb = self.mdb.clone();
-        let uuid = self.uuid.clone();
-        let f = async move {
-            mdb.write().await.give_back(&uuid)
-        };
-
-        Promise::from_future(f)
     }
 }
 
@@ -243,26 +139,6 @@ impl MachineManager {
     pub fn new(uuid: Uuid, mdb: Arc<RwLock<MachinesProvider>>) -> Self {
         Self { mdb, uuid }
     }
-}
-
-impl api::machines::manage::Server for MachineManager {
-    fn set_blocked(&mut self,
-        params: api::machines::manage::SetBlockedParams,
-        results: api::machines::manage::SetBlockedResults)
-        -> Promise<(), Error>
-    {
-        let uuid = self.uuid.clone();
-        let mdb = self.mdb.clone();
-        let f = async move {
-            let params = params.get()?;
-            let blocked = params.get_blocked();
-            mdb.write().await.set_blocked(&uuid, blocked)?;
-            Ok(())
-        };
-
-        Promise::from_future(f)
-    }
-
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]

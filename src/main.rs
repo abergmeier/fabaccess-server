@@ -40,8 +40,6 @@ use std::sync::Arc;
 
 use error::Error;
 
-use api::API;
-
 // Returning a `Result` from `main` allows us to use the `?` shorthand.
 // In the case of an Err it will be printed using `fmt::Debug`
 fn main() -> Result<(), Error> {
@@ -159,10 +157,6 @@ fn main() -> Result<(), Error> {
     let local_spawn = exec.spawner();
 
 
-    // The API has access to all subsystems it needs and the Threadpool as capability to spawn new
-    // tasks for CPU-intensive work
-    let api = API::new(auth, pdb, mach, pool);
-
     // Closure inefficiencies. Lucky cloning an Arc is pretty cheap.
     let inner_log = log.clone();
     let loop_log = log.clone();
@@ -192,7 +186,7 @@ fn main() -> Result<(), Error> {
 
                     // We handle the error using map_err, `let _` is used to quiet the compiler
                     // warning
-                    let f = api::handle_connection(api.clone(), log.clone(), socket)
+                    let f = api::handle_connection(log.clone(), socket)
                         .map_err(move |e| {
                             error!(log, "Error occured during protocol handling: {}", e);
                         })
