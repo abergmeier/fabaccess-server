@@ -1,19 +1,42 @@
 use std::io;
+use std::fmt;
 use toml;
 
-use crate::auth::SASLError;
+use rsasl::SaslError;
 
 #[derive(Debug)]
 pub enum Error {
     TomlDe(toml::de::Error),
     TomlSer(toml::ser::Error),
-    SASL(SASLError),
+    SASL(SaslError),
     IO(io::Error),
     Boxed(Box<dyn std::error::Error>),
 }
 
-impl From<SASLError> for Error {
-    fn from(e: SASLError) -> Error {
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::TomlDe(e) => {
+                write!(f, "TOML Decoding error: {}", e)
+            },
+            Error::TomlSer(e) => {
+                write!(f, "TOML Serialization error: {}", e)
+            },
+            Error::SASL(e) => {
+                write!(f, "SASL Error: {}", e)
+            },
+            Error::IO(e) => {
+                write!(f, "IO Error: {}", e)
+            },
+            Error::Boxed(e) => {
+                write!(f, "{}", e)
+            }
+        }
+    }
+}
+
+impl From<SaslError> for Error {
+    fn from(e: SaslError) -> Error {
         Error::SASL(e)
     }
 }

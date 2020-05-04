@@ -17,8 +17,6 @@ use signal_hook::iterator::Signals;
 
 use clap::{App, Arg};
 
-use api::gen as api_capnp;
-
 use futures::prelude::*;
 use futures::executor::{LocalPool, ThreadPool};
 use futures::compat::Stream01CompatExt;
@@ -39,6 +37,12 @@ use std::mem::drop;
 use std::sync::Arc;
 
 use error::Error;
+
+// Re-Export generated capnp code.
+// This is necessary because the Rust generator expects types to be found in the
+// `crate::<file>_capnp` hierarchy.
+use api::gen as api_capnp;
+use auth::gen as auth_capnp;
 
 // Returning a `Result` from `main` allows us to use the `?` shorthand.
 // In the case of an Err it will be printed using `fmt::Debug`

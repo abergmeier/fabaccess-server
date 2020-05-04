@@ -10,7 +10,6 @@ use toml;
 
 use crate::error::Result;
 use crate::config::Config;
-use crate::access::Permissions;
 
 use std::rc::Rc;
 use async_std::sync::{Arc, RwLock};
@@ -90,11 +89,10 @@ impl MachinesProvider {
 #[derive(Clone)]
 pub struct Machines {
     inner: Arc<RwLock<MachinesProvider>>,
-    perm: Rc<Permissions>,
 }
 impl Machines {
-    pub fn new(inner: Arc<RwLock<MachinesProvider>>, perm: Rc<Permissions>) -> Self {
-        Self { inner, perm }
+    pub fn new(inner: Arc<RwLock<MachinesProvider>>) -> Self {
+        Self { inner }
     }
 }
 
