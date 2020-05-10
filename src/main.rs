@@ -172,7 +172,7 @@ fn main() -> Result<(), Error> {
 
         // For each incoming connection start a new task to handle it
         let handle_sockets = incoming.map(|socket| {
-            // incoming.next() is an error when the underlying `accept` call yielded an error
+            // incoming.next() returns an error when the underlying `accept` call yielded an error
             // In POSIX those are protocol errors we can't really handle, so we just log the error
             // and the move on
             match socket {
@@ -188,8 +188,7 @@ fn main() -> Result<(), Error> {
                     // Clone a log for potential error handling
                     let elog = log.clone();
 
-                    // We handle the error using map_err, `let _` is used to quiet the compiler
-                    // warning
+                    // We handle the error using map_err
                     let f = api::handle_connection(log.clone(), socket)
                         .map_err(move |e| {
                             error!(log, "Error occured during protocol handling: {}", e);
@@ -225,6 +224,8 @@ fn main() -> Result<(), Error> {
 
         // Now actually check if a connection was opened or a signal recv'd
         let mut combined = stream::select(handle_signals, handle_sockets);
+
+        // This is the basic main loop that drives execution
         loop {
             match combined.next().await {
                 // When the result says to continue, do exactly that
@@ -237,9 +238,11 @@ fn main() -> Result<(), Error> {
                     // For now, just log the overload and keep going.
                     error!(loop_log, "Server overloaded");
                 }
-                // None should never be returned because it would mean all sockets were closed and
-                // we can not receive any further signals. Still, in that case shut down cleanly
-                // anyway, the only reason this could happen are some heavy bugs in the runtime
+                // When the result says to stop the server, do exactly that.
+                // Also catches a `None` from the stream; None should never be returned because it
+                // would mean all sockets were closed and we can not receive any further signals.
+                // Still, in that case shut down cleanly anyway, the only reason this could happen
+                // are some heavy bugs in the runtime
                 Some(LoopResult::Stop) | None => {
                     warn!(loop_log, "Stopping server");
                     break;
