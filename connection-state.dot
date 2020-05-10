@@ -1,0 +1,34 @@
+strict digraph connection {
+    Establish [label="TCP/SCTP connection established"];
+    Closed [label="TCP/SCTP connection closed"];
+
+    Establish -> Open [label=open];
+
+    Open -> Closed [label=close];
+
+    Open -> SASL [label=auth];
+    SASL -> SASL [label=step];
+    // Authentication fails
+    SASL -> Closed [label=fails];
+    // Authentication succeeds
+    SASL -> Authenticated [label=successful];
+
+    Open -> STARTTLS [label=starttls];
+    // TLS wrapping succeeds
+    STARTTLS -> Encrypted [label=successful];
+    // TLS wrapping fails
+    STARTTLS -> Closed [label=fails];
+
+    Authenticated -> SASL_TLS [label=starttls];
+    SASL_TLS -> Closed [label=fails];
+    SASL_TLS -> AuthEnc [label=successful];
+
+    Encrypted -> TLS_SASL [label=auth];
+    TLS_SASL -> TLS_SASL [label=step];
+    TLS_SASL -> Closed [label=fails];
+    TLS_SASL -> AuthEnc [label=successful];
+
+    // Only authenticated connections may open RPC. For "unauth", use the `Anonymous` SASL method.
+    AuthEnc -> RPC [label=bootstrap];
+    Authenticated -> RPC [label=bootstrap];
+}

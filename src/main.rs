@@ -12,6 +12,7 @@ mod api;
 mod config;
 mod error;
 mod machine;
+mod connection;
 
 use signal_hook::iterator::Signals;
 
@@ -43,6 +44,7 @@ use error::Error;
 // `crate::<file>_capnp` hierarchy.
 use api::gen as api_capnp;
 use auth::gen as auth_capnp;
+use connection::gen as connection_capnp;
 
 // Returning a `Result` from `main` allows us to use the `?` shorthand.
 // In the case of an Err it will be printed using `fmt::Debug`
