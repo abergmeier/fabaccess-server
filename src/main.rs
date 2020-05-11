@@ -191,7 +191,7 @@ fn main() -> Result<(), Error> {
                     let elog = log.clone();
 
                     // We handle the error using map_err
-                    let f = api::handle_connection(log.clone(), socket)
+                    let f = connection::handle_connection(log.clone(), socket)
                         .map_err(move |e| {
                             error!(log, "Error occured during protocol handling: {}", e);
                         })

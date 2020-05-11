@@ -5,6 +5,7 @@ pub mod gen {
 }
 
 use async_std::net::TcpStream;
+use futures::io::{AsyncRead, AsyncWrite};
 
 use slog::Logger;
 

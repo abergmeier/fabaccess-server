@@ -11,6 +11,7 @@ pub enum Error {
     SASL(SaslError),
     IO(io::Error),
     Boxed(Box<dyn std::error::Error>),
+    Capnp(capnp::Error),
 }
 
 impl fmt::Display for Error {
@@ -30,6 +31,9 @@ impl fmt::Display for Error {
             },
             Error::Boxed(e) => {
                 write!(f, "{}", e)
+            }
+            Error::Capnp(e) => {
+                write!(f, "Cap'n Proto Error: {}", e)
             }
         }
     }
@@ -62,6 +66,12 @@ impl From<toml::ser::Error> for Error {
 impl From<Box<dyn std::error::Error>> for Error {
     fn from(e: Box<dyn std::error::Error>) -> Error {
         Error::Boxed(e)
+    }
+}
+
+impl From<capnp::Error> for Error {
+    fn from(e: capnp::Error) -> Error {
+        Error::Capnp(e)
     }
 }
 
