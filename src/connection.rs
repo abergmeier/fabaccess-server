@@ -1,14 +1,14 @@
 use slog::Logger;
 
 use async_std::net::TcpStream;
-use futures::io::AsyncWriteExt;
 
 use crate::error::Result;
+use crate::auth;
+use crate::api;
 
 pub mod gen {
     include!(concat!(env!("OUT_DIR"), "/schema/connection_capnp.rs"));
 }
-
 
 pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()> {
     let host = "localhost";
@@ -16,8 +16,8 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()>
     let version = (0u32,1u32);
 
 
+    let receive_options = capnp::message::ReaderOptions::default();
     {
-        let receive_options = capnp::message::ReaderOptions::default();
         let message = capnp_futures::serialize::read_message(&mut stream, receive_options).await.unwrap().unwrap();
         let m = message.get_root::<gen::message::Reader>().unwrap();
 
@@ -49,8 +49,94 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()>
 
         capnp_futures::serialize::write_message(&mut stream, message).await?;
     }
+    {
+        let mut message = capnp::message::Builder::new_default();
+        let outer = message.init_root::<gen::message::Builder>();
+        let mut mechs = outer.init_auth().init_mechanisms(1);
+        mechs.set(0, "PLAIN");
 
-    stream.flush().await?;
+        capnp_futures::serialize::write_message(&mut stream, message).await?;
+    }
+
+    {
+        let message = capnp_futures::serialize::read_message(&mut stream, receive_options).await.unwrap().unwrap();
+        let m = message.get_root::<gen::message::Reader>().unwrap();
+
+        let mut auth_success = false;
+
+        match m.which() {
+            Ok(gen::message::Which::Auth(Ok(r))) => {
+                if let Ok(w) = r.which() {
+                    use crate::auth_capnp::auth_message::*;
+                    match w {
+                        Request(Ok(r)) => {
+                            let m = r.get_mechanism().unwrap();
+                            println!("Client wants to AUTH using {:?}",
+                                m);
+                            let cm = std::ffi::CString::new(m).unwrap();
+                            let mut sasl = auth::Auth::new();
+                            let mut sess = sasl.ctx.server_start(&cm).unwrap();
+
+                            use crate::auth_capnp::request::initial_response::*;
+                            match r.get_initial_response().which() {
+                                Ok(Initial(Ok(r))) => {
+                                    debug!(log, "Client Auth with initial data");
+                                    let mut message = capnp::message::Builder::new_default();
+                                    let mut outer = message.init_root::<gen::message::Builder>().init_auth();
+
+                                    match sess.step(r) {
+                                        Ok(rsasl::Step::Done(b)) => {
+                                            auth_success = true;
+                                            debug!(log, "Authentication successful");
+                                            let mut outcome= outer.init_outcome();
+
+                                            outcome.set_result(auth::gen::outcome::Result::Successful);
+                                            if !b.is_empty() {
+                                                let mut add_data = outcome.init_additional_data();
+                                                add_data.set_additional(&b);
+                                            }
+                                        },
+                                        Ok(rsasl::Step::NeedsMore(b)) => {
+                                            debug!(log, "Authentication needs more data");
+                                            outer.set_response(&b);
+                                        }
+                                        Err(e) => {
+                                            warn!(log, "Authentication error: {}", e);
+                                            let mut outcome = outer.init_outcome();
+
+                                            // TODO: Distinguish errors
+                                            outcome.set_result(auth::gen::outcome::Result::Failed);
+                                            outcome.set_action(auth::gen::outcome::Action::Retry);
+                                            outcome.set_help_text(&format!("{}", e));
+                                        }
+                                    }
+
+                                    capnp_futures::serialize::write_message(&mut stream, message).await?;
+                                }
+                                _ => {
+                                }
+                            }
+                        },
+                        _ => {
+                        }
+                    }
+                } else {
+                    println!("Got unexpected message");
+                }
+            },
+            Ok(_) => {
+                println!("Got unexpected message");
+            }
+            Err(e) => {
+                println!("Got error {:?}", e);
+            }
+        }
+
+        if auth_success {
+            info!(log, "Handing off to API connection handler");
+            api::handle_connection(log, stream).await;
+        }
+    }
 
     Ok(())
 }

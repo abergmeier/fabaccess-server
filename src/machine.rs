@@ -1,6 +1,5 @@
 use std::collections::HashMap;
 use std::fs::File;
-use std::path::Path;
 use std::io::{Read, Write};
 
 use slog::Logger;
@@ -11,7 +10,6 @@ use toml;
 use crate::error::Result;
 use crate::config::Config;
 
-use std::rc::Rc;
 use async_std::sync::{Arc, RwLock};
 
 use capnp::Error;

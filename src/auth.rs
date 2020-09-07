@@ -5,7 +5,7 @@
 
 use slog::Logger;
 
-use rsasl::{SASL, Property, Step, Session, ReturnCode};
+use rsasl::{SASL, Property, Session, ReturnCode};
 use rsasl::sys::{Gsasl, Gsasl_session};
 
 use crate::error::Result;
@@ -20,14 +20,27 @@ extern "C" fn callback(ctx: *mut Gsasl, sctx: *mut Gsasl_session, prop: Property
     let mut session = Session::from_ptr(sctx);
 
     let rc = match prop {
-        _ => { ReturnCode::GSASL_NO_CALLBACK }
+        Property::GSASL_VALIDATE_SIMPLE => {
+            let authid = session.get_property_fast(Property::GSASL_AUTHID).to_string_lossy();
+            let pass = session.get_property_fast(Property::GSASL_PASSWORD).to_string_lossy();
+
+            if authid == "test" && pass == "secret" {
+                ReturnCode::GSASL_OK
+            } else {
+                ReturnCode::GSASL_AUTHENTICATION_ERROR
+            }
+        }
+        p => {
+            println!("Callback called with property {:?}", p);
+            ReturnCode::GSASL_NO_CALLBACK 
+        }
     };
 
     rc as i32
 }
 
 pub struct Auth {
-    ctx: SASL,
+    pub ctx: SASL,
 }
 
 impl Auth {

@@ -22,18 +22,14 @@ use futures::prelude::*;
 use futures::executor::{LocalPool, ThreadPool};
 use futures::compat::Stream01CompatExt;
 use futures::join;
-use futures::task::{SpawnExt, LocalSpawn};
+use futures::task::LocalSpawn;
 
-use capnp_rpc::twoparty::{VatNetwork, VatId};
-use capnp_rpc::rpc_twoparty_capnp::Side;
-
-use async_std::net::{TcpListener, TcpStream};
+use async_std::net::TcpListener;
 
 use std::io;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
-use std::mem::drop;
 
 use std::sync::Arc;
 
