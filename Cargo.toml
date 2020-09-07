@@ -15,8 +15,7 @@ futures = { version = "0.3", features = ["thread-pool", "compat"] }
 futures-util = "0.3"
 futures-signals = "0.3"
 
-async-std = "1.5"
-smol = "0.1"
+smol = "0.4"
 
 signal-hook = { version = "0.1", features = ["tokio-support"] }
 

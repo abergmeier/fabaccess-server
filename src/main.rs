@@ -24,8 +24,6 @@ use futures::compat::Stream01CompatExt;
 use futures::join;
 use futures::task::LocalSpawn;
 
-use async_std::net::TcpListener;
-
 use std::io;
 use std::io::Write;
 use std::path::PathBuf;

@@ -10,7 +10,7 @@ use toml;
 use crate::error::Result;
 use crate::config::Config;
 
-use async_std::sync::{Arc, RwLock};
+use smol::lock::{Arc, RwLock};
 
 use capnp::Error;
 
@@ -86,10 +86,10 @@ impl MachinesProvider {
 
 #[derive(Clone)]
 pub struct Machines {
-    inner: Arc<RwLock<MachinesProvider>>,
+    inner: RwLock<MachinesProvider>,
 }
 impl Machines {
-    pub fn new(inner: Arc<RwLock<MachinesProvider>>) -> Self {
+    pub fn new(inner: RwLock<MachinesProvider>) -> Self {
         Self { inner }
     }
 }

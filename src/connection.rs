@@ -1,6 +1,6 @@
 use slog::Logger;
 
-use async_std::net::TcpStream;
+use smol::net::TcpStream;
 
 use crate::error::Result;
 use crate::auth;

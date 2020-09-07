@@ -4,7 +4,7 @@ pub mod gen {
     include!(concat!(env!("OUT_DIR"), "/schema/api_capnp.rs"));
 }
 
-use async_std::net::TcpStream;
+use smol::net::TcpStream;
 use futures_util::FutureExt;
 
 use slog::Logger;
