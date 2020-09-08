@@ -1,6 +1,6 @@
 // module needs to be top level for generated functions to be in scope:
 // https://github.com/capnproto/capnproto-rust/issues/16
-pub mod gen {
+pub mod api_capnp {
     include!(concat!(env!("OUT_DIR"), "/schema/api_capnp.rs"));
 }
 
@@ -19,10 +19,10 @@ use capnp_rpc::rpc_twoparty_capnp::Side;
 
 pub async fn handle_connection(log: Logger, socket: TcpStream) -> Result<()> {
     let client = DifAPI {};
-    let api = gen::diflouroborane::ToClient::new(client).into_client::<capnp_rpc::Server>();
+    let api: api_capnp::diflouroborane::Client = capnp_rpc::new_client(client);
 
     let mut message = capnp::message::Builder::new_default();
-    let mut outer = message.init_root::<crate::connection::gen::message::Builder>();
+    let mut outer = message.init_root::<crate::connection::connection_capnp::message::Builder>();
     outer.set_api(api.clone());
 
     let network = VatNetwork::new(socket.clone(), socket, Side::Server, Default::default());
@@ -35,14 +35,14 @@ pub async fn handle_connection(log: Logger, socket: TcpStream) -> Result<()> {
 
 pub struct DifAPI;
 
-impl gen::diflouroborane::Server for DifAPI {
+impl api_capnp::diflouroborane::Server for DifAPI {
     fn machines(&mut self,
-        _params: gen::diflouroborane::MachinesParams,
-        mut results: gen::diflouroborane::MachinesResults)
+        _params: api_capnp::diflouroborane::MachinesParams,
+        mut results: api_capnp::diflouroborane::MachinesResults)
         -> Promise<(), Error>
     {
         let mut b = results.get();
-        let mach = gen::machines::ToClient::new(MachinesAPI).into_client::<capnp_rpc::Server>();
+        let mach = capnp_rpc::new_client(MachinesAPI);
         b.set_mach(mach);
         Promise::ok(())
     }
@@ -50,10 +50,10 @@ impl gen::diflouroborane::Server for DifAPI {
 
 pub struct MachinesAPI;
 
-impl gen::machines::Server for MachinesAPI {
+impl api_capnp::machines::Server for MachinesAPI {
     fn list(&mut self,
-        _params: gen::machines::ListParams,
-        mut results: gen::machines::ListResults)
+        _params: api_capnp::machines::ListParams,
+        mut results: api_capnp::machines::ListResults)
         -> Promise<(), Error>
     {
         let mut l = results.get();

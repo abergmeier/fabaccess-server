@@ -6,7 +6,7 @@ use crate::error::Result;
 use crate::auth;
 use crate::api;
 
-pub mod gen {
+pub mod connection_capnp {
     include!(concat!(env!("OUT_DIR"), "/schema/connection_capnp.rs"));
 }
 
@@ -19,11 +19,11 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()>
     let receive_options = capnp::message::ReaderOptions::default();
     {
         let message = capnp_futures::serialize::read_message(&mut stream, receive_options).await.unwrap().unwrap();
-        let m = message.get_root::<gen::message::Reader>().unwrap();
+        let m = message.get_root::<connection_capnp::message::Reader>().unwrap();
 
         if m.has_greet() {
             match m.which() {
-                Ok(gen::message::Which::Greet(Ok(r))) => {
+                Ok(connection_capnp::message::Which::Greet(Ok(r))) => {
                     println!("Host {} with program {} is saying hello. They speak API version {}.{}.",
                         r.get_host().unwrap(),
                         r.get_program().unwrap(),
@@ -40,7 +40,7 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()>
 
     {
         let mut message = capnp::message::Builder::new_default();
-        let greet_outer = message.init_root::<gen::message::Builder>();
+        let greet_outer = message.init_root::<connection_capnp::message::Builder>();
         let mut greeting = greet_outer.init_greet();
         greeting.set_host(host);
         greeting.set_program(program);
@@ -51,7 +51,7 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()>
     }
     {
         let mut message = capnp::message::Builder::new_default();
-        let outer = message.init_root::<gen::message::Builder>();
+        let outer = message.init_root::<connection_capnp::message::Builder>();
         let mut mechs = outer.init_auth().init_mechanisms(1);
         mechs.set(0, "PLAIN");
 
@@ -60,14 +60,14 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()>
 
     {
         let message = capnp_futures::serialize::read_message(&mut stream, receive_options).await.unwrap().unwrap();
-        let m = message.get_root::<gen::message::Reader>().unwrap();
+        let m = message.get_root::<connection_capnp::message::Reader>().unwrap();
 
         let mut auth_success = false;
 
         match m.which() {
-            Ok(gen::message::Which::Auth(Ok(r))) => {
+            Ok(connection_capnp::message::Which::Auth(Ok(r))) => {
                 if let Ok(w) = r.which() {
-                    use crate::auth_capnp::auth_message::*;
+                    use crate::auth::auth_capnp::auth_message::*;
                     match w {
                         Request(Ok(r)) => {
                             let m = r.get_mechanism().unwrap();
@@ -77,12 +77,12 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()>
                             let mut sasl = auth::Auth::new();
                             let mut sess = sasl.ctx.server_start(&cm).unwrap();
 
-                            use crate::auth_capnp::request::initial_response::*;
+                            use crate::auth::auth_capnp::request::initial_response::*;
                             match r.get_initial_response().which() {
                                 Ok(Initial(Ok(r))) => {
                                     debug!(log, "Client Auth with initial data");
                                     let mut message = capnp::message::Builder::new_default();
-                                    let mut outer = message.init_root::<gen::message::Builder>().init_auth();
+                                    let mut outer = message.init_root::<connection_capnp::message::Builder>().init_auth();
 
                                     match sess.step(r) {
                                         Ok(rsasl::Step::Done(b)) => {
@@ -90,7 +90,7 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()>
                                             debug!(log, "Authentication successful");
                                             let mut outcome= outer.init_outcome();
 
-                                            outcome.set_result(auth::gen::outcome::Result::Successful);
+                                            outcome.set_result(auth::auth_capnp::outcome::Result::Successful);
                                             if !b.is_empty() {
                                                 let mut add_data = outcome.init_additional_data();
                                                 add_data.set_additional(&b);
@@ -105,8 +105,8 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()>
                                             let mut outcome = outer.init_outcome();
 
                                             // TODO: Distinguish errors
-                                            outcome.set_result(auth::gen::outcome::Result::Failed);
-                                            outcome.set_action(auth::gen::outcome::Action::Retry);
+                                            outcome.set_result(auth::auth_capnp::outcome::Result::Failed);
+                                            outcome.set_action(auth::auth_capnp::outcome::Action::Retry);
                                             outcome.set_help_text(&format!("{}", e));
                                         }
                                     }

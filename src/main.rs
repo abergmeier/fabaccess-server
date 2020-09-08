@@ -24,6 +24,8 @@ use futures::compat::Stream01CompatExt;
 use futures::join;
 use futures::task::LocalSpawn;
 
+use smol::net::TcpListener;
+
 use std::io;
 use std::io::Write;
 use std::path::PathBuf;
@@ -32,13 +34,6 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use error::Error;
-
-// Re-Export generated capnp code.
-// This is necessary because the Rust generator expects types to be found in the
-// `crate::<file>_capnp` hierarchy.
-use api::gen as api_capnp;
-use auth::gen as auth_capnp;
-use connection::gen as connection_capnp;
 
 // Returning a `Result` from `main` allows us to use the `?` shorthand.
 // In the case of an Err it will be printed using `fmt::Debug`

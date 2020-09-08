@@ -11,7 +11,7 @@ use rsasl::sys::{Gsasl, Gsasl_session};
 use crate::error::Result;
 use crate::config::Config;
 
-pub mod gen {
+pub mod auth_capnp {
     include!(concat!(env!("OUT_DIR"), "/schema/auth_capnp.rs"));
 }
 
