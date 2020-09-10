@@ -13,6 +13,8 @@ pub enum Error {
     Boxed(Box<dyn std::error::Error>),
     Capnp(capnp::Error),
     LMDB(lmdb::Error),
+    FlexbuffersDe(flexbuffers::DeserializationError),
+    FlexbuffersSer(flexbuffers::SerializationError),
 }
 
 impl fmt::Display for Error {
@@ -38,6 +40,12 @@ impl fmt::Display for Error {
             },
             Error::LMDB(e) => {
                 write!(f, "LMDB Error: {}", e)
+            },
+            Error::FlexbuffersDe(e) => {
+                write!(f, "Flexbuffers decoding error: {}", e)
+            },
+            Error::FlexbuffersSer(e) => {
+                write!(f, "Flexbuffers encoding error: {}", e)
             },
         }
     }
@@ -82,6 +90,18 @@ impl From<capnp::Error> for Error {
 impl From<lmdb::Error> for Error {
     fn from(e: lmdb::Error) -> Error {
         Error::LMDB(e)
+    }
+}
+
+impl From<flexbuffers::DeserializationError> for Error {
+    fn from(e: flexbuffers::DeserializationError) -> Error {
+        Error::FlexbuffersDe(e)
+    }
+}
+
+impl From<flexbuffers::SerializationError> for Error {
+    fn from(e: flexbuffers::SerializationError) -> Error {
+        Error::FlexbuffersSer(e)
     }
 }
 
