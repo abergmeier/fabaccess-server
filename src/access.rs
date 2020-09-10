@@ -88,6 +88,16 @@ impl PermissionsProvider {
         }
     }
 
+    fn get_perm<T: Transaction>(&self, txn: &T, permID: PermIdentifier) -> Result<Option<Perm>> {
+        match txn.get(self.permdb, &permID.to_ne_bytes()) {
+            Ok(bytes) => {
+                Ok(Some(flexbuffers::from_slice(bytes)?))
+            },
+            Err(lmdb::Error::NotFound) => { Ok(None) },
+            Err(e) => { Err(e.into()) }
+        }
+    }
+
    fn put_role(&self, txn: &mut RwTransaction, roleID: RoleIdentifier, role: Role) -> Result<()> {
        let bytes = flexbuffers::to_vec(role)?;
        txn.put(self.roledb, &roleID.to_ne_bytes(), &bytes, lmdb::WriteFlags::empty())?;
@@ -98,6 +108,13 @@ impl PermissionsProvider {
    fn put_user(&self, txn: &mut RwTransaction, userID: UserIdentifier, user: User) -> Result<()> {
        let bytes = flexbuffers::to_vec(user)?;
        txn.put(self.userdb, &userID.to_ne_bytes(), &bytes, lmdb::WriteFlags::empty())?;
+
+       Ok(())
+   }
+
+   fn put_perm(&self, txn: &mut RwTransaction, permID: PermIdentifier, perm: Perm) -> Result<()> {
+       let bytes = flexbuffers::to_vec(perm)?;
+       txn.put(self.permdb, &permID.to_ne_bytes(), &bytes, lmdb::WriteFlags::empty())?;
 
        Ok(())
    }
@@ -157,6 +174,6 @@ struct Role {
 /// Permissions are rather simple flags. A person can have or not have a permission, dictated by
 /// its roles and the permissions assigned to those roles.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct Permission {
+struct Perm {
     name: String,
 }
