@@ -32,10 +32,13 @@ impl fmt::Display for Error {
             },
             Error::Boxed(e) => {
                 write!(f, "{}", e)
-            }
+            },
             Error::Capnp(e) => {
                 write!(f, "Cap'n Proto Error: {}", e)
-            }
+            },
+            Error::LMDB(e) => {
+                write!(f, "LMDB Error: {}", e)
+            },
         }
     }
 }
