@@ -35,6 +35,8 @@ use std::sync::Arc;
 
 use error::Error;
 
+const LMDB_MAX_DB: u32 = 16;
+
 // Returning a `Result` from `main` allows us to use the `?` shorthand.
 // In the case of an Err it will be printed using `fmt::Debug`
 fn main() -> Result<(), Error> {
@@ -95,11 +97,18 @@ fn main() -> Result<(), Error> {
     // asyncronous fashion.
     let mut exec = LocalPool::new();
 
+    // Initialize the LMDB environment. Since this would usually block untill the mmap() finishes
+    // we wrap it in smol::unblock which runs this as future in a different thread.
+    let e_config = config.clone();
+    let env = lmdb::Environment::new()
+        .set_max_dbs(LMDB_MAX_DB as libc::c_uint)
+        .open(&e_config.db)?;
+
     // Start loading the machine database, authentication system and permission system
     // All of those get a custom logger so the source of a log message can be better traced and
     // filtered
     let machinedb_f = machine::init(log.new(o!("system" => "machines")), &config);
-    let permission_f = access::init(log.new(o!("system" => "permissions")), &config);
+    let pdb = access::init(log.new(o!("system" => "permissions")), &config, &env);
     let authentication_f = auth::init(log.new(o!("system" => "authentication")), config.clone());
 
     // Bind to each address in config.listen.
@@ -124,15 +133,15 @@ fn main() -> Result<(), Error> {
             }
         }).collect();
 
-    let (mach, pdb, auth) = exec.run_until(async {
+    let (mach, auth) = exec.run_until(async {
         // Rull all futures to completion in parallel.
         // This will block until all three are done starting up.
-        join!(machinedb_f, permission_f, authentication_f)
+        join!(machinedb_f, authentication_f)
     });
 
     // Error out if any of the subsystems failed to start.
     let mach = mach?;
-    let pdb = pdb.unwrap();
+    let pdb = pdb?;
     let auth = auth?;
 
     // Since the below closures will happen at a much later time we need to make sure all pointers

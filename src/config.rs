@@ -19,6 +19,7 @@ pub fn read(path: &Path) -> Result<Config> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
+    pub db: PathBuf,
     pub machinedb: PathBuf,
     pub passdb: PathBuf,
     pub(crate) access: Access,
@@ -40,6 +41,7 @@ pub struct Listen {
 impl Default for Config {
     fn default() -> Self {
         Config {
+            db: PathBuf::from_str("/tmp/bffh.db").unwrap(),
             machinedb: PathBuf::from_str("/tmp/machines.db").unwrap(),
             access: Access {
                 model: PathBuf::from_str("/tmp/model.conf").unwrap(),

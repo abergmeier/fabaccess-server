@@ -12,6 +12,7 @@ pub enum Error {
     IO(io::Error),
     Boxed(Box<dyn std::error::Error>),
     Capnp(capnp::Error),
+    LMDB(lmdb::Error),
 }
 
 impl fmt::Display for Error {
@@ -72,6 +73,12 @@ impl From<Box<dyn std::error::Error>> for Error {
 impl From<capnp::Error> for Error {
     fn from(e: capnp::Error) -> Error {
         Error::Capnp(e)
+    }
+}
+
+impl From<lmdb::Error> for Error {
+    fn from(e: lmdb::Error) -> Error {
+        Error::LMDB(e)
     }
 }
 
