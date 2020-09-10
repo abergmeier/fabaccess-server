@@ -87,6 +87,20 @@ impl PermissionsProvider {
             Err(e) => { Err(e.into()) }
         }
     }
+
+   fn put_role(&self, txn: &mut RwTransaction, roleID: RoleIdentifier, role: Role) -> Result<()> {
+       let bytes = flexbuffers::to_vec(role)?;
+       txn.put(self.roledb, &roleID.to_ne_bytes(), &bytes, lmdb::WriteFlags::empty())?;
+
+       Ok(())
+   }
+
+   fn put_user(&self, txn: &mut RwTransaction, userID: UserIdentifier, user: User) -> Result<()> {
+       let bytes = flexbuffers::to_vec(user)?;
+       txn.put(self.userdb, &userID.to_ne_bytes(), &bytes, lmdb::WriteFlags::empty())?;
+
+       Ok(())
+   }
 }
 
 /// This line documents init
@@ -94,8 +108,12 @@ pub fn init(log: Logger, config: &Config, env: &lmdb::Environment) -> std::resul
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
     let roledb = env.create_db(Some("role"), flags)?;
+    debug!(&log, "Opened access database '{}' successfully.", "role");
     let permdb = env.create_db(Some("perm"), flags)?;
+    debug!(&log, "Opened access database '{}' successfully.", "perm");
     let userdb = env.create_db(Some("user"), flags)?;
+    debug!(&log, "Opened access database '{}' successfully.", "user");
+    info!(&log, "Opened all access databases");
     return Ok(PermissionsProvider::new(log, roledb, permdb, userdb));
 }
 

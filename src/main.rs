@@ -100,9 +100,11 @@ fn main() -> Result<(), Error> {
     // Initialize the LMDB environment. Since this would usually block untill the mmap() finishes
     // we wrap it in smol::unblock which runs this as future in a different thread.
     let e_config = config.clone();
+    info!(log, "LMDB env");
     let env = lmdb::Environment::new()
+        .set_flags(lmdb::EnvironmentFlags::MAP_ASYNC | lmdb::EnvironmentFlags::NO_SUB_DIR)
         .set_max_dbs(LMDB_MAX_DB as libc::c_uint)
-        .open(&e_config.db)?;
+        .open(&PathBuf::from_str("/tmp/a.db").unwrap())?;
 
     // Start loading the machine database, authentication system and permission system
     // All of those get a custom logger so the source of a log message can be better traced and
