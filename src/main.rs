@@ -33,6 +33,8 @@ use std::str::FromStr;
 
 use std::sync::Arc;
 
+use lmdb::Transaction;
+
 use error::Error;
 
 const LMDB_MAX_DB: u32 = 16;
@@ -63,6 +65,18 @@ fn main() -> Result<(), Error> {
             .help("Print a default config to stdout instead of running")
             .long("print-default")
         )
+        .arg(Arg::with_name("dump")
+            .help("Dump all databases into the given directory")
+            .long("dump")
+            .conflicts_with("load")
+            .takes_value(true)
+        )
+        .arg(Arg::with_name("load")
+            .help("Load databases from the given directory")
+            .long("load")
+            .conflicts_with("dump")
+            .takes_value(true)
+        )
         .get_matches();
 
     // Check for the --print-default option first because we don't need to do anything else in that
@@ -81,6 +95,7 @@ fn main() -> Result<(), Error> {
         return Ok(())
     }
 
+
     // If no `config` option is given use a preset default.
     let configpath = matches.value_of("config").unwrap_or("/etc/diflouroborane.toml");
     let config = config::read(&PathBuf::from_str(configpath).unwrap())?;
@@ -92,11 +107,6 @@ fn main() -> Result<(), Error> {
     let log = Arc::new(log::init(&config));
     info!(log, "Starting");
 
-    // Kick up an executor
-    // Most initializations from now on do some amount of IO and are much better done in an
-    // asyncronous fashion.
-    let mut exec = LocalPool::new();
-
     // Initialize the LMDB environment. Since this would usually block untill the mmap() finishes
     // we wrap it in smol::unblock which runs this as future in a different thread.
     let e_config = config.clone();
@@ -106,12 +116,57 @@ fn main() -> Result<(), Error> {
         .set_max_dbs(LMDB_MAX_DB as libc::c_uint)
         .open(&PathBuf::from_str("/tmp/a.db").unwrap())?;
 
+    // Kick up an executor
+    // Most initializations from now on do some amount of IO and are much better done in an
+    // asyncronous fashion.
+    let mut exec = LocalPool::new();
+
+
     // Start loading the machine database, authentication system and permission system
     // All of those get a custom logger so the source of a log message can be better traced and
     // filtered
     let machinedb_f = machine::init(log.new(o!("system" => "machines")), &config);
     let pdb = access::init(log.new(o!("system" => "permissions")), &config, &env);
     let authentication_f = auth::init(log.new(o!("system" => "authentication")), config.clone());
+
+    // If --load or --dump is given we can stop at this point and load/dump the database and then
+    // exit.
+    if matches.is_present("load") {
+        if let Some(pathstr) = matches.value_of("load") {
+            let path = std::path::Path::new(pathstr);
+            if !path.is_dir() {
+                error!(log, "The provided path is not a directory or does not exist");
+                return Ok(())
+            }
+
+            let mut txn = env.begin_rw_txn()?;
+            let path = path.to_path_buf();
+            pdb?.load_db(&mut txn, path)?;
+            txn.commit();
+        } else {
+            error!(log, "You must provide a directory path to load from");
+        }
+
+        return Ok(())
+    } else if matches.is_present("dump") {
+        if let Some(pathstr) = matches.value_of("dump") {
+            let path = std::path::Path::new(pathstr);
+            if let Err(e) = std::fs::create_dir_all(path) {
+                error!(log, "The provided path could not be created: {}", e);
+                return Ok(())
+            }
+
+            let txn = env.begin_ro_txn()?;
+            let path = path.to_path_buf();
+            pdb?.dump_db(&txn, path)?;
+        } else {
+
+            error!(log, "You must provide a directory path to dump into");
+        }
+
+        return Ok(())
+    }
+
 
     // Bind to each address in config.listen.
     // This is a Stream over Futures so it will do absolutely nothing unless polled to completion
