@@ -127,25 +127,43 @@ impl PermissionsProvider {
 
    pub fn dump_db<T: Transaction>(&mut self, txn: &T, mut path: PathBuf) -> Result<()> {
        path.push("roles");
-       fs::create_dir(&path);
-       // Rust's stdlib considers the last element the file name so we have to put a dummy here for
-       // .set_filename() to work correctly
-       path.push("dummy");
-       self.dump_roles(txn, path.clone())?;
+       if let Err(e) = fs::create_dir(&path) {
+          error!(self.log, "Failed to create 'roles' directory: {}, skipping!", e);
+          return Ok(())
+       } else {
+           // Rust's stdlib considers the last element the file name so we have to put a dummy here for
+           // .set_filename() to work correctly
+           path.push("dummy");
+           self.dump_roles(txn, path.clone())?;
+           path.pop();
+       }
        path.pop();
 
-       let mut perm_cursor = txn.open_ro_cursor(self.permdb)?;
-       info!(self.log, "================: PERMS :====================");
-       for perm in perm_cursor.iter_start() {
-           info!(self.log, "{:?}", perm)
+       path.push("perms");
+       if let Err(e) = fs::create_dir(&path) {
+          error!(self.log, "Failed to create 'perms' directory: {}, skipping!", e);
+          return Ok(())
+       } else {
+           // Rust's stdlib considers the last element the file name so we have to put a dummy here for
+           // .set_filename() to work correctly
+           path.push("dummy");
+           self.dump_perms(txn, path.clone())?;
+           path.pop();
        }
-       info!(self.log, "=============================================");
+       path.pop();
 
-       let mut user_cursor = txn.open_ro_cursor(self.userdb)?;
-       info!(self.log, "================: USERS :====================");
-       for user in user_cursor.iter_start() {
-           info!(self.log, "{:?}", user)
+       path.push("users");
+       if let Err(e) = fs::create_dir(&path) {
+          error!(self.log, "Failed to create 'users' directory: {}, skipping!", e);
+          return Ok(())
+       } else {
+           // Rust's stdlib considers the last element the file name so we have to put a dummy here for
+           // .set_filename() to work correctly
+           path.push("dummy");
+           self.dump_users(txn, path.clone())?;
+           path.pop();
        }
+       path.pop();
 
        Ok(())
    }
@@ -161,7 +179,41 @@ impl PermissionsProvider {
            path.set_file_name(filename);
            let mut fp = std::fs::File::create(&path)?;
            let toml = toml::to_vec(&role)?;
-           fp.write_all(&toml);
+           fp.write_all(&toml)?;
+       }
+
+       Ok(())
+   }
+
+   fn dump_perms<T: Transaction>(&mut self, txn: &T, mut path: PathBuf) -> Result<()> {
+       let mut perm_cursor = txn.open_ro_cursor(self.permdb)?;
+       for buf in perm_cursor.iter_start() {
+           let (kbuf, vbuf) = buf?;
+           let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
+           let permID = u64::from_ne_bytes(kbytes.try_into().unwrap());
+           let perm: Perm = flexbuffers::from_slice(vbuf)?;
+           let filename = format!("{:x}.toml", permID);
+           path.set_file_name(filename);
+           let mut fp = std::fs::File::create(&path)?;
+           let toml = toml::to_vec(&perm)?;
+           fp.write_all(&toml)?;
+       }
+
+       Ok(())
+   }
+
+   fn dump_users<T: Transaction>(&mut self, txn: &T, mut path: PathBuf) -> Result<()> {
+       let mut user_cursor = txn.open_ro_cursor(self.userdb)?;
+       for buf in user_cursor.iter_start() {
+           let (kbuf, vbuf) = buf?;
+           let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
+           let userID = u64::from_ne_bytes(kbytes.try_into().unwrap());
+           let user: User = flexbuffers::from_slice(vbuf)?;
+           let filename = format!("{:x}.toml", userID);
+           path.set_file_name(filename);
+           let mut fp = std::fs::File::create(&path)?;
+           let toml = toml::to_vec(&user)?;
+           fp.write_all(&toml)?;
        }
 
        Ok(())
