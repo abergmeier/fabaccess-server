@@ -128,7 +128,11 @@ impl PermissionsProvider {
 
    pub fn dump_db<T: Transaction>(&mut self, txn: &T, mut path: PathBuf) -> Result<()> {
        path.push("roles");
-       if let Err(e) = fs::create_dir(&path) {
+       let mut k = Ok(());
+       if !path.is_dir() {
+           k = fs::create_dir(&path);
+       }
+       if let Err(e) = k {
           error!(self.log, "Failed to create 'roles' directory: {}, skipping!", e);
           return Ok(())
        } else {
@@ -140,8 +144,16 @@ impl PermissionsProvider {
        }
        path.pop();
 
+
+       // ====================: PERMS :====================
+
+
        path.push("perms");
-       if let Err(e) = fs::create_dir(&path) {
+       let mut k = Ok(());
+       if !path.is_dir() {
+           k = fs::create_dir(&path);
+       }
+       if let Err(e) = k {
           error!(self.log, "Failed to create 'perms' directory: {}, skipping!", e);
           return Ok(())
        } else {
@@ -153,8 +165,16 @@ impl PermissionsProvider {
        }
        path.pop();
 
+
+       // ====================: USERS :====================
+
+
        path.push("users");
-       if let Err(e) = fs::create_dir(&path) {
+       let mut k = Ok(());
+       if !path.is_dir() {
+           k = fs::create_dir(&path);
+       }
+       if let Err(e) = k {
           error!(self.log, "Failed to create 'users' directory: {}, skipping!", e);
           return Ok(())
        } else {
