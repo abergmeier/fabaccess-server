@@ -18,6 +18,7 @@ use lmdb::{Transaction, RwTransaction, Cursor};
 use crate::config::Config;
 use crate::error::Result;
 
+// FIXME: fabinfra/fabaccess/bffh#3
 type UserIdentifier = u64;
 type RoleIdentifier = u64;
 type PermIdentifier = u64;
@@ -235,7 +236,7 @@ impl PermissionsProvider {
        if !path.is_dir() {
            error!(self.log, "Given load directory is malformed, no 'perms' subdir, not loading perms!");
        } else {
-           //self.load_perms(txn, &path)?;
+           self.load_perms(txn, &path)?;
        }
        path.pop();
        // =================================================
@@ -245,7 +246,7 @@ impl PermissionsProvider {
        if !path.is_dir() {
            error!(self.log, "Given load directory is malformed, no 'users' subdir, not loading users!");
        } else {
-           //self.load_users(txn, &path)?;
+           self.load_users(txn, &path)?;
        }
        path.pop();
        // =================================================
@@ -295,6 +296,95 @@ impl PermissionsProvider {
 
        Ok(())
    }
+
+   fn load_perms(&mut self, txn: &mut RwTransaction, path: &Path) -> Result<()> {
+       for entry in std::fs::read_dir(path)? {
+           let entry = entry?;
+           let path = entry.path();
+           if path.is_file() {
+               // will only ever be none if the path has no file name and then how is it a file?!
+               let permID_str = path
+                   .file_stem().expect("Found a file with no filename?")
+                   .to_str().expect("Found an OsStr that isn't valid Unicode. Fix your OS!");
+               let permID = match u64::from_str_radix(permID_str, 16) {
+                   Ok(i) => i,
+                   Err(e) => {
+                       warn!(self.log, "File {} had a invalid name. Expected an u64 in [0-9a-z] hex with optional file ending: {}. Skipping!", path.display(), e);
+                       continue;
+                   }
+               };
+               let s = match fs::read_to_string(path.as_path()) {
+                   Ok(s) => s,
+                   Err(e) => {
+                       warn!(self.log, "Failed to open file {}: {}, skipping!"
+                            , path.display()
+                            , e);
+                       continue;
+                   }
+               };
+               let perm: Perm = match toml::from_str(&s) {
+                   Ok(r) => r,
+                   Err(e) => {
+                       warn!(self.log, "Failed to parse perm at path {}: {}, skipping!"
+                            , path.display()
+                            , e);
+                       continue;
+                   }
+               };
+               self.put_perm(txn, permID, perm)?;
+               debug!(self.log, "Loaded perm {}", permID);
+           } else {
+               warn!(self.log, "Path {} is not a file, skipping!", path.display());
+           }
+       }
+
+       Ok(())
+   }
+
+   fn load_users(&mut self, txn: &mut RwTransaction, path: &Path) -> Result<()> {
+       for entry in std::fs::read_dir(path)? {
+           let entry = entry?;
+           let path = entry.path();
+           if path.is_file() {
+               // will only ever be none if the path has no file name and then how is it a file?!
+               let userID_str = path
+                   .file_stem().expect("Found a file with no filename?")
+                   .to_str().expect("Found an OsStr that isn't valid Unicode. Fix your OS!");
+               let userID = match u64::from_str_radix(userID_str, 16) {
+                   Ok(i) => i,
+                   Err(e) => {
+                       warn!(self.log, "File {} had a invalid name. Expected an u64 in [0-9a-z] hex with optional file ending: {}. Skipping!", path.display(), e);
+                       continue;
+                   }
+               };
+               let s = match fs::read_to_string(path.as_path()) {
+                   Ok(s) => s,
+                   Err(e) => {
+                       warn!(self.log, "Failed to open file {}: {}, skipping!"
+                            , path.display()
+                            , e);
+                       continue;
+                   }
+               };
+               let user: User = match toml::from_str(&s) {
+                   Ok(r) => r,
+                   Err(e) => {
+                       warn!(self.log, "Failed to parse user at path {}: {}, skipping!"
+                            , path.display()
+                            , e);
+                       continue;
+                   }
+               };
+               self.put_user(txn, userID, user)?;
+               debug!(self.log, "Loaded user {}", userID);
+           } else {
+               warn!(self.log, "Path {} is not a file, skipping!", path.display());
+           }
+       }
+
+       Ok(())
+   }
+
 }
 
 /// This line documents init
