@@ -8,9 +8,6 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-# TODO: reduce the feature groups for faster compilation
-#tokio = { version = "0.2", features = ["full"] }
-
 futures = { version = "0.3", features = ["thread-pool", "compat"] }
 futures-util = "0.3"
 futures-signals = "0.3"
@@ -29,12 +26,21 @@ capnp-futures = "0.13"
 
 toml = "0.5"
 serde = { version = "1.0", features = ["derive"] }
+flexbuffers = "0.1"
 
 uuid = { version = "0.8", features = ["serde", "v4"] }
 
 clap = "2.33"
 
 rsasl = "0.1"
+
+# rumqtt needs tokio which I'm trying to get away from
+paho-mqtt = "0.7.1"
+
+mlua = { version = "0.4", features = ["async", "luajit"] }
+
+libc = "0.2"
+lmdb-rkv = "0.14"
 
 [build-dependencies]
 capnpc = "0.13"

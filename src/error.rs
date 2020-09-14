@@ -4,6 +4,9 @@ use toml;
 
 use rsasl::SaslError;
 
+// SpawnError is a somewhat ambigous name, `use as` to make it futures::SpawnError instead.
+use futures::task as futures;
+
 #[derive(Debug)]
 pub enum Error {
     TomlDe(toml::de::Error),
@@ -15,6 +18,7 @@ pub enum Error {
     LMDB(lmdb::Error),
     FlexbuffersDe(flexbuffers::DeserializationError),
     FlexbuffersSer(flexbuffers::SerializationError),
+    FuturesSpawn(futures::SpawnError),
 }
 
 impl fmt::Display for Error {
@@ -46,6 +50,9 @@ impl fmt::Display for Error {
             },
             Error::FlexbuffersSer(e) => {
                 write!(f, "Flexbuffers encoding error: {}", e)
+            },
+            Error::FuturesSpawn(e) => {
+                write!(f, "Future could not be spawned: {}", e)
             },
         }
     }
@@ -105,4 +112,10 @@ impl From<flexbuffers::SerializationError> for Error {
     }
 }
 
-pub type Result<T> = std::result::Result<T, Error>;
+impl From<futures::SpawnError> for Error {
+    fn from(e: futures::SpawnError) -> Error {
+        Error::FuturesSpawn(e)
+    }
+}
+
+pub(crate) type Result<T> = std::result::Result<T, Error>;

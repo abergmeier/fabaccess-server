@@ -13,6 +13,7 @@ mod config;
 mod error;
 mod machine;
 mod connection;
+mod registries;
 
 use signal_hook::iterator::Signals;
 
@@ -217,6 +218,17 @@ fn main() -> Result<(), Error> {
         .create()?;
     let local_spawn = exec.spawner();
 
+    // Start all modules on the threadpool. The pool will run the modules until it is dropped.
+    // FIXME: implement notification so the modules can shut down cleanly instead of being killed
+    // without warning.
+    let modlog = log.clone();
+    match modules::init(modlog.new(o!("system" => "modules")), &config, &pool) {
+        Ok(()) => {}
+        Err(e) => {
+            error!(modlog, "Module startup failed: {}", e);
+            return Err(e);
+        }
+    }
 
     // Closure inefficiencies. Lucky cloning an Arc is pretty cheap.
     let inner_log = log.clone();
