@@ -88,10 +88,13 @@ impl MachineManager {
 }
 
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+/// Internal machine representation
+///
+/// A machine connects an event from a sensor to an actor activating/deactivating a real-world
+/// machine, checking that the user who wants the machine (de)activated has the required
+/// permissions.
 pub struct Machine {
     pub name: String,
-    pub location: String,
-    pub status: Status,
     pub perm: String,
 }
 
