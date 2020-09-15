@@ -16,6 +16,8 @@ use capnp::Error;
 
 use uuid::Uuid;
 
+use lmdb::{Transaction, RwTransaction};
+
 /// Status of a Machine
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Status {
@@ -167,16 +169,25 @@ impl MachineDB {
         Self { db }
     }
 
-    pub fn get_machine<T: Transaction>(&self, txn: &T, machine_id: MachineIdentifier) 
+    pub fn get_machine<T: Transaction>(&self, txn: &T, uuid: Uuid) 
         -> Result<Option<Machine>> 
     {
-        match txn.get(self.db, &machine_id.to_ne_bytes()) {
+        match txn.get(self.db, &uuid.as_bytes()) {
             Ok(bytes) => {
                 Ok(Some(flexbuffers::from_slice(bytes)?))
             },
             Err(lmdb::Error::NotFound) => { Ok(None) },
             Err(e) => { Err(e.into()) },
         }
+    }
+
+    pub fn put_machine( &self, txn: &mut RwTransaction, uuid: Uuid, machine: Machine) 
+        -> Result<()>
+    {
+        let bytes = flexbuffers::to_vec(machine)?;
+        txn.put(self.db, &uuid.as_bytes(), &bytes, lmdb::WriteFlags::empty())?;
+
+        Ok(())
     }
 }
 
