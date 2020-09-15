@@ -407,7 +407,7 @@ impl PermissionsProvider {
 
 }
 
-/// This line documents init
+/// Initialize the access db by loading all the lmdb databases
 pub fn init(log: Logger, config: &Settings, env: &lmdb::Environment) -> std::result::Result<PermissionsProvider, crate::error::Error> {
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
