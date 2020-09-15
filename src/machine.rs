@@ -23,7 +23,7 @@ use smol::channel::{Receiver, Sender};
 use futures_signals::signal::*;
 
 /// Status of a Machine
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Status {
     /// Not currently used by anybody
     Free,
