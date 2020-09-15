@@ -120,8 +120,16 @@ impl Machine {
         }
     }
 
-    pub fn signal(&self) -> MutableSignal<Status> {
-        self.state.signal()
+    /// Generate a signal from the internal state.
+    ///
+    /// A signal is a lossy stream of state changes. Lossy in that if changes happen in quick
+    /// succession intermediary values may be lost. But this isn't really relevant in this case
+    /// since the only relevant state is the latest one.
+    /// dedupe ensures that if state is changed but only changes to the value it had beforehand
+    /// (could for example happen if the machine changes current user but stays activated) no
+    /// update is sent.
+    pub fn signal(&self) -> impl Signal {
+        self.state.signal().dedupe()
     }
 }
 
