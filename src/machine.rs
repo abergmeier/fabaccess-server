@@ -158,7 +158,27 @@ impl Machine {
     }
 }
 
-pub type MachineDB = HashMap<Uuid, Machine>;
+struct MachineDB {
+    db: lmdb::Database,
+}
+
+impl MachineDB {
+    pub fn new(db: lmdb::Database) -> Self {
+        Self { db }
+    }
+
+    pub fn get_machine<T: Transaction>(&self, txn: &T, machine_id: MachineIdentifier) 
+        -> Result<Option<Machine>> 
+    {
+        match txn.get(self.db, &machine_id.to_ne_bytes()) {
+            Ok(bytes) => {
+                Ok(Some(flexbuffers::from_slice(bytes)?))
+            },
+            Err(lmdb::Error::NotFound) => { Ok(None) },
+            Err(e) => { Err(e.into()) },
+        }
+    }
+}
 
 pub async fn init(log: Logger, config: &Settings) -> Result<MachinesProvider> {
     unimplemented!()
