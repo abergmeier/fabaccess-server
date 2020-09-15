@@ -7,6 +7,8 @@ use rsasl::SaslError;
 // SpawnError is a somewhat ambigous name, `use as` to make it futures::SpawnError instead.
 use futures::task as futures;
 
+use paho_mqtt::errors as mqtt;
+
 #[derive(Debug)]
 pub enum Error {
     TomlDe(toml::de::Error),
@@ -19,6 +21,7 @@ pub enum Error {
     FlexbuffersDe(flexbuffers::DeserializationError),
     FlexbuffersSer(flexbuffers::SerializationError),
     FuturesSpawn(futures::SpawnError),
+    MQTT(mqtt::Error),
 }
 
 impl fmt::Display for Error {
@@ -53,6 +56,9 @@ impl fmt::Display for Error {
             },
             Error::FuturesSpawn(e) => {
                 write!(f, "Future could not be spawned: {}", e)
+            },
+            Error::MQTT(e) => {
+                write!(f, "Paho MQTT encountered an error: {}", e)
             },
         }
     }
@@ -115,6 +121,12 @@ impl From<flexbuffers::SerializationError> for Error {
 impl From<futures::SpawnError> for Error {
     fn from(e: futures::SpawnError) -> Error {
         Error::FuturesSpawn(e)
+    }
+}
+
+impl From<mqtt::Error> for Error {
+    fn from(e: mqtt::Error) -> Error {
+        Error::MQTT(e)
     }
 }
 

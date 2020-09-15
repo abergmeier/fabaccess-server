@@ -4,6 +4,9 @@ extern crate slog;
 #[macro_use]
 extern crate capnp_rpc;
 
+#[macro_use]
+extern crate async_trait;
+
 mod auth;
 mod access;
 mod modules;
@@ -37,6 +40,8 @@ use std::sync::Arc;
 use lmdb::Transaction;
 
 use error::Error;
+
+use registries::Registries;
 
 const LMDB_MAX_DB: u32 = 16;
 
@@ -222,7 +227,8 @@ fn main() -> Result<(), Error> {
     // FIXME: implement notification so the modules can shut down cleanly instead of being killed
     // without warning.
     let modlog = log.clone();
-    match modules::init(modlog.new(o!("system" => "modules")), &config, &pool) {
+    let regs = Registries::new();
+    match modules::init(modlog.new(o!("system" => "modules")), &config, &local_spawn, regs) {
         Ok(()) => {}
         Err(e) => {
             error!(modlog, "Module startup failed: {}", e);

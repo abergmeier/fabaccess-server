@@ -32,7 +32,8 @@ uuid = { version = "0.8", features = ["serde", "v4"] }
 
 clap = "2.33"
 
-#rsasl = "0.1"
+# TODO update this if bindgen breaks (again)
+rsasl = "0.1.2"
 
 # rumqtt needs tokio which I'm trying to get away from
 paho-mqtt = { git = "https://github.com/dequbed/paho.mqtt.rust.git", branch = "master", features = ["build_bindgen"] }
@@ -41,6 +42,8 @@ paho-mqtt = { git = "https://github.com/dequbed/paho.mqtt.rust.git", branch = "m
 
 libc = "0.2"
 lmdb-rkv = "0.14"
+
+async-trait = "0.1"
 
 [build-dependencies]
 capnpc = "0.13"

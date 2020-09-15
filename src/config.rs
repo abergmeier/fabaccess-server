@@ -24,6 +24,7 @@ pub struct Config {
     pub passdb: PathBuf,
     pub(crate) access: Access,
     pub listen: Box<[Listen]>,
+    pub mqtt_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -56,6 +57,7 @@ impl Default for Config {
                     address: "::1".to_string(),
                     port: Some(DEFAULT_PORT)
             }]),
+            mqtt_url: "127.0.0.1:1883".to_string(),
         }
     }
 }

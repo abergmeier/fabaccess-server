@@ -10,10 +10,9 @@ pub struct Actuators {
     inner: Arc<RwLock<Inner>>,
 }
 
-type ActBox = Box<dyn Actuator
-            < PowerOnFut = Future<Output = ()>
-            , PowerOffFut = Future<Output = ()>
-            >>;
+unsafe impl Send for Actuators { }
+
+pub type ActBox = Box<dyn Actuator>;
 
 type Inner = HashMap<String, ActBox>;
 
@@ -32,47 +31,23 @@ impl Actuators {
 }
 
 
+#[async_trait]
 pub trait Actuator {
     // TODO: Is it smarter to pass a (reference to?) a machine instead of 'name'? Do we need to
     // pass basically arbitrary parameters to the Actuator?
-    type PowerOnFut: Future<Output = ()>;
-    fn power_on(&mut self, name: String) -> Self::PowerOnFut;
-
-    type PowerOffFut: Future<Output = ()>;
-    fn power_off(&mut self, name: String) -> Self::PowerOffFut;
+    async fn power_on(&mut self, name: String);
+    async fn power_off(&mut self, name: String);
 }
 
 // This is merely a proof that Actuator *can* be implemented on a finite, known type. Yay for type
 // systems with halting problems.
 struct Dummy;
+#[async_trait]
 impl Actuator for Dummy {
-    type PowerOnFut = DummyPowerOnFut;
-    type PowerOffFut = DummyPowerOffFut;
-
-    fn power_on(&mut self) -> DummyPowerOnFut {
-        DummyPowerOnFut
+    async fn power_on(&mut self, _name: String) {
+        return
     }
-    fn power_off(&mut self) -> DummyPowerOffFut {
-        DummyPowerOffFut
-    }
-}
-
-use std::pin::Pin;
-use futures::task::{Poll, Context};
-
-struct DummyPowerOnFut;
-impl Future for DummyPowerOnFut {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        Poll::Ready(())
-    }
-}
-struct DummyPowerOffFut;
-impl Future for DummyPowerOffFut {
-    type Output = ();
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        Poll::Ready(())
+    async fn power_off(&mut self, _name: String) {
+        return
     }
 }
