@@ -22,6 +22,7 @@ pub enum Error {
     FlexbuffersSer(flexbuffers::SerializationError),
     FuturesSpawn(futures::SpawnError),
     MQTT(mqtt::Error),
+    Config(config::ConfigError),
 }
 
 impl fmt::Display for Error {
@@ -60,6 +61,9 @@ impl fmt::Display for Error {
             Error::MQTT(e) => {
                 write!(f, "Paho MQTT encountered an error: {}", e)
             },
+            Error::Config(e) => {
+                write!(f, "Failed to parse config: {}", e)
+            }
         }
     }
 }
@@ -127,6 +131,12 @@ impl From<futures::SpawnError> for Error {
 impl From<mqtt::Error> for Error {
     fn from(e: mqtt::Error) -> Error {
         Error::MQTT(e)
+    }
+}
+
+impl From<config::ConfigError> for Error {
+    fn from(e: config::ConfigError) -> Error {
+        Error::Config(e)
     }
 }
 

@@ -5,13 +5,12 @@ use std::io::{Read, Write};
 use slog::Logger;
 
 use serde::{Serialize, Deserialize};
-use toml;
 
 use std::sync::Arc;
 use smol::lock::RwLock;
 
 use crate::error::Result;
-use crate::config::Config;
+use crate::config::Settings;
 
 use capnp::Error;
 
@@ -161,23 +160,6 @@ impl Machine {
 
 pub type MachineDB = HashMap<Uuid, Machine>;
 
-pub async fn init(log: Logger, config: &Config) -> Result<MachinesProvider> {
-    let mdb = if config.machinedb.is_file() {
-        let mut fp = File::open(&config.machinedb)?;
-        let mut content = String::new();
-        fp.read_to_string(&mut content)?;
-        let map = toml::from_str(&content)?;
-        map
-    } else {
-        HashMap::new()
-    };
-
-    Ok(MachinesProvider::new(log, mdb))
-}
-
-pub fn save(config: &Config, mdb: &MachineDB) -> Result<()> {
-    let mut fp = File::create(&config.machinedb)?;
-    let toml = toml::to_string(mdb)?;
-    fp.write_all(&toml.as_bytes())?;
-    Ok(())
+pub async fn init(log: Logger, config: &Settings) -> Result<MachinesProvider> {
+    unimplemented!()
 }

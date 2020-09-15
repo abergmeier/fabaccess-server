@@ -8,29 +8,29 @@ use crate::error::Result;
 
 use std::default::Default;
 
-pub fn read(path: &Path) -> Result<Config> {
-    let mut fp = File::open(path)?;
-    let mut contents = String::new();
-    fp.read_to_string(&mut contents)?;
+use std::collections::HashMap;
 
-    let config = toml::from_str(&contents)?;
-    Ok(config)
+use config::Config;
+pub use config::ConfigError;
+use glob::glob;
+
+pub fn read(path: &Path) -> Result<Settings> {
+    let mut settings = Config::default();
+    settings
+        .merge(config::File::from(path)).unwrap();
+
+    Ok(settings.try_into()?)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Config {
-    pub db: PathBuf,
-    pub machinedb: PathBuf,
-    pub passdb: PathBuf,
-    pub(crate) access: Access,
-    pub listen: Box<[Listen]>,
-    pub mqtt_url: String,
+pub struct Settings {
+    pub listens: Box<[Listen]>,
+    pub shelly: Option<ShellyCfg>
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Access {
-    pub(crate) model: PathBuf,
-    pub(crate) policy: PathBuf
+pub struct ShellyCfg {
+    pub mqtt_url: String
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,25 +39,20 @@ pub struct Listen {
     pub port: Option<u16>,
 }
 
-impl Default for Config {
+impl Default for Settings {
     fn default() -> Self {
-        Config {
-            db: PathBuf::from_str("/tmp/bffh.db").unwrap(),
-            machinedb: PathBuf::from_str("/tmp/machines.db").unwrap(),
-            access: Access {
-                model: PathBuf::from_str("/tmp/model.conf").unwrap(),
-                policy: PathBuf::from_str("/tmp/policy.csv").unwrap(),
-            },
-            passdb: PathBuf::from_str("/tmp/passwd.db").unwrap(),
-            listen: Box::new([Listen {
+        Settings {
+            listens: Box::new([Listen {
                     address: "127.0.0.1".to_string(),
                     port: Some(DEFAULT_PORT)
                 },
                 Listen {
                     address: "::1".to_string(),
                     port: Some(DEFAULT_PORT)
-            }]),
-            mqtt_url: "127.0.0.1:1883".to_string(),
+                }]),
+            shelly: Some(ShellyCfg {
+                mqtt_url: "127.0.0.1:1883".to_string()
+            }),
         }
     }
 }

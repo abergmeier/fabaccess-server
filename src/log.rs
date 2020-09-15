@@ -1,9 +1,9 @@
 use slog::{Drain, Logger};
 use slog_async;
 use slog_term::{TermDecorator, FullFormat};
-use crate::config::Config;
+use crate::config::Settings;
 
-pub fn init(_config: &Config) -> Logger {
+pub fn init(_config: &Settings) -> Logger {
     let decorator = TermDecorator::new().build();
     let drain = FullFormat::new(decorator).build().fuse();
     let drain = slog_async::Async::new(drain).build().fuse();

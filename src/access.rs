@@ -15,7 +15,7 @@ use serde::{Serialize, Deserialize};
 use slog::Logger;
 use lmdb::{Transaction, RwTransaction, Cursor};
 
-use crate::config::Config;
+use crate::config::Settings;
 use crate::error::Result;
 
 // FIXME: fabinfra/fabaccess/bffh#3
@@ -196,11 +196,11 @@ impl PermissionsProvider {
            let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
            let roleID = u64::from_ne_bytes(kbytes.try_into().unwrap());
            let role: Role = flexbuffers::from_slice(vbuf)?;
-           let filename = format!("{:x}.toml", roleID);
+           let filename = format!("{:x}.yml", roleID);
            path.set_file_name(filename);
            let mut fp = std::fs::File::create(&path)?;
-           let toml = toml::to_vec(&role)?;
-           fp.write_all(&toml)?;
+           let out = toml::to_vec(&role)?;
+           fp.write_all(&out)?;
        }
 
        Ok(())
@@ -213,11 +213,11 @@ impl PermissionsProvider {
            let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
            let permID = u64::from_ne_bytes(kbytes.try_into().unwrap());
            let perm: Perm = flexbuffers::from_slice(vbuf)?;
-           let filename = format!("{:x}.toml", permID);
+           let filename = format!("{:x}.yml", permID);
            path.set_file_name(filename);
            let mut fp = std::fs::File::create(&path)?;
-           let toml = toml::to_vec(&perm)?;
-           fp.write_all(&toml)?;
+           let out = toml::to_vec(&perm)?;
+           fp.write_all(&out)?;
        }
 
        Ok(())
@@ -230,11 +230,11 @@ impl PermissionsProvider {
            let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
            let userID = u64::from_ne_bytes(kbytes.try_into().unwrap());
            let user: User = flexbuffers::from_slice(vbuf)?;
-           let filename = format!("{:x}.toml", userID);
+           let filename = format!("{:x}.yml", userID);
            path.set_file_name(filename);
            let mut fp = std::fs::File::create(&path)?;
-           let toml = toml::to_vec(&user)?;
-           fp.write_all(&toml)?;
+           let out = toml::to_vec(&user)?;
+           fp.write_all(&out)?;
        }
 
        Ok(())
@@ -408,7 +408,7 @@ impl PermissionsProvider {
 }
 
 /// This line documents init
-pub fn init(log: Logger, config: &Config, env: &lmdb::Environment) -> std::result::Result<PermissionsProvider, crate::error::Error> {
+pub fn init(log: Logger, config: &Settings, env: &lmdb::Environment) -> std::result::Result<PermissionsProvider, crate::error::Error> {
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
     let roledb = env.create_db(Some("role"), flags)?;

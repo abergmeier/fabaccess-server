@@ -9,7 +9,7 @@ use rsasl::{SASL, Property, Session, ReturnCode};
 use rsasl::sys::{Gsasl, Gsasl_session};
 
 use crate::error::Result;
-use crate::config::Config;
+use crate::config::Settings;
 
 pub mod auth_capnp {
     include!(concat!(env!("OUT_DIR"), "/schema/auth_capnp.rs"));
@@ -53,6 +53,6 @@ impl Auth {
     }
 }
 
-pub async fn init(log: Logger, config: Config) -> Result<Auth> {
+pub async fn init(log: Logger, config: Settings) -> Result<Auth> {
     Ok(Auth::new())
 }

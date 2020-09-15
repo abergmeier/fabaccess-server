@@ -88,7 +88,7 @@ fn main() -> Result<(), Error> {
     // Check for the --print-default option first because we don't need to do anything else in that
     // case.
     if matches.is_present("print default") {
-        let config = config::Config::default();
+        let config = config::Settings::default();
         let encoded = toml::to_vec(&config)?;
 
         // Direct writing to fd 1 is faster but also prevents any print-formatting that could
@@ -177,7 +177,7 @@ fn main() -> Result<(), Error> {
     // Bind to each address in config.listen.
     // This is a Stream over Futures so it will do absolutely nothing unless polled to completion
     let listeners_s: futures::stream::Collect<_, Vec<TcpListener>> 
-        = stream::iter((&config).listen.iter())
+        = stream::iter((&config).listens.iter())
         .map(|l| {
             let addr = l.address.clone();
             let port = l.port.unwrap_or(config::DEFAULT_PORT);
