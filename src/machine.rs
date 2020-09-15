@@ -18,6 +18,10 @@ use uuid::Uuid;
 
 use lmdb::{Transaction, RwTransaction};
 
+use smol::channel::{Receiver, Sender};
+
+use futures_signals::signal::*;
+
 /// Status of a Machine
 #[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Status {
@@ -87,15 +91,24 @@ impl MachineManager {
     }
 }
 
-#[derive(PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[derive(Debug, Serialize, Deserialize)]
 /// Internal machine representation
 ///
 /// A machine connects an event from a sensor to an actor activating/deactivating a real-world
 /// machine, checking that the user who wants the machine (de)activated has the required
 /// permissions.
 pub struct Machine {
-    pub name: String,
-    pub perm: String,
+    /// The human-readable name of the machine. Does not need to be unique
+    name: String,
+
+    /// The required permission to use this machine.
+    perm: String,
+
+    /// The state of the machine as bffh thinks the machine *should* be in.
+    ///
+    /// This is a Signal generator. Subscribers to this signal will be notified of changes. In the
+    /// case of an actor it should then make sure that the real world matches up with the set state
+    state: Mutable<Status>,
 }
 
 impl Machine {
@@ -103,7 +116,12 @@ impl Machine {
         Machine {
             name: name,
             perm: perm,
+            state: Mutable::new(Status::Free),
         }
+    }
+
+    pub fn signal(&self) -> MutableSignal<Status> {
+        self.state.signal()
     }
 }
 
