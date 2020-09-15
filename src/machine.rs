@@ -38,52 +38,6 @@ impl MachinesProvider {
     pub fn new(log: Logger, mdb: MachineDB) -> Self {
         Self { log, mdb }
     }
-
-    pub fn use_(&mut self, uuid: &Uuid) -> std::result::Result<(), capnp::Error> {
-        if let Some(m) = self.mdb.get_mut(uuid) {
-            match m.status {
-                Status::Free => {
-                    trace!(self.log, "Granted use on machine {}", uuid);
-
-                    m.status = Status::Occupied;
-
-                    Ok(())
-                },
-                Status::Occupied => {
-                    info!(self.log, "Attempted use on an occupied machine {}", uuid);
-                    Err(Error::failed("Machine is occupied".to_string()))
-                },
-                Status::Blocked => {
-                    info!(self.log, "Attempted use on a blocked machine {}", uuid);
-                    Err(Error::failed("Machine is blocked".to_string()))
-                }
-            }
-        } else {
-            info!(self.log, "Attempted use on invalid machine {}", uuid);
-            Err(Error::failed("No such machine".to_string()))
-        }
-    }
-
-    pub fn give_back(&mut self, uuid: &Uuid) -> std::result::Result<(), capnp::Error> {
-        if let Some(m) = self.mdb.get_mut(uuid) {
-            m.status = Status::Free;
-        } else {
-            warn!(self.log, "A giveback was issued for a unknown machine {}", uuid);
-        }
-
-        Ok(())
-    }
-
-    pub fn get_perm_req(&self, uuid: &Uuid) -> Option<String> {
-        self.mdb.get(uuid).map(|m| m.perm.clone())
-    }
-
-    pub fn set_blocked(&mut self, uuid: &Uuid, blocked: bool) -> std::result::Result<(), capnp::Error> {
-        // If the value can not be found map doesn't run and ok_or changes it into a Err with the
-        // given error value
-        self.mdb.get_mut(uuid).map(|m| m.set_blocked(blocked))
-            .ok_or(capnp::Error::failed("No such machine".to_string()))
-    }
 }
 
 #[derive(Clone)]
