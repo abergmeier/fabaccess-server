@@ -99,25 +99,15 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub fn new(name: String, location: String, perm: String) -> Machine {
+    pub fn new(name: String, perm: String) -> Machine {
         Machine {
             name: name,
-            location: location,
-            status: Status::Free,
             perm: perm,
-        }
-    }
-
-    pub fn set_blocked(&mut self, blocked: bool) {
-        if blocked {
-            self.status = Status::Blocked;
-        } else {
-            self.status = Status::Free;
         }
     }
 }
 
-struct MachineDB {
+pub struct MachineDB {
     db: lmdb::Database,
 }
 
