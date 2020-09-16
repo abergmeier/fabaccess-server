@@ -1,0 +1,53 @@
+# Official language image. Look for the different tagged releases at:
+# https://hub.docker.com/r/library/rust/tags/
+image: "rust:latest"
+
+# Optional: Pick zero or more services to be used on all builds.
+# Only needed when using a docker container to run your tests in.
+# Check out: http://docs.gitlab.com/ce/ci/docker/using_docker_images.html#what-is-a-service
+# services:
+#   - mysql:latest
+#   - redis:latest
+#   - postgres:latest
+
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+  # CARGO_HOME: $CI_PROJECT_DIR/cargo
+  APT_CACHE_DIR: $CI_PROJECT_DIR/apt
+
+# install build dependencies
+before_script:
+  - apt-get update -yqq
+  - apt-get install -o dir::cache::archives="$APT_CACHE_DIR" -yqq --no-install-recommends capnproto build-essential cmake clang libclang-dev libgsasl7-dev
+  - rustup update
+  - rustup component add rustfmt
+  - rustup component add clippy
+
+# Use clippy to lint the project
+lint:clippy:
+  allow_failure: true
+  script:
+    - rustc --version && cargo --version  # Print version info for debugging
+    - cargo clippy -- -D warnings
+
+# Use rustfmt to check formating of the project
+lint:fmt:
+  allow_failure: true
+  script:
+    - rustc --version && cargo --version  # Print version info for debugging
+    - cargo fmt -- --check # TODO: Do we want to enforce formating?
+
+# Use cargo to test the project
+test:cargo:
+  script:
+    - rustc --version && cargo --version  # Print version info for debugging
+    - cargo test --workspace --verbose
+
+
+# cache dependencies and build environment to speed up setup
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - apt/
+    # - cargo/
+    - target/
