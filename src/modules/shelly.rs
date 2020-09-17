@@ -48,16 +48,8 @@ impl Shelly {
 
 #[async_trait]
 impl Actuator for Shelly {
-    async fn power_on(&mut self, name: String) {
-        let topic = format!("shellies/{}/relay/0/command", name);
-        let msg = mqtt::Message::new(topic, "on", 0);
-        self.client.publish(msg).map(|_| ()).await
-    }
-
-    async fn power_off(&mut self, name: String) {
-        let topic = format!("shellies/{}/relay/0/command", name);
-        let msg = mqtt::Message::new(topic, "off", 0);
-        self.client.publish(msg).map(|_| ()).await
+    async fn subscribe(&mut self, signal: StatusSignal) {
+        self.signal.replace(signal);
     }
 }
 

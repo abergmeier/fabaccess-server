@@ -36,19 +36,10 @@ impl Actuators {
     }
 }
 
-
-#[async_trait]
-pub trait Actuator: Stream<Item = future::BoxFuture<'static, ()>> {
-    // TODO: Is it smarter to pass a (reference to?) a machine instead of 'name'? Do we need to
-    // pass basically arbitrary parameters to the Actuator?
-    async fn power_on(&mut self, name: String);
-    async fn power_off(&mut self, name: String);
-}
-
 pub type StatusSignal = Pin<Box<dyn Signal<Item = Status> + Send + Sync>>;
 
 #[async_trait]
-pub trait Subscriber {
+pub trait Actuator: Stream<Item = future::BoxFuture<'static, ()>> {
     async fn subscribe(&mut self, signal: StatusSignal);
 }
 
@@ -60,16 +51,6 @@ struct Dummy {
 }
 #[async_trait]
 impl Actuator for Dummy {
-    async fn power_on(&mut self, _name: String) {
-        return
-    }
-    async fn power_off(&mut self, _name: String) {
-        return
-    }
-}
-
-#[async_trait]
-impl Subscriber for Dummy {
     async fn subscribe(&mut self, signal: StatusSignal) {
         self.signal.replace(signal);
     }
