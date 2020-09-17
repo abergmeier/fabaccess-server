@@ -1,7 +1,7 @@
 mod actuators;
 mod sensors;
 
-pub use actuators::{Actuator, ActBox};
+pub use actuators::{Actuator, ActBox, StatusSignal};
 pub use sensors::{Sensor, SensBox};
 
 #[derive(Clone)]
