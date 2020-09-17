@@ -17,9 +17,8 @@ use crate::error::Result;
 use crate::registries::Registries;
 
 // spawner is a type that allows 'tasks' to be spawned on it, running them to completion.
-pub fn init<S: Spawn>(log: Logger, config: &Settings, spawner: &S, registries: Registries) -> Result<()> {
-    let f = Box::new(shelly::run(log.clone(), config.clone(), registries.clone()));
-    spawner.spawn_obj(f.into())?;
+pub async fn init<S: Spawn + Clone + Send>(log: Logger, config: Settings, spawner: S, registries: Registries) -> Result<()> {
+    shelly::run(log.clone(), config.clone(), registries.clone()).await;
 
     Ok(())
 }

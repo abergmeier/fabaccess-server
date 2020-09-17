@@ -8,7 +8,8 @@ use crate::machine::Status;
 use std::pin::Pin;
 use futures::prelude::*;
 use futures::ready;
-use futures::task::{Poll, Context, Waker};
+use futures::task::{Poll, Context, Waker, Spawn};
+use futures::StreamExt;
 use futures_signals::signal::Signal;
 
 use paho_mqtt as mqtt;
@@ -19,7 +20,7 @@ use paho_mqtt as mqtt;
 pub async fn run(log: Logger, config: Settings, registries: Registries) {
     let shelly = Shelly::new(config).await;
 
-    let r = registries.actuators.register("shelly".to_string(), shelly).await;
+    let r = registries.actuators.register("shelly".to_string(), Box::new(shelly)).await;
 }
 
 /// An actuator for all Shellies connected listening on one MQTT broker
@@ -35,7 +36,7 @@ struct Shelly {
 
 impl Shelly {
     // Can't use Error, it's not Send. fabinfra/fabaccess/bffh#7
-    pub async fn new(config: Settings) -> ActBox {
+    pub async fn new(config: Settings) -> Self {
         let client = mqtt::AsyncClient::new(config.shelly.unwrap().mqtt_url).unwrap();
 
         client.connect(mqtt::ConnectOptions::new()).await.unwrap();
@@ -44,7 +45,7 @@ impl Shelly {
         let signal: Option<StatusSignal> = None;
         let waker = None;
 
-        Box::new(Shelly { signal, waker, name, client })
+        Shelly { signal, waker, name, client }
     }
 }
 

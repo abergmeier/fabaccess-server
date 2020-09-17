@@ -34,6 +34,20 @@ impl Actuators {
         // TODO: Log an error or something if that name was already taken
         wlock.insert(name, act);
     }
+
+    pub async fn run<S: Spawn>(&mut self) {
+        let mut wlock = self.inner.write().await;
+        for (_name, act) in wlock.into_iter() {
+
+        }
+    }
+
+    pub async fn subscribe(&mut self, name: String, signal: StatusSignal) {
+        let mut wlock = self.inner.write().await;
+        if let Some(act) = wlock.get_mut(&name) {
+            act.subscribe(signal);
+        }
+    }
 }
 
 pub type StatusSignal = Pin<Box<dyn Signal<Item = Status> + Send + Sync>>;
