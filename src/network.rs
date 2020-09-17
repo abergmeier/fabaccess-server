@@ -19,7 +19,7 @@ impl Network {
     ///
     /// Idea being that bffh builds an event network that filters an incoming event into an
     /// the appropiate (sub)set of signal handlers based on pretty dynamic configuration.
-    pub fn filter<B, S: Signal<Item=B>, F: Fn(&B) -> bool>(&mut self, ) {
+    pub fn filter<B, S: Signal<Item=B>, F: Fn(&B) -> bool>(&mut self) {
         unimplemented!()
     }
 }
