@@ -229,7 +229,7 @@ fn main() -> Result<(), Error> {
     // without warning.
     let modlog = log.clone();
     let regs = Registries::new();
-    match modules::init(modlog.new(o!("system" => "modules")), &config, &local_spawn, regs) {
+    match modules::init(modlog.new(o!("system" => "modules")), &config, &pool, regs) {
         Ok(()) => {}
         Err(e) => {
             error!(modlog, "Module startup failed: {}", e);

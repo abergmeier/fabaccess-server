@@ -15,33 +15,27 @@ use paho_mqtt as mqtt;
 // entirety. This works reasonably enough for this static modules here but if we do dynamic loading
 // via dlopen(), lua API, python API etc it will not.
 pub async fn run(log: Logger, config: Settings, registries: Registries) {
-    let shelly_r = Shelly::new(config).await;
-    if let Err(e) = shelly_r {
-        error!(log, "Shelly module errored: {}", e);
-        return;
-    }
+    let shelly = Shelly::new(config).await;
 
-    let r = registries.actuators.register(
-        "shelly".to_string(), 
-        shelly_r.unwrap()
-    ).await;
+    let r = registries.actuators.register("shelly".to_string(), shelly).await;
 }
 
 /// An actuator for all Shellies connected listening on one MQTT broker
 ///
 /// This actuator can power toggle an arbitrariy named shelly on the broker it is connected to. If
 /// you need to toggle shellies on multiple brokers you need multiple instanced of this actuator.
+#[derive(Clone)]
 struct Shelly {
     client: mqtt::AsyncClient,
 }
 
 impl Shelly {
-    pub async fn new(config: Settings) -> Result<ActBox> {
-        let client = mqtt::AsyncClient::new(config.shelly.unwrap().mqtt_url)?;
+    pub async fn new(config: Settings) -> ActBox {
+        let client = mqtt::AsyncClient::new(config.shelly.unwrap().mqtt_url).unwrap();
 
-        client.connect(mqtt::ConnectOptions::new()).await?;
+        client.connect(mqtt::ConnectOptions::new()).await.unwrap();
 
-        Ok(Box::new(Shelly { client }) as ActBox)
+        Box::new(Shelly { client })
     }
 }
 

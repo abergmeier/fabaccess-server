@@ -10,9 +10,7 @@ pub struct Actuators {
     inner: Arc<RwLock<Inner>>,
 }
 
-unsafe impl Send for Actuators { }
-
-pub type ActBox = Box<dyn Actuator>;
+pub type ActBox = Box<dyn Actuator + Sync + Send>;
 
 type Inner = HashMap<String, ActBox>;
 

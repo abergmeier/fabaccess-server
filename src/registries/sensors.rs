@@ -20,7 +20,7 @@ impl Sensors {
     }
 }
 
-pub type SensBox = Box<dyn Sensor>;
+pub type SensBox = Box<dyn Sensor + Send + Sync>;
 type Inner = HashMap<String, SensBox>;
 
 
