@@ -33,6 +33,9 @@ lint:clippy:
     - master
     - development
     - merge_requests
+  tags:
+    - linux
+    - docker
 
 # Use rustfmt to check formating of the project
 lint:fmt:
@@ -44,6 +47,9 @@ lint:fmt:
     - master
     - development
     - merge_requests
+  tags:
+    - linux
+    - docker
 
 # Use cargo to test the project
 test:cargo:
@@ -54,6 +60,9 @@ test:cargo:
     - master
     - development
     - merge_requests
+  tags:
+    - linux
+    - docker
 
 
 # cache dependencies and build environment to speed up setup
