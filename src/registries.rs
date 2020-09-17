@@ -1,4 +1,5 @@
 mod actuators;
+mod sensors;
 
 pub use actuators::{Actuator, ActBox};
 
