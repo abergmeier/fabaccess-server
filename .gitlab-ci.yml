@@ -29,6 +29,10 @@ lint:clippy:
   script:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo clippy -- -D warnings
+  only:
+    - master
+    - development
+    - merge_requests
 
 # Use rustfmt to check formating of the project
 lint:fmt:
@@ -36,12 +40,20 @@ lint:fmt:
   script:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo fmt -- --check # TODO: Do we want to enforce formating?
+  only:
+    - master
+    - development
+    - merge_requests
 
 # Use cargo to test the project
 test:cargo:
   script:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo test --workspace --verbose
+  only:
+    - master
+    - development
+    - merge_requests
 
 
 # cache dependencies and build environment to speed up setup
