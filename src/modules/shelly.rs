@@ -30,6 +30,7 @@ struct Shelly {
 }
 
 impl Shelly {
+    // Can't use Error, it's not Send. fabinfra/fabaccess/bffh#7
     pub async fn new(config: Settings) -> ActBox {
         let client = mqtt::AsyncClient::new(config.shelly.unwrap().mqtt_url).unwrap();
 
