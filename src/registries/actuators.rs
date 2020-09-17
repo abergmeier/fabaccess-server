@@ -38,9 +38,8 @@ impl Actuators {
 
 pub type StatusSignal = Pin<Box<dyn Signal<Item = Status> + Send + Sync>>;
 
-#[async_trait]
 pub trait Actuator: Stream<Item = future::BoxFuture<'static, ()>> {
-    async fn subscribe(&mut self, signal: StatusSignal);
+    fn subscribe(&mut self, signal: StatusSignal);
 }
 
 // This is merely a proof that Actuator *can* be implemented on a finite, known type. Yay for type
@@ -49,9 +48,9 @@ struct Dummy {
     log: Logger,
     signal: Option<StatusSignal>
 }
-#[async_trait]
+
 impl Actuator for Dummy {
-    async fn subscribe(&mut self, signal: StatusSignal) {
+    fn subscribe(&mut self, signal: StatusSignal) {
         self.signal.replace(signal);
     }
 }

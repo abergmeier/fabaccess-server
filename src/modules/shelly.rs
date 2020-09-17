@@ -49,9 +49,8 @@ impl Shelly {
 }
 
 
-#[async_trait]
 impl Actuator for Shelly {
-    async fn subscribe(&mut self, signal: StatusSignal) {
+    fn subscribe(&mut self, signal: StatusSignal) {
         self.signal.replace(signal);
         if let Some(waker) = self.waker.take() {
             waker.wake();
