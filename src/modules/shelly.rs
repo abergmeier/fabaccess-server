@@ -3,6 +3,7 @@ use slog::Logger;
 use crate::config::Settings;
 use crate::registries::{Registries, Actuator, ActBox, StatusSignal};
 use crate::error::Result;
+use crate::machine::Status;
 
 use std::pin::Pin;
 use futures::prelude::*;
@@ -59,14 +60,20 @@ impl Stream for Shelly {
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         let unpin = Pin::into_inner(self);
         if let Some(ref mut s) = unpin.signal {
-            let status = ready!(Signal::poll_change(Pin::new(s), cx));
-            let topic = format!("shellies/{}/relay/0/command", unpin.name);
-            let msg = mqtt::Message::new(topic, "on", 0);
-            let f = unpin.client.publish(msg).map(|_| ());
+            if let Some(status) = ready!(Signal::poll_change(Pin::new(s), cx)) {
+                let topic = format!("shellies/{}/relay/0/command", unpin.name);
+                let pl = match status {
+                    Status::Free => "off",
+                    Status::Occupied => "on",
+                    Status::Blocked => "off",
+                };
+                let msg = mqtt::Message::new(topic, pl, 0);
+                let f = unpin.client.publish(msg).map(|_| ());
 
-            Poll::Ready(Some(Box::pin(f)))
-        } else {
-            Poll::Pending
+                return Poll::Ready(Some(Box::pin(f)));
+            }
         }
+
+        Poll::Pending
     }
 }
