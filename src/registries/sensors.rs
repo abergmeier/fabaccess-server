@@ -7,8 +7,17 @@ use std::sync::Arc;
 use smol::lock::RwLock;
 use std::collections::HashMap;
 
+#[derive(Clone)]
 pub struct Sensors {
     inner: Arc<RwLock<Inner>>,
+}
+
+impl Sensors {
+    pub fn new() -> Self {
+        Sensors {
+            inner: Arc::new(RwLock::new(Inner::new())),
+        }
+    }
 }
 
 pub type SensBox<'a> = Box<dyn Sensor<'a>>;
