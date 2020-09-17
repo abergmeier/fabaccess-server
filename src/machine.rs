@@ -22,6 +22,8 @@ use smol::channel::{Receiver, Sender};
 
 use futures_signals::signal::*;
 
+pub type ID = Uuid;
+
 /// Status of a Machine
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Status {
