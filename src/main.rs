@@ -17,6 +17,7 @@ mod error;
 mod machine;
 mod connection;
 mod registries;
+mod network;
 
 use signal_hook::iterator::Signals;
 
