@@ -20,8 +20,8 @@ impl Sensors {
     }
 }
 
-pub type SensBox<'a> = Box<dyn Sensor<'a>>;
-type Inner = HashMap<String, SensBox<'static>>;
+pub type SensBox = Box<dyn Sensor>;
+type Inner = HashMap<String, SensBox>;
 
 
 // Implementing Sensors.
@@ -35,13 +35,14 @@ type Inner = HashMap<String, SensBox<'static>>;
 /// A sensor is anything that can forward an intent of an user to do something to bffh.
 /// This may be a card reader connected to a machine, a website allowing users to select a machine
 /// they want to use or something like QRHello
-pub trait Sensor<'a>: Stream<Item = BoxFuture<'a, ()>> {
+pub trait Sensor: Stream<Item = BoxFuture<'static, ()>> {
     /// Setup the Sensor.
     ///
     /// After this async function completes the Stream implementation should be able to generate
     /// futures when polled.
     /// Implementations can rely on this function being polled to completeion before the stream
     /// is polled.
+    // TODO Is this sensible vs just having module-specific setup fns?
     async fn setup(&mut self);
 
     /// Shutdown the sensor gracefully
@@ -51,11 +52,9 @@ pub trait Sensor<'a>: Stream<Item = BoxFuture<'a, ()>> {
     async fn shutdown(&mut self);
 }
 
-struct Dummy<'a> {
-    phantom: &'a std::marker::PhantomData<()>,
-}
+struct Dummy;
 #[async_trait]
-impl<'a> Sensor<'a> for Dummy<'a> {
+impl Sensor for Dummy {
     async fn setup(&mut self) {
         return;
     }
@@ -65,10 +64,10 @@ impl<'a> Sensor<'a> for Dummy<'a> {
     }
 }
 
-impl<'a> Stream for Dummy<'a> {
-    type Item = BoxFuture<'a, ()>;
+impl Stream for Dummy {
+    type Item = BoxFuture<'static, ()>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        todo!()
+        Poll::Ready(Some(Box::pin(futures::future::ready(()))))
     }
 }
