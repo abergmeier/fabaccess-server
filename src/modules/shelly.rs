@@ -63,9 +63,8 @@ impl Stream for Shelly {
             if let Some(status) = ready!(Signal::poll_change(Pin::new(s), cx)) {
                 let topic = format!("shellies/{}/relay/0/command", unpin.name);
                 let pl = match status {
-                    Status::Free => "off",
+                    Status::Free | Status::Blocked => "off",
                     Status::Occupied => "on",
-                    Status::Blocked => "off",
                 };
                 let msg = mqtt::Message::new(topic, pl, 0);
                 let f = unpin.client.publish(msg).map(|_| ());
