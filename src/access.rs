@@ -19,9 +19,9 @@ use crate::config::Settings;
 use crate::error::Result;
 
 // FIXME: fabinfra/fabaccess/bffh#3
-type UserIdentifier = u64;
-type RoleIdentifier = u64;
-type PermIdentifier = u64;
+pub type UserIdentifier = u64;
+pub type RoleIdentifier = u64;
+pub type PermIdentifier = u64;
 
 pub struct PermissionsProvider {
     log: Logger,

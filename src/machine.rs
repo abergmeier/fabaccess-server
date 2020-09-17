@@ -11,6 +11,7 @@ use smol::lock::RwLock;
 
 use crate::error::Result;
 use crate::config::Settings;
+use crate::access;
 
 use capnp::Error;
 
@@ -26,6 +27,7 @@ pub type ID = Uuid;
 
 /// Status of a Machine
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
+#[repr(u8)]
 pub enum Status {
     /// Not currently used by anybody
     Free,
@@ -100,11 +102,16 @@ impl MachineManager {
 /// machine, checking that the user who wants the machine (de)activated has the required
 /// permissions.
 pub struct Machine {
+    /// Computer-readable identifier for this machine
+    // Implicit in database since it's the key.
+    #[serde(skip)]
+    id: ID,
+
     /// The human-readable name of the machine. Does not need to be unique
     name: String,
 
     /// The required permission to use this machine.
-    perm: String,
+    perm: access::PermIdentifier,
 
     /// The state of the machine as bffh thinks the machine *should* be in.
     ///
@@ -114,8 +121,9 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub fn new(name: String, perm: String) -> Machine {
+    pub fn new(id: Uuid, name: String, perm: access::PermIdentifier) -> Machine {
         Machine {
+            id: id,
             name: name,
             perm: perm,
             state: Mutable::new(Status::Free),
@@ -133,6 +141,24 @@ impl Machine {
     pub fn signal(&self) -> impl Signal {
         self.state.signal().dedupe()
     }
+
+    /// Requests to use a machine. Returns `true` if successful.
+    ///
+    /// This will update the internal state of the machine, notifying connected actors, if any.
+    pub fn request_use<T: Transaction>
+        ( &mut self
+        , txn: &T
+        , pp: &access::PermissionsProvider
+        , who: access::UserIdentifier
+        ) -> Result<bool>
+    {
+        if pp.check(txn, who, self.perm)? {
+            self.state.set(Status::Occupied);
+            return Ok(true);
+        } else {
+            return Ok(false);
+        }
+    }
 }
 
 pub struct MachineDB {
@@ -149,7 +175,10 @@ impl MachineDB {
     {
         match txn.get(self.db, &uuid.as_bytes()) {
             Ok(bytes) => {
-                Ok(Some(flexbuffers::from_slice(bytes)?))
+                let mut machine: Machine = flexbuffers::from_slice(bytes)?;
+                machine.id = uuid;
+
+                Ok(Some(machine))
             },
             Err(lmdb::Error::NotFound) => { Ok(None) },
             Err(e) => { Err(e.into()) },
