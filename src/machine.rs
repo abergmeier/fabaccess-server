@@ -23,6 +23,8 @@ use smol::channel::{Receiver, Sender};
 
 use futures_signals::signal::*;
 
+use crate::registries::StatusSignal;
+
 pub type ID = Uuid;
 
 /// Status of a Machine
@@ -138,8 +140,8 @@ impl Machine {
     /// dedupe ensures that if state is changed but only changes to the value it had beforehand
     /// (could for example happen if the machine changes current user but stays activated) no
     /// update is sent.
-    pub fn signal(&self) -> impl Signal {
-        self.state.signal().dedupe()
+    pub fn signal(&self) -> StatusSignal {
+        Box::pin(self.state.signal().dedupe())
     }
 
     /// Requests to use a machine. Returns `true` if successful.
@@ -158,6 +160,10 @@ impl Machine {
         } else {
             return Ok(false);
         }
+    }
+
+    pub fn set_state(&mut self, state: Status) {
+        self.state.set(state)
     }
 }
 

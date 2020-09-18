@@ -6,7 +6,8 @@ use smol::lock::RwLock;
 use std::pin::Pin;
 use futures::ready;
 use futures::prelude::*;
-use futures::task::{Context, Poll};
+use futures::channel::mpsc;
+use futures::task::{Context, Poll, Spawn};
 use futures_signals::signal::Signal;
 
 use crate::machine::Status;
@@ -18,9 +19,9 @@ pub struct Actuators {
     inner: Arc<RwLock<Inner>>,
 }
 
-pub type ActBox = Box<dyn Actuator + Sync + Send>;
+pub type ActBox = Box<dyn Actuator + Sync + Send + Unpin>;
 
-type Inner = HashMap<String, ActBox>;
+type Inner = HashMap<String, mpsc::Sender<StatusSignal>>;
 
 impl Actuators {
     pub fn new() -> Self {
@@ -29,23 +30,16 @@ impl Actuators {
         }
     }
 
-    pub async fn register(&self, name: String, act: ActBox) {
+    pub async fn register(&self, name: String, tx: mpsc::Sender<StatusSignal>) {
         let mut wlock = self.inner.write().await;
         // TODO: Log an error or something if that name was already taken
-        wlock.insert(name, act);
-    }
-
-    pub async fn run<S: Spawn>(&mut self) {
-        let mut wlock = self.inner.write().await;
-        for (_name, act) in wlock.into_iter() {
-
-        }
+        wlock.insert(name, tx);
     }
 
     pub async fn subscribe(&mut self, name: String, signal: StatusSignal) {
         let mut wlock = self.inner.write().await;
-        if let Some(act) = wlock.get_mut(&name) {
-            act.subscribe(signal);
+        if let Some(tx) = wlock.get_mut(&name) {
+            tx.send(signal).await;
         }
     }
 }
@@ -60,7 +54,8 @@ pub trait Actuator: Stream<Item = future::BoxFuture<'static, ()>> {
 // systems with halting problems.
 struct Dummy {
     log: Logger,
-    signal: Option<StatusSignal>
+    sigchan: mpsc::Receiver<StatusSignal>,
+    signal: Option<StatusSignal>,
 }
 
 impl Actuator for Dummy {

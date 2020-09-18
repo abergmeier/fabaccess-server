@@ -197,16 +197,16 @@ fn main() -> Result<(), Error> {
             }
         }).collect();
 
-    let (mach, auth) = exec.run_until(async {
-        // Rull all futures to completion in parallel.
-        // This will block until all three are done starting up.
-        join!(machinedb_f, authentication_f)
-    });
+    //let (mach, auth) = exec.run_until(async {
+    //    // Rull all futures to completion in parallel.
+    //    // This will block until all three are done starting up.
+    //    join!(machinedb_f, authentication_f)
+    //});
 
     // Error out if any of the subsystems failed to start.
-    let mach = mach?;
+    //let mach = mach?;
     let pdb = pdb?;
-    let auth = auth?;
+    //let auth = auth?;
 
     // Since the below closures will happen at a much later time we need to make sure all pointers
     // are still valid. Thus, Arc.
@@ -228,14 +228,36 @@ fn main() -> Result<(), Error> {
     // FIXME: implement notification so the modules can shut down cleanly instead of being killed
     // without warning.
     let modlog = log.clone();
-    let regs = Registries::new();
-    match exec.run_until(modules::init(modlog.new(o!("system" => "modules")), config.clone(), pool.clone(), regs)) {
+    let mut regs = Registries::new();
+    match exec.run_until(modules::init(modlog.new(o!("system" => "modules")), config.clone(), pool.clone(), regs.clone())) {
         Ok(()) => {}
         Err(e) => {
             error!(modlog, "Module startup failed: {}", e);
             return Err(e);
         }
     }
+
+    use uuid::Uuid;
+    use machine::{Status, Machine};
+    let mut machine = Machine::new(Uuid::new_v4(), "Testmachine".to_string(), 0);
+    let f = regs.actuators.subscribe("shelly".to_string(), machine.signal());
+    exec.run_until(f);
+
+    let postlog = log.clone();
+    use std::thread;
+    use std::time::Duration;
+    thread::spawn(move || {
+        info!(postlog, "Zzz");
+        thread::sleep(Duration::from_millis(1000));
+        machine.set_state(Status::Occupied);
+        info!(postlog, "Beep");
+        thread::sleep(Duration::from_millis(2000));
+        machine.set_state(Status::Blocked);
+        info!(postlog, "Bap");
+        thread::sleep(Duration::from_millis(3000));
+        machine.set_state(Status::Free);
+        info!(postlog, "Boop");
+    });
 
     // Closure inefficiencies. Lucky cloning an Arc is pretty cheap.
     let inner_log = log.clone();

@@ -18,7 +18,7 @@ use crate::registries::Registries;
 
 // spawner is a type that allows 'tasks' to be spawned on it, running them to completion.
 pub async fn init<S: Spawn + Clone + Send>(log: Logger, config: Settings, spawner: S, registries: Registries) -> Result<()> {
-    shelly::run(log.clone(), config.clone(), registries.clone()).await;
+    shelly::run(log.clone(), config.clone(), registries.clone(), spawner.clone()).await;
 
     Ok(())
 }
