@@ -238,29 +238,6 @@ fn main() -> Result<(), Error> {
         }
     }
 
-    use uuid::Uuid;
-    use machine::{Status, Machine};
-    let mut machine = Machine::new(Uuid::new_v4(), "Testmachine".to_string(), 0);
-    println!("{}", toml::to_string(&machine).unwrap());
-    let f = regs.actuators.subscribe("shelly".to_string(), machine.signal());
-    exec.run_until(f);
-
-    let postlog = log.clone();
-    use std::thread;
-    use std::time::Duration;
-    thread::spawn(move || {
-        info!(postlog, "Zzz");
-        thread::sleep(Duration::from_millis(1000));
-        machine.set_state(Status::Occupied);
-        info!(postlog, "Beep");
-        thread::sleep(Duration::from_millis(2000));
-        machine.set_state(Status::Blocked);
-        info!(postlog, "Bap");
-        thread::sleep(Duration::from_millis(3000));
-        machine.set_state(Status::Free);
-        info!(postlog, "Boop");
-    });
-
     // Closure inefficiencies. Lucky cloning an Arc is pretty cheap.
     let inner_log = log.clone();
     let loop_log = log.clone();
