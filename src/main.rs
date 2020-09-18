@@ -132,7 +132,7 @@ fn main() -> Result<(), Error> {
     // Start loading the machine database, authentication system and permission system
     // All of those get a custom logger so the source of a log message can be better traced and
     // filtered
-    let machinedb_f = machine::init(log.new(o!("system" => "machines")), &config);
+    let mdb = machine::init(log.new(o!("system" => "machines")), &config, &env);
     let pdb = access::init(log.new(o!("system" => "permissions")), &config, &env);
     let authentication_f = auth::init(log.new(o!("system" => "authentication")), config.clone());
 
@@ -148,7 +148,8 @@ fn main() -> Result<(), Error> {
 
             let mut txn = env.begin_rw_txn()?;
             let path = path.to_path_buf();
-            pdb?.load_db(&mut txn, path)?;
+            pdb?.load_db(&mut txn, path.clone())?;
+            mdb?.load_db(&mut txn, path)?;
             txn.commit();
         } else {
             error!(log, "You must provide a directory path to load from");
@@ -165,9 +166,9 @@ fn main() -> Result<(), Error> {
 
             let txn = env.begin_ro_txn()?;
             let path = path.to_path_buf();
-            pdb?.dump_db(&txn, path)?;
+            pdb?.dump_db(&txn, path.clone())?;
+            mdb?.dump_db(&txn, path)?;
         } else {
-
             error!(log, "You must provide a directory path to dump into");
         }
 
@@ -204,7 +205,7 @@ fn main() -> Result<(), Error> {
     //});
 
     // Error out if any of the subsystems failed to start.
-    //let mach = mach?;
+    let mdb = mdb?;
     let pdb = pdb?;
     //let auth = auth?;
 
@@ -240,6 +241,7 @@ fn main() -> Result<(), Error> {
     use uuid::Uuid;
     use machine::{Status, Machine};
     let mut machine = Machine::new(Uuid::new_v4(), "Testmachine".to_string(), 0);
+    println!("{}", toml::to_string(&machine).unwrap());
     let f = regs.actuators.subscribe("shelly".to_string(), machine.signal());
     exec.run_until(f);
 
