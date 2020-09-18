@@ -10,16 +10,15 @@ use slog::Logger;
 mod shelly;
 
 use futures::prelude::*;
-use futures::task::LocalSpawn;
+use futures::task::Spawn;
 
 use crate::config::Settings;
 use crate::error::Result;
 use crate::registries::Registries;
 
 // spawner is a type that allows 'tasks' to be spawned on it, running them to completion.
-pub fn init<S: LocalSpawn>(log: Logger, config: &Settings, spawner: &S, registries: Registries) -> Result<()> {
-    let f = Box::new(shelly::run(log.clone(), config.clone(), registries.clone()));
-    spawner.spawn_local_obj(f.into())?;
+pub async fn init<S: Spawn + Clone + Send>(log: Logger, config: Settings, spawner: S, registries: Registries) -> Result<()> {
+    shelly::run(log.clone(), config.clone(), registries.clone(), spawner.clone()).await;
 
     Ok(())
 }

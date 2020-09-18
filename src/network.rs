@@ -1,5 +1,8 @@
 use futures_signals::signal::Signal;
 
+use crate::machine;
+use crate::access;
+
 struct Network {
 
 }
@@ -24,10 +27,12 @@ impl Network {
     }
 }
 
+/// The internal bffh event type
+///
+/// Everything that BFFH considers an event is contained in an instance of this.
+#[derive(PartialEq, Eq, Clone, PartialOrd, Ord, Debug)]
 enum Event {
-
-}
-
-trait Filter<S> {
-    fn filter(&self, f: Fn(&S) -> bool);
+    /// An user wants to use a machine
+    // TODO: Define /what/ an user wants to do with said machine?
+    MachineRequest(machine::ID, access::UserIdentifier),
 }

@@ -132,7 +132,7 @@ fn main() -> Result<(), Error> {
     // Start loading the machine database, authentication system and permission system
     // All of those get a custom logger so the source of a log message can be better traced and
     // filtered
-    let machinedb_f = machine::init(log.new(o!("system" => "machines")), &config);
+    let mdb = machine::init(log.new(o!("system" => "machines")), &config, &env);
     let pdb = access::init(log.new(o!("system" => "permissions")), &config, &env);
     let authentication_f = auth::init(log.new(o!("system" => "authentication")), config.clone());
 
@@ -148,7 +148,8 @@ fn main() -> Result<(), Error> {
 
             let mut txn = env.begin_rw_txn()?;
             let path = path.to_path_buf();
-            pdb?.load_db(&mut txn, path)?;
+            pdb?.load_db(&mut txn, path.clone())?;
+            mdb?.load_db(&mut txn, path)?;
             txn.commit();
         } else {
             error!(log, "You must provide a directory path to load from");
@@ -165,9 +166,9 @@ fn main() -> Result<(), Error> {
 
             let txn = env.begin_ro_txn()?;
             let path = path.to_path_buf();
-            pdb?.dump_db(&txn, path)?;
+            pdb?.dump_db(&txn, path.clone())?;
+            mdb?.dump_db(&txn, path)?;
         } else {
-
             error!(log, "You must provide a directory path to dump into");
         }
 
@@ -197,16 +198,16 @@ fn main() -> Result<(), Error> {
             }
         }).collect();
 
-    let (mach, auth) = exec.run_until(async {
-        // Rull all futures to completion in parallel.
-        // This will block until all three are done starting up.
-        join!(machinedb_f, authentication_f)
-    });
+    //let (mach, auth) = exec.run_until(async {
+    //    // Rull all futures to completion in parallel.
+    //    // This will block until all three are done starting up.
+    //    join!(machinedb_f, authentication_f)
+    //});
 
     // Error out if any of the subsystems failed to start.
-    let mach = mach?;
+    let mdb = mdb?;
     let pdb = pdb?;
-    let auth = auth?;
+    //let auth = auth?;
 
     // Since the below closures will happen at a much later time we need to make sure all pointers
     // are still valid. Thus, Arc.
@@ -228,8 +229,8 @@ fn main() -> Result<(), Error> {
     // FIXME: implement notification so the modules can shut down cleanly instead of being killed
     // without warning.
     let modlog = log.clone();
-    let regs = Registries::new();
-    match modules::init(modlog.new(o!("system" => "modules")), &config, &local_spawn, regs) {
+    let mut regs = Registries::new();
+    match exec.run_until(modules::init(modlog.new(o!("system" => "modules")), config.clone(), pool.clone(), regs.clone())) {
         Ok(()) => {}
         Err(e) => {
             error!(modlog, "Module startup failed: {}", e);
