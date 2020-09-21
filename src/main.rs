@@ -19,8 +19,6 @@ mod connection;
 mod registries;
 mod network;
 
-use signal_hook::iterator::Signals;
-
 use clap::{App, Arg};
 
 use futures::prelude::*;
@@ -30,6 +28,7 @@ use futures::join;
 use futures::task::LocalSpawn;
 
 use smol::net::TcpListener;
+use smol::net::unix::UnixStream;
 
 use std::io;
 use std::io::Write;
@@ -49,11 +48,22 @@ const LMDB_MAX_DB: u32 = 16;
 // Returning a `Result` from `main` allows us to use the `?` shorthand.
 // In the case of an Err it will be printed using `fmt::Debug`
 fn main() -> Result<(), Error> {
-    // Initialize signal handler.
-    // Specifically, this is a Stream of c_int representing received signals
-    // We currently only care about Ctrl-C so SIGINT it is.
-    // TODO: Make this do SIGHUP and a few others too.
-    let signals = Signals::new(&[signal_hook::SIGINT])?.into_async()?;
+
+    let signal = Box::pin(async {
+        let (tx, mut rx) = UnixStream::pair()?;
+        // Initialize signal handler.
+        // We currently only care about Ctrl-C so SIGINT it is.
+        // TODO: Make this do SIGHUP and a few others too. (By cloning the tx end of the pipe)
+        signal_hook::pipe::register(signal_hook::SIGINT, tx)?;
+        // When a signal is received this future can complete and read a byte from the underlying
+        // socket — the actual data is discarded but the act of being able to receive data tells us
+        // that we received a SIGINT.
+
+        // FIXME: What errors are possible and how to handle them properly?
+        rx.read_exact(&mut [0u8]).await?;
+
+        io::Result::Ok(LoopResult::Stop)
+    });
 
     use clap::{crate_version, crate_description, crate_name};
 
@@ -292,14 +302,9 @@ fn main() -> Result<(), Error> {
 
         // Check each signal as it arrives
         // signals is a futures-0.1 stream, compat() makes it a futures-0.3 (which we use) stream
-        let handle_signals = signals.compat().map(|_signal| {
-            // _signal is the signal c_int.
-            // But since we only listen for SIGINT at the moment we don't really need to look at
-            // it.
-            return LoopResult::Stop;
-        });
-
         // Now actually check if a connection was opened or a signal recv'd
+        let handle_signals = signal.map(|r| { r.unwrap() }).into_stream();
+
         let mut combined = stream::select(handle_signals, handle_sockets);
 
         // This is the basic main loop that drives execution
