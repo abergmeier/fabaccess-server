@@ -1,0 +1,13 @@
+version: "3.8"
+services:
+  bffh:
+    build: .
+    ports:
+      - "59661:59661"
+    volumes:
+      # generate a sample config.toml by running "docker run diflouroborane --print-default". You may have to delete the ipv6 listen section.
+      - "$PWD/config.toml:/etc/diflouroborane.toml"
+    links:
+      - mqtt
+  mqtt:
+    image: eclipse-mosquitto
