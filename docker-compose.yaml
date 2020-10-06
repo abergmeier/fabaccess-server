@@ -1,0 +1,12 @@
+version: "3.8"
+services:
+  bffh:
+    build: .
+    ports:
+      - "59661:59661"
+    volumes:
+      - "$PWD/config.toml:/etc/diflouroborane.toml"
+    links:
+      - mqtt
+  mqtt:
+    image: eclipse-mosquitto
