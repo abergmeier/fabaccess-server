@@ -196,7 +196,7 @@ impl PermissionsProvider {
            let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
            let roleID = u64::from_ne_bytes(kbytes.try_into().unwrap());
            let role: Role = flexbuffers::from_slice(vbuf)?;
-           let filename = format!("{:x}.yml", roleID);
+           let filename = format!("{:x}.toml", roleID);
            path.set_file_name(filename);
            let mut fp = std::fs::File::create(&path)?;
            let out = toml::to_vec(&role)?;
@@ -213,7 +213,7 @@ impl PermissionsProvider {
            let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
            let permID = u64::from_ne_bytes(kbytes.try_into().unwrap());
            let perm: Perm = flexbuffers::from_slice(vbuf)?;
-           let filename = format!("{:x}.yml", permID);
+           let filename = format!("{:x}.toml", permID);
            path.set_file_name(filename);
            let mut fp = std::fs::File::create(&path)?;
            let out = toml::to_vec(&perm)?;
@@ -230,7 +230,7 @@ impl PermissionsProvider {
            let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
            let userID = u64::from_ne_bytes(kbytes.try_into().unwrap());
            let user: User = flexbuffers::from_slice(vbuf)?;
-           let filename = format!("{:x}.yml", userID);
+           let filename = format!("{:x}.toml", userID);
            path.set_file_name(filename);
            let mut fp = std::fs::File::create(&path)?;
            let out = toml::to_vec(&user)?;

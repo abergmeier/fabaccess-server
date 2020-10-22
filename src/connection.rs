@@ -6,9 +6,7 @@ use crate::error::Result;
 use crate::auth;
 use crate::api;
 
-pub mod connection_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/connection_capnp.rs"));
-}
+pub use crate::schema::connection_capnp;
 
 pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()> {
     let host = "localhost";

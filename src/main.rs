@@ -18,6 +18,7 @@ mod machine;
 mod connection;
 mod registries;
 mod network;
+mod schema;
 
 use clap::{App, Arg};
 
