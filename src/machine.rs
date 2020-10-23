@@ -142,7 +142,7 @@ impl Machine {
     pub fn request_use<T: Transaction>
         ( &mut self
         , txn: &T
-        , pp: &access::PermissionsProvider
+        , pp: &access::PermissionsDB
         , who: access::UserIdentifier
         ) -> Result<bool>
     {
@@ -256,7 +256,7 @@ impl MachinesProvider {
     }
 }
 
-pub fn init(log: Logger, config: &Settings, env: &lmdb::Environment) -> Result<MachinesProvider> {
+pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> Result<MachinesProvider> {
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
     let machdb = env.create_db(Some("machines"), flags)?;

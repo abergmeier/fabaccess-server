@@ -37,7 +37,7 @@ impl connection_capnp::bootstrap::Server for Connection {
         _: Params<permissions_params::Owned>,
         mut res: Results<permissions_results::Owned>
     ) -> Promise<(), capnp::Error> {
-        if let Some(user) = self.user {
+        if self.user.is_some() {
 
         }
 

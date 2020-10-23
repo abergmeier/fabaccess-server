@@ -8,12 +8,13 @@ use std::convert::TryInto;
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::Write;
+use std::sync::Arc;
 
 use flexbuffers;
 use serde::{Serialize, Deserialize};
 
 use slog::Logger;
-use lmdb::{Transaction, RwTransaction, Cursor};
+use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 
 use crate::config::Settings;
 use crate::error::Result;
@@ -23,16 +24,78 @@ pub type UserIdentifier = u64;
 pub type RoleIdentifier = u64;
 pub type PermIdentifier = u64;
 
-pub struct PermissionsProvider {
+#[derive(Clone, Debug)]
+pub struct Permissions {
+    pub inner: PermissionsDB,
+    env: Arc<Environment>,
+}
+
+impl Permissions {
+    pub fn new(inner: PermissionsDB, env: Arc<Environment>) -> Permissions {
+        Permissions { inner, env }
+    }
+
+    pub fn check(&self, userID: UserIdentifier, permID: PermIdentifier) -> Result<bool> {
+        let txn = self.env.begin_ro_txn()?;
+        self.inner.check(&txn, userID, permID)
+    }
+}
+
+/// A Person, from the Authorization perspective
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+struct User {
+    name: String,
+
+    /// A Person has N ≥ 0 roles.
+    /// Persons are only ever given roles, not permissions directly
+    roles: Vec<RoleIdentifier>
+}
+
+/// A "Role" from the Authorization perspective
+///
+/// You can think of a role as a bundle of permissions relating to other roles. In most cases a
+/// role represents a real-world education or apprenticeship, which gives a person the education
+/// necessary to use a machine safely.
+/// Roles are assigned permissions which in most cases evaluate to granting a person the right to
+/// use certain (potentially) dangerous machines. 
+/// Using this indirection makes administration easier in certain ways; instead of maintaining
+/// permissions on users directly the user is given a role after having been educated on the safety
+/// of a machine; if later on a similar enough machine is put to use the administrator can just add
+/// the permission for that machine to an already existing role instead of manually having to
+/// assign to all users.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+struct Role {
+    name: String,
+
+    /// A Role can have parents, inheriting all permissions
+    ///
+    /// This makes situations where different levels of access are required easier: Each higher
+    /// level of access sets the lower levels of access as parent, inheriting their permission; if
+    /// you are allowed to manage a machine you are then also allowed to use it and so on
+    parents: Vec<RoleIdentifier>,
+    permissions: Vec<PermIdentifier>,
+}
+
+/// A Permission from the Authorization perspective
+///
+/// Permissions are rather simple flags. A person can have or not have a permission, dictated by
+/// its roles and the permissions assigned to those roles.
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+struct Perm {
+    name: String,
+}
+
+#[derive(Clone, Debug)]
+pub struct PermissionsDB {
     log: Logger,
     roledb: lmdb::Database,
     permdb: lmdb::Database,
     userdb: lmdb::Database,
 }
 
-impl PermissionsProvider {
+impl PermissionsDB {
     pub fn new(log: Logger, roledb: lmdb::Database, permdb: lmdb::Database, userdb: lmdb::Database) -> Self {
-        Self { log, roledb, permdb, userdb }
+        PermissionsDB { log, roledb, permdb, userdb }
     }
 
     /// Check if a given user has the given permission
@@ -408,7 +471,7 @@ impl PermissionsProvider {
 }
 
 /// Initialize the access db by loading all the lmdb databases
-pub fn init(log: Logger, config: &Settings, env: &lmdb::Environment) -> std::result::Result<PermissionsProvider, crate::error::Error> {
+pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> std::result::Result<Permissions, crate::error::Error> {
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
     let roledb = env.create_db(Some("role"), flags)?;
@@ -418,49 +481,8 @@ pub fn init(log: Logger, config: &Settings, env: &lmdb::Environment) -> std::res
     let userdb = env.create_db(Some("user"), flags)?;
     debug!(&log, "Opened access database '{}' successfully.", "user");
     info!(&log, "Opened all access databases");
-    return Ok(PermissionsProvider::new(log, roledb, permdb, userdb));
-}
 
-/// A Person, from the Authorization perspective
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct User {
-    name: String,
+    let pdb = PermissionsDB::new(log, roledb, permdb, userdb);
 
-    /// A Person has N ≥ 0 roles.
-    /// Persons are only ever given roles, not permissions directly
-    roles: Vec<RoleIdentifier>
-}
-
-/// A "Role" from the Authorization perspective
-///
-/// You can think of a role as a bundle of permissions relating to other roles. In most cases a
-/// role represents a real-world education or apprenticeship, which gives a person the education
-/// necessary to use a machine safely.
-/// Roles are assigned permissions which in most cases evaluate to granting a person the right to
-/// use certain (potentially) dangerous machines. 
-/// Using this indirection makes administration easier in certain ways; instead of maintaining
-/// permissions on users directly the user is given a role after having been educated on the safety
-/// of a machine; if later on a similar enough machine is put to use the administrator can just add
-/// the permission for that machine to an already existing role instead of manually having to
-/// assign to all users.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct Role {
-    name: String,
-
-    /// A Role can have parents, inheriting all permissions
-    ///
-    /// This makes situations where different levels of access are required easier: Each higher
-    /// level of access sets the lower levels of access as parent, inheriting their permission; if
-    /// you are allowed to manage a machine you are then also allowed to use it and so on
-    parents: Vec<RoleIdentifier>,
-    permissions: Vec<PermIdentifier>,
-}
-
-/// A Permission from the Authorization perspective
-///
-/// Permissions are rather simple flags. A person can have or not have a permission, dictated by
-/// its roles and the permissions assigned to those roles.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-struct Perm {
-    name: String,
+    Ok(Permissions::new(pdb, env))
 }

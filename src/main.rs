@@ -8,7 +8,6 @@ extern crate capnp_rpc;
 extern crate async_trait;
 
 mod auth;
-mod access;
 mod modules;
 mod log;
 mod api;
@@ -19,6 +18,9 @@ mod connection;
 mod registries;
 mod network;
 mod schema;
+mod db;
+
+use db::access;
 
 use clap::{App, Arg};
 
@@ -143,8 +145,9 @@ fn main() -> Result<(), Error> {
     // Start loading the machine database, authentication system and permission system
     // All of those get a custom logger so the source of a log message can be better traced and
     // filtered
-    let mdb = machine::init(log.new(o!("system" => "machines")), &config, &env);
-    let pdb = access::init(log.new(o!("system" => "permissions")), &config, &env);
+    let env = Arc::new(env);
+    let mdb = machine::init(log.new(o!("system" => "machines")), &config, env.clone());
+    let pdb = access::init(log.new(o!("system" => "permissions")), &config, env.clone());
     let authentication_f = auth::init(log.new(o!("system" => "authentication")), config.clone());
 
     // If --load or --dump is given we can stop at this point and load/dump the database and then
@@ -159,7 +162,7 @@ fn main() -> Result<(), Error> {
 
             let mut txn = env.begin_rw_txn()?;
             let path = path.to_path_buf();
-            pdb?.load_db(&mut txn, path.clone())?;
+            pdb?.inner.load_db(&mut txn, path.clone())?;
             mdb?.load_db(&mut txn, path)?;
             txn.commit();
         } else {
@@ -177,7 +180,7 @@ fn main() -> Result<(), Error> {
 
             let txn = env.begin_ro_txn()?;
             let path = path.to_path_buf();
-            pdb?.dump_db(&txn, path.clone())?;
+            pdb?.inner.dump_db(&txn, path.clone())?;
             mdb?.dump_db(&txn, path)?;
         } else {
             error!(log, "You must provide a directory path to dump into");
