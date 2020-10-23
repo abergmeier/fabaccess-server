@@ -14,19 +14,7 @@ use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp::capability::FromServer;
 
 pub async fn handle_connection(log: Logger, socket: TcpStream) -> Result<()> {
-    let mut message = capnp::message::Builder::new_default();
-    let mut outer = message.init_root::<crate::connection::connection_capnp::message::Builder>();
-    let mut api = outer.init_api();
-
-    let mapi = MachinesAPI {};
-    api.set_machines(capnp_rpc::new_client(mapi));
-
-    let network = VatNetwork::new(socket.clone(), socket, Side::Server, Default::default());
-    let rpc = RpcSystem::new(Box::new(network), None).map(|_| ());
-
-    rpc.await;
-
-    Ok(())
+    unimplemented!()
 }
 
 pub struct MachinesAPI;

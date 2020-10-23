@@ -136,8 +136,8 @@ impl PermissionsProvider {
           error!(self.log, "Failed to create 'roles' directory: {}, skipping!", e);
           return Ok(())
        } else {
-           // Rust's stdlib considers the last element the file name so we have to put a dummy here for
-           // .set_filename() to work correctly
+           // Rust's stdlib considers the last element the file name even when it's a directory so
+           // we have to put a dummy here for .set_filename() to work correctly
            path.push("dummy");
            self.dump_roles(txn, path.clone())?;
            path.pop();
@@ -157,8 +157,8 @@ impl PermissionsProvider {
           error!(self.log, "Failed to create 'perms' directory: {}, skipping!", e);
           return Ok(())
        } else {
-           // Rust's stdlib considers the last element the file name so we have to put a dummy here for
-           // .set_filename() to work correctly
+           // Rust's stdlib considers the last element the file name even when it's a directory so
+           // we have to put a dummy here for .set_filename() to work correctly
            path.push("dummy");
            self.dump_perms(txn, path.clone())?;
            path.pop();
@@ -178,8 +178,8 @@ impl PermissionsProvider {
           error!(self.log, "Failed to create 'users' directory: {}, skipping!", e);
           return Ok(())
        } else {
-           // Rust's stdlib considers the last element the file name so we have to put a dummy here for
-           // .set_filename() to work correctly
+           // Rust's stdlib considers the last element the file name even when it's a directory so
+           // we have to put a dummy here for .set_filename() to work correctly
            path.push("dummy");
            self.dump_users(txn, path.clone())?;
            path.pop();

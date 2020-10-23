@@ -302,8 +302,6 @@ fn main() -> Result<(), Error> {
         });
 
         // Check each signal as it arrives
-        // signals is a futures-0.1 stream, compat() makes it a futures-0.3 (which we use) stream
-        // Now actually check if a connection was opened or a signal recv'd
         let handle_signals = signal.map(|r| { r.unwrap() }).into_stream();
 
         let mut combined = stream::select(handle_signals, handle_sockets);
