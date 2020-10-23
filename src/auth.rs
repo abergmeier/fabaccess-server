@@ -5,47 +5,59 @@
 
 use slog::Logger;
 
-use rsasl::{SASL, Property, Session, ReturnCode};
-use rsasl::sys::{Gsasl, Gsasl_session};
+use rsasl::{
+    SASL,
+    Property,
+    Session,
+    ReturnCode,
+    Callback,
+    SaslCtx,
+};
 
 use crate::error::Result;
 use crate::config::Settings;
 
 pub use crate::schema::auth_capnp;
 
-extern "C" fn callback(ctx: *mut Gsasl, sctx: *mut Gsasl_session, prop: Property) -> i32 {
-    let sasl = SASL::from_ptr(ctx);
-    let mut session = Session::from_ptr(sctx);
+struct AppData;
+struct SessionData;
 
-    let rc = match prop {
-        Property::GSASL_VALIDATE_SIMPLE => {
-            let authid = session.get_property_fast(Property::GSASL_AUTHID).to_string_lossy();
-            let pass = session.get_property_fast(Property::GSASL_PASSWORD).to_string_lossy();
+struct CB;
+impl Callback<AppData, SessionData> for CB {
+    fn callback(sasl: SaslCtx<AppData, SessionData>, session: Session<SessionData>, prop: Property) -> libc::c_int {
+        let ret = match prop {
+            Property::GSASL_VALIDATE_SIMPLE => {
+                let authid = session.get_property(Property::GSASL_AUTHID).unwrap().to_string_lossy();
+                let pass = session.get_property(Property::GSASL_PASSWORD).unwrap().to_string_lossy();
 
-            if authid == "test" && pass == "secret" {
-                ReturnCode::GSASL_OK
-            } else {
-                ReturnCode::GSASL_AUTHENTICATION_ERROR
+                if authid == "test" && pass == "secret" {
+                    ReturnCode::GSASL_OK
+                } else {
+                    ReturnCode::GSASL_AUTHENTICATION_ERROR
+                }
             }
-        }
-        p => {
-            println!("Callback called with property {:?}", p);
-            ReturnCode::GSASL_NO_CALLBACK 
-        }
-    };
-
-    rc as i32
+            p => {
+                println!("Callback called with property {:?}", p);
+                ReturnCode::GSASL_NO_CALLBACK 
+            }
+        };
+        ret as libc::c_int
+    }
 }
 
 pub struct Auth {
-    pub ctx: SASL,
+    pub ctx: SASL<AppData, SessionData>,
 }
 
 impl Auth {
     pub fn new() -> Self {
         let mut ctx = SASL::new().unwrap();
 
-        ctx.install_callback(Some(callback));
+        let mut appdata = Box::new(AppData);
+
+        ctx.store(appdata);
+
+        ctx.install_callback::<CB>();
 
         Self { ctx }
     }
