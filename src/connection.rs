@@ -69,11 +69,9 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()>
                     match w {
                         Request(Ok(r)) => {
                             let m = r.get_mechanism().unwrap();
-                            println!("Client wants to AUTH using {:?}",
-                                m);
-                            let cm = std::ffi::CString::new(m).unwrap();
+                            println!("Client wants to AUTH using {:?}", &m);
                             let mut sasl = auth::Auth::new();
-                            let mut sess = sasl.ctx.server_start(&cm).unwrap();
+                            let mut sess = sasl.ctx.server_start(&m).unwrap();
 
                             use crate::auth::auth_capnp::request::initial_response::*;
                             match r.get_initial_response().which() {

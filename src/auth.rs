@@ -12,15 +12,18 @@ use rsasl::{
     ReturnCode,
     Callback,
     SaslCtx,
+    Step,
 };
+
+use capnp::capability::{Params, Results, Promise};
 
 use crate::error::Result;
 use crate::config::Settings;
 
 pub use crate::schema::auth_capnp;
 
-struct AppData;
-struct SessionData;
+pub struct AppData;
+pub struct SessionData;
 
 struct CB;
 impl Callback<AppData, SessionData> for CB {
@@ -63,6 +66,96 @@ impl Auth {
     }
 }
 
+use auth_capnp::authentication::*;
+impl auth_capnp::authentication::Server for Auth {
+    fn mechanisms(&mut self, 
+        _: Params<mechanisms_params::Owned>,
+        mut res: Results<mechanisms_results::Owned>
+    ) -> Promise<(), capnp::Error> {
+        let mechs = match self.ctx.server_mech_list() {
+            Ok(m) => m,
+            Err(e) => {
+                return Promise::err(capnp::Error {
+                    kind: capnp::ErrorKind::Failed,
+                    description: format!("SASL Failure: {}", e),
+                })
+            },
+        };
+
+        let mechvec: Vec<&str> = mechs.iter().collect();
+
+        let mut res_mechs = res.get().init_mechs(mechvec.len() as u32);
+        for (i, m) in mechvec.into_iter().enumerate() {
+            res_mechs.set(i as u32, m);
+        }
+
+        Promise::ok(())
+    }
+
+    // TODO: return Outcome instead of exceptions
+    fn start(&mut self,
+        params: Params<start_params::Owned>,
+        mut res: Results<start_results::Owned>
+    ) -> Promise<(), capnp::Error> {
+        let req = pry!(pry!(params.get()).get_request());
+
+        // Extract the MECHANISM the client wants to use and start a session.
+        // Or fail at that and thrown an exception TODO: return Outcome
+        let mech = pry!(req.get_mechanism());
+        let mut session = match self.ctx.server_start(mech) {
+            Ok(s) => s,
+            Err(e) => 
+                return Promise::err(capnp::Error {
+                    kind: capnp::ErrorKind::Failed,
+                    description: format!("SASL error: {}", e),
+                }),
+        };
+
+        // If the client has provided initial data go use that
+        use auth_capnp::request::initial_response::Which;
+        let step_res = match req.get_initial_response().which() {
+            Err(capnp::NotInSchema(_)) => 
+                return Promise::err(capnp::Error {
+                    kind: capnp::ErrorKind::Failed,
+                    description: "Initial data is badly formatted".to_string(),
+                }),
+
+            Ok(Which::None(_)) => {
+                // FIXME: Actually this needs to indicate NO data instead of SOME data of 0 length
+                session.step(&[])
+            }
+            Ok(Which::Initial(data)) => {
+                session.step(pry!(data))
+            }
+        };
+
+        // The step may either return an error, a success or the need for more data
+        match step_res {
+            Ok(Step::Done(b)) => {
+                use auth_capnp::response::Result;
+
+                let mut outcome = pry!(res.get().get_response()).init_outcome();
+                outcome.reborrow().set_result(Result::Successful);
+                if b.len() != 0 {
+                    outcome.init_additional_data().set_additional(&b);
+                }
+                Promise::ok(())
+            },
+            Ok(Step::NeedsMore(b)) => {
+                pry!(res.get().get_response()).set_challence(&b);
+                Promise::ok(())
+            }
+            // TODO: This should really be an outcome because this is failed auth just as much atm.
+            Err(e) => 
+                return Promise::err(capnp::Error {
+                    kind: capnp::ErrorKind::Failed,
+                    description: format!("SASL error: {}", e),
+                }),
+        }
+
+    }
+}
+
 pub async fn init(log: Logger, config: Settings) -> Result<Auth> {
     Ok(Auth::new())
 }
@@ -82,9 +175,19 @@ struct AuthCId(String);
 /// This identity is internal to FabAccess and completely independent from the authentication
 /// method or source
 struct AuthZId {
+    /// Main User ID. Generally an user name or similar
     uid: String,
+    /// Sub user ID. 
+    ///
+    /// Can change scopes for permissions, e.g. having a +admin account with more permissions than
+    /// the default account and +dashboard et.al. accounts that have restricted permissions for
+    /// their applications
     subuid: String,
-    domain: String,
+    /// Realm this account originates.
+    ///
+    /// The Realm is usually described by a domain name but local policy may dictate an unrelated
+    /// mapping
+    realm: String,
 }
 
 // What is a man?! A miserable little pile of secrets!
@@ -93,7 +196,7 @@ struct AuthZId {
 /// This struct contains the user as is passed to the actual authentication/authorization
 /// subsystems
 ///
-struct User {
+pub struct User {
     /// Contains the Authentication ID used
     ///
     /// The authentication ID is an identifier for the authentication exchange. This is different
@@ -133,11 +236,13 @@ struct User {
 // b) the given authcid may authenticate as the given authzid. E.g. if a given client certificate
 //    has been configured for that user, if a GSSAPI user maps to a given user, 
 
-enum AuthError {
+pub enum AuthError {
     /// Authentication ID is bad/unknown/..
     BadAuthcid,
-    /// Authorization ID is bad/unknown/..
+    /// Authorization ID is unknown/..
     BadAuthzid,
+    /// Authorization ID is not of form user+uid@realm
+    MalformedAuthzid,
     /// User may not use that authorization id
     NotAllowedAuthzid,
 
