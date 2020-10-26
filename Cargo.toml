@@ -7,6 +7,12 @@ edition = "2018"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
+[features]
+default = ["lmdb"]
+
+# Use LMDB for internal kv-stores
+lmdb = []
+
 [dependencies]
 futures = { version = "0.3", features = ["thread-pool", "compat"] }
 futures-util = "0.3"

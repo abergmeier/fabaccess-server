@@ -13,14 +13,15 @@ mod log;
 mod api;
 mod config;
 mod error;
-mod machine;
 mod connection;
 mod registries;
 mod network;
 mod schema;
 mod db;
 
+// TODO: Remove these and improve module namespacing
 use db::access;
+pub use db::machine;
 
 use clap::{App, Arg};
 
