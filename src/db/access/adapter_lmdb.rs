@@ -16,19 +16,20 @@ use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 use crate::config::Settings;
 use crate::error::Result;
 
-use crate::db::access::{PermIdentifier, Role, RoleIdentifier, Permissions};
+use crate::db::access::{PermIdentifier, Role, RoleIdentifier, AccessDB};
 use crate::db::user::{UserIdentifier, User};
 
 #[derive(Clone, Debug)]
 pub struct PermissionsDB {
     log: Logger,
+    env: Arc<Environment>,
     roledb: lmdb::Database,
     userdb: lmdb::Database,
 }
 
 impl PermissionsDB {
-    pub fn new(log: Logger, roledb: lmdb::Database, userdb: lmdb::Database) -> Self {
-        PermissionsDB { log, roledb, userdb }
+    pub fn new(log: Logger, env: Arc<Environment>, roledb: lmdb::Database, userdb: lmdb::Database) -> Self {
+        PermissionsDB { log, env, roledb, userdb }
     }
 
     /// Check if a given user has the given permission
@@ -81,46 +82,12 @@ impl PermissionsDB {
         }
     }
 
-    pub fn get_user<T: Transaction>(&self, txn: &T, userID: UserIdentifier) -> Result<Option<User>> {
-        match txn.get(self.userdb, &userID.to_ne_bytes()) {
-            Ok(bytes) => {
-                Ok(Some(flexbuffers::from_slice(bytes)?))
-            },
-            Err(lmdb::Error::NotFound) => { Ok(None) },
-            Err(e) => { Err(e.into()) }
-        }
-    }
-
-    //fn get_perm<T: Transaction>(&self, txn: &T, permID: PermIdentifier) -> Result<Option<Perm>> {
-    //    match txn.get(self.permdb, &permID.to_ne_bytes()) {
-    //        Ok(bytes) => {
-    //            Ok(Some(flexbuffers::from_slice(bytes)?))
-    //        },
-    //        Err(lmdb::Error::NotFound) => { Ok(None) },
-    //        Err(e) => { Err(e.into()) }
-    //    }
-    //}
-
    fn put_role(&self, txn: &mut RwTransaction, roleID: RoleIdentifier, role: Role) -> Result<()> {
        let bytes = flexbuffers::to_vec(role)?;
        txn.put(self.roledb, &roleID.to_ne_bytes(), &bytes, lmdb::WriteFlags::empty())?;
 
        Ok(())
    }
-
-   fn put_user(&self, txn: &mut RwTransaction, userID: UserIdentifier, user: User) -> Result<()> {
-       let bytes = flexbuffers::to_vec(user)?;
-       txn.put(self.userdb, &userID.to_ne_bytes(), &bytes, lmdb::WriteFlags::empty())?;
-
-       Ok(())
-   }
-
-   //fn put_perm(&self, txn: &mut RwTransaction, permID: PermIdentifier, perm: Perm) -> Result<()> {
-   //    let bytes = flexbuffers::to_vec(perm)?;
-   //    txn.put(self.permdb, &permID.to_ne_bytes(), &bytes, lmdb::WriteFlags::empty())?;
-
-   //    Ok(())
-   //}
 
    pub fn dump_db<T: Transaction>(&mut self, txn: &T, mut path: PathBuf) -> Result<()> {
        path.push("roles");
@@ -136,48 +103,6 @@ impl PermissionsDB {
            // we have to put a dummy here for .set_filename() to work correctly
            path.push("dummy");
            self.dump_roles(txn, path.clone())?;
-           path.pop();
-       }
-       path.pop();
-
-
-       // ====================: PERMS :====================
-
-
-//       path.push("perms");
-//       let mut k = Ok(());
-//       if !path.is_dir() {
-//           k = fs::create_dir(&path);
-//       }
-//       if let Err(e) = k {
-//          error!(self.log, "Failed to create 'perms' directory: {}, skipping!", e);
-//          return Ok(())
-//       } else {
-//           // Rust's stdlib considers the last element the file name even when it's a directory so
-//           // we have to put a dummy here for .set_filename() to work correctly
-//           path.push("dummy");
-//           self.dump_perms(txn, path.clone())?;
-//           path.pop();
-//       }
-//       path.pop();
-
-
-       // ====================: USERS :====================
-
-
-       path.push("users");
-       let mut k = Ok(());
-       if !path.is_dir() {
-           k = fs::create_dir(&path);
-       }
-       if let Err(e) = k {
-          error!(self.log, "Failed to create 'users' directory: {}, skipping!", e);
-          return Ok(())
-       } else {
-           // Rust's stdlib considers the last element the file name even when it's a directory so
-           // we have to put a dummy here for .set_filename() to work correctly
-           path.push("dummy");
-           self.dump_users(txn, path.clone())?;
            path.pop();
        }
        path.pop();
@@ -219,53 +144,14 @@ impl PermissionsDB {
    //    Ok(())
    //}
 
-   fn dump_users<T: Transaction>(&mut self, txn: &T, mut path: PathBuf) -> Result<()> {
-       let mut user_cursor = txn.open_ro_cursor(self.userdb)?;
-       for buf in user_cursor.iter_start() {
-           let (kbuf, vbuf) = buf?;
-           let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
-           let userID = u64::from_ne_bytes(kbytes.try_into().unwrap());
-           let user: User = flexbuffers::from_slice(vbuf)?;
-           let filename = format!("{:x}.toml", userID);
-           path.set_file_name(filename);
-           let mut fp = std::fs::File::create(&path)?;
-           let out = toml::to_vec(&user)?;
-           fp.write_all(&out)?;
-       }
-
-       Ok(())
-   }
-
    pub fn load_db(&mut self, txn: &mut RwTransaction, mut path: PathBuf) -> Result<()> {
-       // ====================: ROLES :====================
        path.push("roles");
        if !path.is_dir() {
            error!(self.log, "Given load directory is malformed, no 'roles' subdir, not loading roles!");
        } else {
            self.load_roles(txn, path.as_path())?;
        }
-       path.pop();
-       // =================================================
 
-//       // ====================: PERMS :====================
-//       path.push("perms");
-//       if !path.is_dir() {
-//           error!(self.log, "Given load directory is malformed, no 'perms' subdir, not loading perms!");
-//       } else {
-//           self.load_perms(txn, &path)?;
-//       }
-//       path.pop();
-//       // =================================================
-
-       // ====================: USERS :====================
-       path.push("users");
-       if !path.is_dir() {
-           error!(self.log, "Given load directory is malformed, no 'users' subdir, not loading users!");
-       } else {
-           self.load_users(txn, &path)?;
-       }
-       path.pop();
-       // =================================================
        Ok(())
    }
 
@@ -312,96 +198,22 @@ impl PermissionsDB {
 
        Ok(())
    }
-
-//   fn load_perms(&mut self, txn: &mut RwTransaction, path: &Path) -> Result<()> {
-//       for entry in std::fs::read_dir(path)? {
-//           let entry = entry?;
-//           let path = entry.path();
-//           if path.is_file() {
-//               // will only ever be none if the path has no file name and then how is it a file?!
-//               let permID_str = path
-//                   .file_stem().expect("Found a file with no filename?")
-//                   .to_str().expect("Found an OsStr that isn't valid Unicode. Fix your OS!");
-//               let permID = match u64::from_str_radix(permID_str, 16) {
-//                   Ok(i) => i,
-//                   Err(e) => {
-//                       warn!(self.log, "File {} had a invalid name. Expected an u64 in [0-9a-z] hex with optional file ending: {}. Skipping!", path.display(), e);
-//                       continue;
-//                   }
-//               };
-//               let s = match fs::read_to_string(path.as_path()) {
-//                   Ok(s) => s,
-//                   Err(e) => {
-//                       warn!(self.log, "Failed to open file {}: {}, skipping!"
-//                            , path.display()
-//                            , e);
-//                       continue;
-//                   }
-//               };
-//               let perm: Perm = match toml::from_str(&s) {
-//                   Ok(r) => r,
-//                   Err(e) => {
-//                       warn!(self.log, "Failed to parse perm at path {}: {}, skipping!"
-//                            , path.display()
-//                            , e);
-//                       continue;
-//                   }
-//               };
-//               self.put_perm(txn, permID, perm)?;
-//               debug!(self.log, "Loaded perm {}", permID);
-//           } else {
-//               warn!(self.log, "Path {} is not a file, skipping!", path.display());
-//           }
-//       }
-
-//       Ok(())
-//   }
-
-   fn load_users(&mut self, txn: &mut RwTransaction, path: &Path) -> Result<()> {
-       for entry in std::fs::read_dir(path)? {
-           let entry = entry?;
-           let path = entry.path();
-           if path.is_file() {
-               // will only ever be none if the path has no file name and then how is it a file?!
-               let userID_str = path
-                   .file_stem().expect("Found a file with no filename?")
-                   .to_str().expect("Found an OsStr that isn't valid Unicode. Fix your OS!");
-               let userID = match u64::from_str_radix(userID_str, 16) {
-                   Ok(i) => i,
-                   Err(e) => {
-                       warn!(self.log, "File {} had a invalid name. Expected an u64 in [0-9a-z] hex with optional file ending: {}. Skipping!", path.display(), e);
-                       continue;
-                   }
-               };
-               let s = match fs::read_to_string(path.as_path()) {
-                   Ok(s) => s,
-                   Err(e) => {
-                       warn!(self.log, "Failed to open file {}: {}, skipping!"
-                            , path.display()
-                            , e);
-                       continue;
-                   }
-               };
-               let user: User = match toml::from_str(&s) {
-                   Ok(r) => r,
-                   Err(e) => {
-                       warn!(self.log, "Failed to parse user at path {}: {}, skipping!"
-                            , path.display()
-                            , e);
-                       continue;
-                   }
-               };
-               self.put_user(txn, userID, user)?;
-               debug!(self.log, "Loaded user {}", userID);
-           } else {
-               warn!(self.log, "Path {} is not a file, skipping!", path.display());
-           }
-       }
-
-       Ok(())
-   }
-
 }
+
+impl AccessDB for Permissions {
+    fn check(&self, userID: UserIdentifier, permID: PermIdentifier) -> Result<bool> {
+        let txn = self.env.begin_ro_txn()?;
+        self.inner.check(&txn, userID, permID)
+    }
+
+    fn get_role(&self, roleID: RoleIdentifier) -> Result<Option<Role>> {
+        let txn = self.env.begin_ro_txn()?;
+        self.inner.get_role(&txn, roleID)
+    }
+}
+
+
+
 /// Initialize the access db by loading all the lmdb databases
 pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> std::result::Result<Permissions, crate::error::Error> {
     let mut flags = lmdb::DatabaseFlags::empty();
@@ -414,7 +226,5 @@ pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> std:
     debug!(&log, "Opened access database '{}' successfully.", "user");
     info!(&log, "Opened all access databases");
 
-    let pdb = PermissionsDB::new(log, roledb, userdb);
-
-    Ok(Permissions::new(pdb, env))
+    Ok(PermissionsDB::new(log, env, roledb, userdb))
 }

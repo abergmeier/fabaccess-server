@@ -1,15 +1,22 @@
 use serde::{Serialize, Deserialize};
 use std::fmt;
 use crate::db::access::RoleIdentifier;
+use std::collections::HashMap;
 
 /// A Person, from the Authorization perspective
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
-    name: String,
+    /// The identification of this user.
+    #[serde(skip, default = get_uid)]
+    pub id: UserIdentifier,
 
     /// A Person has N ≥ 0 roles.
     /// Persons are only ever given roles, not permissions directly
-    pub roles: Vec<RoleIdentifier>
+    pub roles: Vec<RoleIdentifier>,
+
+    /// Additional data storage
+    #[serde(flatten)]
+    kv: HashMap<Box<[u8]>, Box<[u8]>>,
 }
 
 
@@ -31,6 +38,10 @@ impl UserIdentifier {
     pub fn new(uid: String, subuid: Option<String>, location: Option<String>) -> Self {
         Self { uid, subuid, location }
     }
+}
+
+fn get_uid() -> UserIdentifier {
+
 }
 
 impl fmt::Display for UserIdentifier {
@@ -57,6 +68,17 @@ mod tests {
 
     #[test]
     fn format_uid_test() {
-        
+        let uid = "testuser".to_string();
+        let suid = "testsuid".to_string();
+        let location = "testloc".to_string();
+
+        assert_eq!("testuser", 
+            format!("{}", UserIdentifier::new(uid, None, None)));
+        assert_eq!("testuser+testsuid", 
+            format!(UserIdentifier::new("testuser", Some(suid), None)));
+        assert_eq!("testuser+testsuid", 
+            format!(UserIdentifier::new("testuser", Some(suid), None)));
+        assert_eq!("testuser+testsuid@testloc", 
+            format!(UserIdentifier::new("testuser", Some(suid), Some(location))));
     }
 }

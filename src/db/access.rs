@@ -26,30 +26,12 @@ use adapter_lmdb::PermissionsDB;
 pub use adapter_lmdb::init;
 
 // FIXME: fabinfra/fabaccess/bffh#3
-pub type UserIdentifier = u64;
 pub type RoleIdentifier = u64;
 pub type PermIdentifier = u64;
 
-#[derive(Clone, Debug)]
-pub struct Permissions {
-    pub inner: PermissionsDB,
-    env: Arc<Environment>,
-}
-
-impl Permissions {
-    pub fn new(inner: PermissionsDB, env: Arc<Environment>) -> Permissions {
-        Permissions { inner, env }
-    }
-
-    pub fn check(&self, userID: UserIdentifier, permID: PermIdentifier) -> Result<bool> {
-        let txn = self.env.begin_ro_txn()?;
-        self.inner.check(&txn, userID, permID)
-    }
-
-    pub fn get_role(&self, roleID: RoleIdentifier) -> Result<Option<Role>> {
-        let txn = self.env.begin_ro_txn()?;
-        self.inner.get_role(&txn, roleID)
-    }
+pub trait AccessDB {
+    fn check(&self, userID: UserIdentifier,  permID: PermIdentifier) -> Result<bool>;
+    fn get_role(&self, roleID: RoleIdentifier) -> Result<Option<Role>>;
 }
 
 /// A "Role" from the Authorization perspective
