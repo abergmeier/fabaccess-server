@@ -68,11 +68,11 @@ mod tests {
         let location = "testloc".to_string();
 
         assert_eq!("testuser", 
-            format!("{}", UserIdentifier::new(uid, None, None)));
+            format!("{}", UserIdentifier::new(uid.clone(), None, None)));
         assert_eq!("testuser+testsuid", 
-            format!("{}", UserIdentifier::new(uid, Some(suid), None)));
+            format!("{}", UserIdentifier::new(uid.clone(), Some(suid.clone()), None)));
         assert_eq!("testuser+testsuid", 
-            format!("{}", UserIdentifier::new(uid, Some(suid), None)));
+            format!("{}", UserIdentifier::new(uid.clone(), Some(suid.clone()), None)));
         assert_eq!("testuser+testsuid@testloc", 
             format!("{}", UserIdentifier::new(uid, Some(suid), Some(location))));
     }

@@ -357,6 +357,7 @@ mod tests {
 
     #[test]
     fn permission_ord_test() {
-        assert!(PermissionBuf::from_string("bffh.perm") > PermissionBuf::from_string("bffh.perm.sub"));
+        assert!(PermissionBuf::from_string("bffh.perm".to_string()) 
+            > PermissionBuf::from_string("bffh.perm.sub".to_string()));
     }
 }
