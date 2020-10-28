@@ -2,6 +2,7 @@ use futures_signals::signal::Signal;
 
 use crate::machine;
 use crate::access;
+use crate::db::user::UserIdentifier;
 
 struct Network {
 

@@ -16,7 +16,7 @@ use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 use crate::config::Settings;
 use crate::error::Result;
 
-use crate::db::access::{PermIdentifier, Role, RoleIdentifier, AccessDB};
+use crate::db::access::{PermIdentifier, Role, RoleIdentifier, RoleDB};
 use crate::db::user::{UserIdentifier, User};
 
 #[derive(Clone, Debug)]
@@ -34,7 +34,7 @@ impl PermissionsDB {
 
     /// Check if a given user has the given permission
     #[allow(unused)]
-    pub fn check<T: Transaction>(&self, txn: &T, userID: UserIdentifier, permID: PermIdentifier) -> Result<bool> {
+    pub fn _check<T: Transaction>(&self, txn: &T, userID: UserIdentifier, permID: PermIdentifier) -> Result<bool> {
         if let Some(user) = self.get_user(txn, userID)? {
             // Tally all roles. Makes dependent roles easier
             let mut roles = HashSet::new();
@@ -72,7 +72,7 @@ impl PermissionsDB {
         Ok(())
     }
 
-    pub fn get_role<'txn, T: Transaction>(&self, txn: &'txn T, roleID: RoleIdentifier) -> Result<Option<Role>> {
+    pub fn _get_role<'txn, T: Transaction>(&self, txn: &'txn T, roleID: RoleIdentifier) -> Result<Option<Role>> {
         match txn.get(self.roledb, &roleID.to_ne_bytes()) {
             Ok(bytes) => {
                 Ok(Some(flexbuffers::from_slice(bytes)?))
@@ -200,15 +200,15 @@ impl PermissionsDB {
    }
 }
 
-impl AccessDB for Permissions {
+impl RoleDB for PermissionsDB {
     fn check(&self, userID: UserIdentifier, permID: PermIdentifier) -> Result<bool> {
         let txn = self.env.begin_ro_txn()?;
-        self.inner.check(&txn, userID, permID)
+        self._check(&txn, userID, permID)
     }
 
     fn get_role(&self, roleID: RoleIdentifier) -> Result<Option<Role>> {
         let txn = self.env.begin_ro_txn()?;
-        self.inner.get_role(&txn, roleID)
+        self._get_role(&txn, roleID)
     }
 }
 

@@ -7,7 +7,6 @@ use std::collections::HashMap;
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     /// The identification of this user.
-    #[serde(skip, default = get_uid)]
     pub id: UserIdentifier,
 
     /// A Person has N ≥ 0 roles.
@@ -38,10 +37,6 @@ impl UserIdentifier {
     pub fn new(uid: String, subuid: Option<String>, location: Option<String>) -> Self {
         Self { uid, subuid, location }
     }
-}
-
-fn get_uid() -> UserIdentifier {
-
 }
 
 impl fmt::Display for UserIdentifier {
