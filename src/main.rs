@@ -163,7 +163,7 @@ fn main() -> Result<(), Error> {
 
             let mut txn = env.begin_rw_txn()?;
             let path = path.to_path_buf();
-            pdb?.inner.load_db(&mut txn, path.clone())?;
+            pdb?.load_db(&mut txn, path.clone())?;
             mdb?.load_db(&mut txn, path)?;
             txn.commit();
         } else {
@@ -181,7 +181,7 @@ fn main() -> Result<(), Error> {
 
             let txn = env.begin_ro_txn()?;
             let path = path.to_path_buf();
-            pdb?.inner.dump_db(&txn, path.clone())?;
+            pdb?.dump_db(&txn, path.clone())?;
             mdb?.dump_db(&txn, path)?;
         } else {
             error!(log, "You must provide a directory path to dump into");

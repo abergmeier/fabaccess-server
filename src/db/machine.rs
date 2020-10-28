@@ -16,6 +16,8 @@ use crate::error::Result;
 use crate::config::Settings;
 use crate::access;
 
+use crate::db::user::UserIdentifier;
+
 use capnp::Error;
 
 use uuid::Uuid;
@@ -27,6 +29,7 @@ use smol::channel::{Receiver, Sender};
 use futures_signals::signal::*;
 
 use crate::registries::StatusSignal;
+use crate::db::user::User;
 
 pub type ID = Uuid;
 
@@ -139,14 +142,13 @@ impl Machine {
     /// Requests to use a machine. Returns `true` if successful.
     ///
     /// This will update the internal state of the machine, notifying connected actors, if any.
-    pub fn request_use<T: Transaction>
+    pub fn request_use<P: access::RoleDB>
         ( &mut self
-        , txn: &T
-        , pp: &access::PermissionsDB
-        , who: access::UserIdentifier
+        , pp: &P
+        , who: &User
         ) -> Result<bool>
     {
-        if pp.check(txn, who, self.perm)? {
+        if pp.check(who, &self.perm)? {
             self.state.set(Status::Occupied);
             return Ok(true);
         } else {

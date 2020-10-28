@@ -34,21 +34,19 @@ impl PermissionsDB {
 
     /// Check if a given user has the given permission
     #[allow(unused)]
-    pub fn _check<T: Transaction>(&self, txn: &T, userID: UserIdentifier, permID: PermIdentifier) -> Result<bool> {
-        if let Some(user) = self.get_user(txn, userID)? {
-            // Tally all roles. Makes dependent roles easier
-            let mut roles = HashSet::new();
-            for roleID in user.roles {
-                self.tally_role(txn, &mut roles, roleID)?;
-            }
+    pub fn _check<T: Transaction>(&self, txn: &T, user: &User, permID: &PermIdentifier) -> Result<bool> {
+        // Tally all roles. Makes dependent roles easier
+        let mut roles = HashSet::new();
+        for roleID in user.roles.iter() {
+            self._tally_role(txn, &mut roles, roleID)?;
+        }
 
-            // Iter all unique role->permissions we've found and early return on match. 
-            // TODO: Change this for negative permissions?
-            for role in roles.iter() {
-                for perm in role.permissions.iter() {
-                    if permID == *perm {
-                        return Ok(true);
-                    }
+        // Iter all unique role->permissions we've found and early return on match. 
+        // TODO: Change this for negative permissions?
+        for role in roles.iter() {
+            for perm in role.permissions.iter() {
+                if permID == perm {
+                    return Ok(true);
                 }
             }
         }
@@ -56,13 +54,13 @@ impl PermissionsDB {
         return Ok(false);
     }
 
-    fn tally_role<T: Transaction>(&self, txn: &T, roles: &mut HashSet<Role>, roleID: RoleIdentifier) -> Result<()> {
-        if let Some(role) = self.get_role(txn, roleID)? {
+    fn _tally_role<T: Transaction>(&self, txn: &T, roles: &mut HashSet<Role>, roleID: &RoleIdentifier) -> Result<()> {
+        if let Some(role) = self._get_role(txn, roleID)? {
             // Only check and tally parents of a role at the role itself if it's the first time we
             // see it
             if !roles.contains(&role) {
                 for parent in role.parents.iter() {
-                    self.tally_role(txn, roles, *parent)?;
+                    self._tally_role(txn, roles, parent)?;
                 }
 
                 roles.insert(role);
@@ -72,8 +70,9 @@ impl PermissionsDB {
         Ok(())
     }
 
-    pub fn _get_role<'txn, T: Transaction>(&self, txn: &'txn T, roleID: RoleIdentifier) -> Result<Option<Role>> {
-        match txn.get(self.roledb, &roleID.to_ne_bytes()) {
+    pub fn _get_role<'txn, T: Transaction>(&self, txn: &'txn T, roleID: &RoleIdentifier) -> Result<Option<Role>> {
+        let string = format!("{}", roleID);
+        match txn.get(self.roledb, &string.as_bytes()) {
             Ok(bytes) => {
                 Ok(Some(flexbuffers::from_slice(bytes)?))
             },
@@ -82,9 +81,10 @@ impl PermissionsDB {
         }
     }
 
-   fn put_role(&self, txn: &mut RwTransaction, roleID: RoleIdentifier, role: Role) -> Result<()> {
+   fn put_role(&self, txn: &mut RwTransaction, roleID: &RoleIdentifier, role: Role) -> Result<()> {
        let bytes = flexbuffers::to_vec(role)?;
-       txn.put(self.roledb, &roleID.to_ne_bytes(), &bytes, lmdb::WriteFlags::empty())?;
+       let string = format!("{}", roleID);
+       txn.put(self.roledb, &string.as_bytes(), &bytes, lmdb::WriteFlags::empty())?;
 
        Ok(())
    }
@@ -164,10 +164,10 @@ impl PermissionsDB {
                let roleID_str = path
                    .file_stem().expect("Found a file with no filename?")
                    .to_str().expect("Found an OsStr that isn't valid Unicode. Fix your OS!");
-               let roleID = match u64::from_str_radix(roleID_str, 16) {
+               let roleID = match str::parse(roleID_str) {
                    Ok(i) => i,
                    Err(e) => {
-                       warn!(self.log, "File {} had a invalid name. Expected an u64 in [0-9a-z] hex with optional file ending: {}. Skipping!", path.display(), e);
+                       warn!(self.log, "File {} had a invalid name.", path.display());
                        continue;
                    }
                };
@@ -189,8 +189,8 @@ impl PermissionsDB {
                        continue;
                    }
                };
-               self.put_role(txn, roleID, role)?;
-               debug!(self.log, "Loaded role {}", roleID);
+               self.put_role(txn, &roleID, role)?;
+               debug!(self.log, "Loaded role {}", &roleID);
            } else {
                warn!(self.log, "Path {} is not a file, skipping!", path.display());
            }
@@ -201,21 +201,28 @@ impl PermissionsDB {
 }
 
 impl RoleDB for PermissionsDB {
-    fn check(&self, userID: UserIdentifier, permID: PermIdentifier) -> Result<bool> {
+    fn check(&self, user: &User, permID: &PermIdentifier) -> Result<bool> {
         let txn = self.env.begin_ro_txn()?;
-        self._check(&txn, userID, permID)
+        self._check(&txn, user, permID)
     }
 
-    fn get_role(&self, roleID: RoleIdentifier) -> Result<Option<Role>> {
+    fn get_role(&self, roleID: &RoleIdentifier) -> Result<Option<Role>> {
         let txn = self.env.begin_ro_txn()?;
         self._get_role(&txn, roleID)
+    }
+
+    fn tally_role(&self, roles: &mut HashSet<Role>, roleID: &RoleIdentifier) -> Result<()> {
+        let txn = self.env.begin_ro_txn()?;
+        self._tally_role(&txn, roles, roleID)
     }
 }
 
 
 
 /// Initialize the access db by loading all the lmdb databases
-pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> std::result::Result<Permissions, crate::error::Error> {
+pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) 
+    -> std::result::Result<PermissionsDB, crate::error::Error> 
+{
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
     let roledb = env.create_db(Some("role"), flags)?;

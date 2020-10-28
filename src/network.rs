@@ -35,5 +35,5 @@ impl Network {
 enum Event {
     /// An user wants to use a machine
     // TODO: Define /what/ an user wants to do with said machine?
-    MachineRequest(machine::ID, access::UserIdentifier),
+    MachineRequest(machine::ID, UserIdentifier),
 }

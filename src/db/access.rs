@@ -3,6 +3,7 @@
 
 use std::fmt;
 use std::collections::HashSet;
+use std::cmp::Ordering;
 
 use std::convert::TryInto;
 
@@ -22,18 +23,19 @@ use crate::error::Result;
 
 mod adapter_lmdb;
 
+use crate::db::user::User;
 use adapter_lmdb::PermissionsDB;
 pub use adapter_lmdb::init;
 
 pub trait RoleDB {
-    fn get_role(&self, roleID: RoleIdentifier) -> Result<Option<Role>>;
+    fn get_role(&self, roleID: &RoleIdentifier) -> Result<Option<Role>>;
 
     /// Check if a given user has the given permission
     /// 
     /// Default implementation which adapter may overwrite with more efficient specialized
     /// implementations.
-    fn check(&self, user: &User, permID: PermIdentifier) -> Result<bool> {
-        self.check_roles(user.roles)
+    fn check(&self, user: &User, permID: &PermIdentifier) -> Result<bool> {
+        self.check_roles(&user.roles, permID)
     }
 
     /// Check if a given permission is granted by any of the given roles or their respective
@@ -41,18 +43,17 @@ pub trait RoleDB {
     /// 
     /// Default implementation which adapter may overwrite with more efficient specialized
     /// implementations.
-    fn check_roles(&self, roles: &[RoleIdentifier], permID: PermIdentifier) -> Result<bool> {
+    fn check_roles(&self, roles: &[RoleIdentifier], permID: &PermIdentifier) -> Result<bool> {
         // Tally all roles. Makes dependent roles easier
-        let mut roles = HashSet::new();
+        let mut roleset = HashSet::new();
         for roleID in roles {
-            self.tally_role(txn, &mut roles, roleID)?;
+            self.tally_role(&mut roleset, roleID)?;
         }
 
         // Iter all unique role->permissions we've found and early return on match. 
-        // TODO: Change this for negative permissions?
-        for role in roles.iter() {
+        for role in roleset.iter() {
             for perm in role.permissions.iter() {
-                if permID == *perm {
+                if permID == perm {
                     return Ok(true);
                 }
             }
@@ -64,13 +65,13 @@ pub trait RoleDB {
     /// Tally a role dependency tree into a set
     ///
     /// Default implementation which adapter may overwrite with more efficient implementations
-    fn tally_role(&self, roles: &mut HashSet<Role>, roleID: RoleIdentifier) -> Result<()> {
-        if let Some(role) = self.get_role(txn, roleID)? {
+    fn tally_role(&self, roles: &mut HashSet<Role>, roleID: &RoleIdentifier) -> Result<()> {
+        if let Some(role) = self.get_role(roleID)? {
             // Only check and tally parents of a role at the role itself if it's the first time we
             // see it
             if !roles.contains(&role) {
                 for parent in role.parents.iter() {
-                    self.tally_role(txn, roles, *parent)?;
+                    self.tally_role(roles, parent)?;
                 }
 
                 roles.insert(role);
@@ -108,8 +109,15 @@ pub struct Role {
 
 type SourceID = String;
 
+fn split_once(s: &str, split: char) -> Option<(&str, &str)> {
+    s
+        .find(split)
+        .map(|idx| s.split_at(idx))
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 /// Universal (relative) id of a role
-enum RoleIdentifier {
+pub enum RoleIdentifier {
     /// The role comes from this instance
     Local {
         /// Locally unique name for the role. No other role at this instance no matter the source
@@ -127,16 +135,35 @@ enum RoleIdentifier {
         location: String,
     }
 }
-impl fmt::Display for RoleID {
+impl std::str::FromStr for RoleIdentifier {
+    type Err = RoleFromStrError;
+
+    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
+        if let Some((name, location)) = split_once(s, '@') {
+            Ok(RoleIdentifier::Remote { name: name.to_string(), location: location.to_string() })
+        } else if let Some((name, source)) = split_once(s, '%') {
+            Ok(RoleIdentifier::Local { name: name.to_string(), source: source.to_string() })
+        } else {
+            Err(RoleFromStrError::Invalid)
+        }
+    }
+}
+impl fmt::Display for RoleIdentifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
+        match self {
             RoleIdentifier::Local {name, source} => write!(f, "{}/{}@local", name, source),
             RoleIdentifier::Remote {name, location} => write!(f, "{}@{}", name, location),
         }
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub enum RoleFromStrError {
+    /// No '@' or '%' found. That's strange, huh?
+    Invalid
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 /// An identifier for a permission
 // XXX: Does remote permissions ever make sense?
 // I mean we kinda get them for free so maybe?
@@ -146,7 +173,7 @@ pub enum PermIdentifier {
 }
 impl fmt::Display for PermIdentifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
+        match self {
             PermIdentifier::Local(perm) 
                 => write!(f, "{}", perm),
             PermIdentifier::Remote(perm, source) 
@@ -155,7 +182,11 @@ impl fmt::Display for PermIdentifier {
     }
 }
 
-#[derive(Clone, Serialize, Deserialize)]
+fn is_sep_char(c: char) -> bool {
+    c == '.'
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(transparent)]
 /// An owned permission string
 ///
@@ -173,13 +204,13 @@ impl PermissionBuf {
     }
 
     /// Allocate a `PermissionBuf` with the given capacity given to the internal [`String`]
-    pub fn with_capacity() -> Self {
-        PermissionBuf { inner: String::with_capacity() }
+    pub fn with_capacity(cap: usize) -> Self {
+        PermissionBuf { inner: String::with_capacity(cap) }
     }
 
     #[inline(always)]
     pub fn as_permission(&self) -> &Permission {
-        self
+        self.as_ref()
     }
 
     pub fn push<P: AsRef<Permission>>(&mut self, perm: P) {
@@ -192,22 +223,39 @@ impl PermissionBuf {
         if need_sep {
             self.inner.push('.')
         }
-        self.inner.push(perm.as_str())
+        self.inner.push_str(perm.as_str())
     }
 
     pub fn from_string(inner: String) -> Self {
         Self { inner }
     }
 }
-impl AsRef<Permission> for PermissionBuf {
+impl AsRef<str> for PermissionBuf {
     #[inline(always)]
+    fn as_ref(&self) -> &str {
+        &self.inner[..]
+    }
+}
+impl AsRef<Permission> for PermissionBuf {
+    #[inline]
     fn as_ref(&self) -> &Permission {
-        self.as_permission()
+        Permission::new(self)
+    }
+}
+impl PartialOrd for PermissionBuf {
+    fn partial_cmp(&self, other: &Self) -> Option<Ordering> {
+        let a: &Permission = self.as_ref();
+        a.partial_cmp(other.as_ref())
+    }
+}
+impl fmt::Display for PermissionBuf {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        self.inner.fmt(f)
     }
 }
 
 #[repr(transparent)]
-#[derive(PartialEq, Eq)]
+#[derive(PartialEq, Eq, Hash)]
 /// A borrowed permission string
 /// 
 /// Permissions have total equality and partial ordering.
@@ -218,21 +266,27 @@ pub struct Permission {
     inner: str
 }
 impl Permission {
-    pub fn as_str(&self) -> &str {
-        self.inner
+    pub fn new<S: AsRef<str> + ?Sized>(s: &S) -> &Permission {
+        unsafe { &*(s.as_ref() as *const str as *const Permission) }
     }
 
-    pub fn iter(&self) -> std::str::Split<Char>  {
+    pub fn as_str(&self) -> &str {
+        &self.inner
+    }
+
+    pub fn iter(&self) -> std::str::Split<char>  {
         self.inner.split('.')
     }
 }
 
 impl PartialOrd for Permission {
     fn partial_cmp(&self, other: &Permission) -> Option<Ordering> {
-        let (l,r) = (None, None);
+        let mut i = self.iter();
+        let mut j = other.iter();
+        let (mut l, mut r) = (None, None);
         while {
-            l = self.next();
-            r = other.next();
+            l = i.next();
+            r = j.next();
 
             l.is_some() && r.is_some()
         } {
@@ -243,7 +297,7 @@ impl PartialOrd for Permission {
 
         match (l,r) {
             (None, None) => Some(Ordering::Equal),
-            (Some(_), None) => Some(Ordering::Lesser),
+            (Some(_), None) => Some(Ordering::Less),
             (None, Some(_)) => Some(Ordering::Greater),
             (Some(_), Some(_)) => panic!("Broken contract in Permission::partial_cmp: sides should never be both Some!"),
         }
@@ -251,7 +305,7 @@ impl PartialOrd for Permission {
 }
 
 
-#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum PermRule {
     /// The permission is precise, 
     ///
@@ -277,16 +331,16 @@ impl PermRule {
     // Does this rule match that permission
     fn match_perm<P: AsRef<Permission>>(rule: &PermRule, perm: P) -> bool {
         match rule {
-            Base(base) => base == perm,
-            Children(parent) => parent > perm ,
-            Subtree(parent) => parent >= perm,
+            PermRule::Base(base) => base.as_permission() == perm.as_ref(),
+            PermRule::Children(parent) => parent.as_permission() > perm.as_ref() ,
+            PermRule::Subtree(parent) => parent.as_permission() >= perm.as_ref(),
         }
     }
 }
 
 impl fmt::Display for PermRule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match *self {
+        match self {
             PermRule::Base(perm)
                 => write!(f, "{}", perm),
             PermRule::Children(parent)
