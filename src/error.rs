@@ -23,6 +23,7 @@ pub enum Error {
     FuturesSpawn(futures::SpawnError),
     MQTT(mqtt::Error),
     Config(config::ConfigError),
+    BadVersion((u32,u32)),
 }
 
 impl fmt::Display for Error {
@@ -63,6 +64,9 @@ impl fmt::Display for Error {
             },
             Error::Config(e) => {
                 write!(f, "Failed to parse config: {}", e)
+            }
+            Error::BadVersion((major,minor)) => {
+                write!(f, "Peer uses API version {}.{} which is incompatible!", major, minor)
             }
         }
     }
