@@ -102,8 +102,8 @@ impl Stream for Shelly {
                 info!(unpin.log, "Machine Status changed: {:?}", status);
                 let topic = format!("shellies/{}/relay/0/command", unpin.name);
                 let pl = match status {
-                    Status::Free | Status::Blocked => "off",
-                    Status::Occupied => "on",
+                    Status::InUse(_) => "on",
+                    _ => "off",
                 };
                 let msg = mqtt::Message::new(topic, pl, 0);
                 let f = unpin.client.publish(msg).map(|_| ());

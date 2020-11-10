@@ -1,5 +1,4 @@
-use smol::net::TcpStream;
-use futures_util::FutureExt;
+use std::sync::Arc;
 
 use slog::Logger;
 
@@ -13,11 +12,22 @@ use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp::capability::FromServer;
 
-pub async fn handle_connection(log: Logger, socket: TcpStream) -> Result<()> {
-    unimplemented!()
+use crate::db::machine::Machines;
+use crate::db::user::User;
+
+use uuid::Uuid;
+
+pub struct MachinesAPI {
+    log: Logger,
+    user: User,
+    machines: Arc<Machines>,
 }
 
-pub struct MachinesAPI;
+impl MachinesAPI {
+    pub fn new(log: Logger, user: User, machines: Arc<Machines>) -> Self {
+        Self { log, user, machines }
+    }
+}
 
 impl api_capnp::machines::Server for MachinesAPI {
     fn list_machines(&mut self,
@@ -25,8 +35,9 @@ impl api_capnp::machines::Server for MachinesAPI {
         mut results: api_capnp::machines::ListMachinesResults)
         -> Promise<(), Error>
     {
-        let mut l = results.get();
-        l.init_machines(0);
+        let l = results.get();
+        let keys: Vec<api_capnp::machine::Reader> = self.machines.iter().map(|x| x.into()).collect();
+        l.set_machines(keys);
         Promise::ok(())
     }
 

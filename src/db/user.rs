@@ -4,7 +4,7 @@ use crate::db::access::RoleIdentifier;
 use std::collections::HashMap;
 
 /// A Person, from the Authorization perspective
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
 pub struct User {
     /// The identification of this user.
     pub id: UserIdentifier,

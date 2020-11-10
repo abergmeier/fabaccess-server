@@ -187,6 +187,18 @@ fn is_sep_char(c: char) -> bool {
     c == '.'
 }
 
+/// A set of privileges to a thing
+pub struct PrivilegesBuf {
+    /// Which permission is required to know about the existance of this thing
+    disclose: PermissionBuf,
+    /// Which permission is required to read this thing
+    read: PermissionBuf,
+    /// Which permission is required to write parts of this thing
+    write: PermissionBuf,
+    /// Which permission is required to manage all parts of this thing
+    manage: PermissionBuf
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(transparent)]
 /// An owned permission string

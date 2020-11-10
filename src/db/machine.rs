@@ -37,15 +37,20 @@ use internal::Internal;
 pub type MachineIdentifier = Uuid;
 
 /// Status of a Machine
-#[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
-#[repr(u8)]
+#[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
 pub enum Status {
     /// Not currently used by anybody
     Free,
     /// Used by somebody
-    Occupied,
+    InUse(UserIdentifier),
+    /// Was used by somebody and now needs to be checked for cleanliness
+    ToCheck(UserIdentifier),
     /// Not used by anybody but also can not be used. E.g. down for maintenance
-    Blocked,
+    Blocked(UserIdentifier),
+    /// Disabled for some other reason
+    Disabled,
+    /// Reserved
+    Reserved(UserIdentifier),
 }
 
 #[derive(Clone)]
@@ -88,7 +93,7 @@ pub struct Machine {
     /// The human-readable name of the machine. Does not need to be unique
     name: String,
 
-    /// The required permission to use this machine.
+    /// The required permissions to use this machine.
     perm: access::PermIdentifier,
 
     /// The state of the machine as bffh thinks the machine *should* be in.
@@ -117,7 +122,7 @@ impl Machine {
         // dedupe ensures that if state is changed but only changes to the value it had beforehand
         // (could for example happen if the machine changes current user but stays activated) no
         // update is sent.
-        Box::pin(self.state.signal().dedupe())
+        Box::pin(self.state.signal_cloned().dedupe_cloned())
     }
 
     /// Requests to use a machine. Returns `true` if successful.
@@ -130,7 +135,7 @@ impl Machine {
         ) -> Result<bool>
     {
         if pp.check(who, &self.perm)? {
-            self.state.set(Status::Occupied);
+            self.state.set(Status::InUse(who.id.clone()));
             return Ok(true);
         } else {
             return Ok(false);
@@ -140,6 +145,15 @@ impl Machine {
     pub fn set_state(&mut self, state: Status) {
         self.state.set(state)
     }
+}
+
+#[derive(Debug)]
+pub struct Machines {
+    inner: HashMap<Uuid, Machine>,
+}
+
+impl Machines {
+
 }
 
 // TODO split up for non-writable Definition Databases
