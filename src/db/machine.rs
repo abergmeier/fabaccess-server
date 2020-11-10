@@ -31,7 +31,10 @@ use futures_signals::signal::*;
 use crate::registries::StatusSignal;
 use crate::db::user::User;
 
-pub type ID = Uuid;
+mod internal;
+use internal::Internal;
+
+pub type MachineIdentifier = Uuid;
 
 /// Status of a Machine
 #[derive(Clone, Copy, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -46,22 +49,12 @@ pub enum Status {
 }
 
 #[derive(Clone)]
-pub struct Machines {
-    inner: Arc<RwLock<MachinesProvider>>,
-}
-impl Machines {
-    pub fn new(inner: Arc<RwLock<MachinesProvider>>) -> Self {
-        Self { inner }
-    }
-}
-
-#[derive(Clone)]
 pub struct GiveBack {
-    mdb: Arc<RwLock<MachinesProvider>>,
+    mdb: Arc<Box<dyn MachineDB>>,
     uuid: Uuid,
 }
 impl GiveBack {
-    pub fn new(mdb: Arc<RwLock<MachinesProvider>>, uuid: Uuid) -> Self {
+    pub fn new(mdb: Arc<Box<dyn MachineDB>>, uuid: Uuid) -> Self {
         Self { mdb, uuid }
     }
 }
@@ -80,18 +73,6 @@ fn api_from_uuid(uuid: Uuid, mut wr: crate::api::api_capnp::u_u_i_d::Builder) {
     wr.set_uuid1(uuid1);
 }
 
-#[derive(Clone)]
-pub struct MachineManager {
-    mdb: Arc<RwLock<MachinesProvider>>,
-    uuid: Uuid,
-}
-
-impl MachineManager {
-    pub fn new(uuid: Uuid, mdb: Arc<RwLock<MachinesProvider>>) -> Self {
-        Self { mdb, uuid }
-    }
-}
-
 #[derive(Debug, Serialize, Deserialize)]
 /// Internal machine representation
 ///
@@ -102,7 +83,7 @@ pub struct Machine {
     /// Computer-readable identifier for this machine
     // Implicit in database since it's the key.
     #[serde(skip)]
-    id: ID,
+    id: MachineIdentifier,
 
     /// The human-readable name of the machine. Does not need to be unique
     name: String,
@@ -132,10 +113,10 @@ impl Machine {
     /// A signal is a lossy stream of state changes. Lossy in that if changes happen in quick
     /// succession intermediary values may be lost. But this isn't really relevant in this case
     /// since the only relevant state is the latest one.
-    /// dedupe ensures that if state is changed but only changes to the value it had beforehand
-    /// (could for example happen if the machine changes current user but stays activated) no
-    /// update is sent.
     pub fn signal(&self) -> StatusSignal {
+        // dedupe ensures that if state is changed but only changes to the value it had beforehand
+        // (could for example happen if the machine changes current user but stays activated) no
+        // update is sent.
         Box::pin(self.state.signal().dedupe())
     }
 
@@ -161,108 +142,17 @@ impl Machine {
     }
 }
 
-pub struct MachinesProvider {
-    log: Logger,
-    db: lmdb::Database,
+// TODO split up for non-writable Definition Databases
+pub trait MachineDB {
+    fn get_machine(&self, machID: &MachineIdentifier) -> Result<Option<Machine>>;
+    fn put_machine(&self, machID: &MachineIdentifier, machine: Machine) -> Result<()>;
 }
 
-impl MachinesProvider {
-    pub fn new(log: Logger, db: lmdb::Database) -> Self {
-        Self { log, db }
-    }
-
-    pub fn get_machine<T: Transaction>(&self, txn: &T, uuid: Uuid) 
-        -> Result<Option<Machine>> 
-    {
-        match txn.get(self.db, &uuid.as_bytes()) {
-            Ok(bytes) => {
-                let mut machine: Machine = flexbuffers::from_slice(bytes)?;
-                machine.id = uuid;
-
-                Ok(Some(machine))
-            },
-            Err(lmdb::Error::NotFound) => { Ok(None) },
-            Err(e) => { Err(e.into()) },
-        }
-    }
-
-    pub fn put_machine( &self, txn: &mut RwTransaction, uuid: Uuid, machine: Machine) 
-        -> Result<()>
-    {
-        let bytes = flexbuffers::to_vec(machine)?;
-        txn.put(self.db, &uuid.as_bytes(), &bytes, lmdb::WriteFlags::empty())?;
-
-        Ok(())
-    }
-
-    pub fn load_db(&mut self, txn: &mut RwTransaction, mut path: PathBuf) -> Result<()> {
-       path.push("machines");
-       for entry in std::fs::read_dir(path)? {
-           let entry = entry?;
-           let path = entry.path();
-           if path.is_file() {
-               // will only ever be none if the path has no file name and then how is it a file?!
-               let machID_str = path
-                   .file_stem().expect("Found a file with no filename?")
-                   .to_str().expect("Found an OsStr that isn't valid Unicode. Fix your OS!");
-               let machID = match uuid::Uuid::from_str(machID_str) {
-                   Ok(i) => i,
-                   Err(e) => {
-                       warn!(self.log, "File {} had a invalid name. Expected an u64 in [0-9a-z] hex with optional file ending: {}. Skipping!", path.display(), e);
-                       continue;
-                   }
-               };
-               let s = match fs::read_to_string(path.as_path()) {
-                   Ok(s) => s,
-                   Err(e) => {
-                       warn!(self.log, "Failed to open file {}: {}, skipping!"
-                            , path.display()
-                            , e);
-                       continue;
-                   }
-               };
-               let mach: Machine = match toml::from_str(&s) {
-                   Ok(r) => r,
-                   Err(e) => {
-                       warn!(self.log, "Failed to parse mach at path {}: {}, skipping!"
-                            , path.display()
-                            , e);
-                       continue;
-                   }
-               };
-               self.put_machine(txn, machID, mach)?;
-               debug!(self.log, "Loaded machine {}", machID);
-           } else {
-               warn!(self.log, "Path {} is not a file, skipping!", path.display());
-           }
-       }
-
-       Ok(())
-    }
-
-    pub fn dump_db<T: Transaction>(&self, txn: &T, mut path: PathBuf) -> Result<()> {
-        path.push("machines");
-       let mut mach_cursor = txn.open_ro_cursor(self.db)?;
-       for buf in mach_cursor.iter_start() {
-           let (kbuf, vbuf) = buf?;
-           let machID = uuid::Uuid::from_slice(kbuf).unwrap();
-           let mach: Machine = flexbuffers::from_slice(vbuf)?;
-           let filename = format!("{}.yml", machID.to_hyphenated().to_string());
-           path.set_file_name(filename);
-           let mut fp = std::fs::File::create(&path)?;
-           let out = toml::to_vec(&mach)?;
-           fp.write_all(&out)?;
-       }
-
-       Ok(())
-    }
-}
-
-pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> Result<MachinesProvider> {
+pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> Result<Internal> {
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
     let machdb = env.create_db(Some("machines"), flags)?;
     debug!(&log, "Opened machine db successfully.");
 
-    Ok(MachinesProvider::new(log, machdb))
+    Ok(Internal::new(log, env, machdb))
 }

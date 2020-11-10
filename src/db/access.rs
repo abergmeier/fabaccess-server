@@ -21,11 +21,11 @@ use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 use crate::config::Settings;
 use crate::error::Result;
 
-mod adapter_lmdb;
+mod internal;
 
 use crate::db::user::User;
-use adapter_lmdb::PermissionsDB;
-pub use adapter_lmdb::init;
+use internal::PermissionsDB;
+pub use internal::init;
 
 pub trait RoleDB {
     fn get_role(&self, roleID: &RoleIdentifier) -> Result<Option<Role>>;
@@ -40,8 +40,8 @@ pub trait RoleDB {
 
     /// Check if a given permission is granted by any of the given roles or their respective
     /// parents
-    /// 
-    /// Default implementation which adapter may overwrite with more efficient specialized
+    ///
+    /// A Default implementation exists which adapter may overwrite with more efficient specialized
     /// implementations.
     fn check_roles(&self, roles: &[RoleIdentifier], permID: &PermIdentifier) -> Result<bool> {
         // Tally all roles. Makes dependent roles easier
@@ -64,7 +64,8 @@ pub trait RoleDB {
 
     /// Tally a role dependency tree into a set
     ///
-    /// Default implementation which adapter may overwrite with more efficient implementations
+    /// A Default implementation exists which adapter may overwrite with more efficient
+    /// implementations.
     fn tally_role(&self, roles: &mut HashSet<Role>, roleID: &RoleIdentifier) -> Result<()> {
         if let Some(role) = self.get_role(roleID)? {
             // Only check and tally parents of a role at the role itself if it's the first time we

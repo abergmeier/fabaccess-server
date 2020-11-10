@@ -52,7 +52,6 @@ const LMDB_MAX_DB: u32 = 16;
 // Returning a `Result` from `main` allows us to use the `?` shorthand.
 // In the case of an Err it will be printed using `fmt::Debug`
 fn main() -> Result<(), Error> {
-
     let signal = Box::pin(async {
         let (tx, mut rx) = UnixStream::pair()?;
         // Initialize signal handler.
