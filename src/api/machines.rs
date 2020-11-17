@@ -7,7 +7,7 @@ use crate::schema::api_capnp::machines;
 use crate::connection::Session;
 
 /// An implementation of the `Machines` API
-struct Machines {
+pub struct Machines {
     /// A reference to the connection — as long as at least one API endpoint is
     /// still alive the session has to be as well.
     session: Arc<Session>,

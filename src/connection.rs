@@ -5,21 +5,18 @@ use slog::Logger;
 use smol::net::TcpStream;
 
 use crate::error::{Error, Result};
-use crate::auth;
-use crate::api;
-
-pub use crate::schema::connection_capnp;
-use crate::db::Databases;
+use crate::api::auth;
+use crate::api::Bootstrap;
 
 use capnp_rpc::{twoparty, rpc_twoparty_capnp};
 
-use capnp::capability::{Params, Results, Promise, FromServer};
+use crate::schema::connection_capnp;
 
 /// Connection context
 // TODO this should track over several connections
 pub struct Session {
     log: Logger,
-    user: Option<auth::User>,
+    pub user: Option<auth::User>,
 }
 
 impl Session {
@@ -27,50 +24,6 @@ impl Session {
         let user = None;
 
         Session { log, user }
-    }
-}
-
-struct Bootstrap {
-    session: Arc<Session>
-}
-
-impl Bootstrap {
-    pub fn new(session: Arc<Session>) -> Self {
-        Self { session }
-    }
-}
-
-use connection_capnp::bootstrap::*;
-impl connection_capnp::bootstrap::Server for Bootstrap {
-    fn auth(&mut self, 
-        _: Params<auth_params::Owned>,
-        mut res: Results<auth_results::Owned>
-    ) -> Promise<(), capnp::Error> {
-        // Forbid mutltiple authentication for now
-        // TODO: When should we allow multiple auth and how do me make sure that does not leak
-        // priviledges (e.g. due to previously issues caps)?
-        if self.session.user.is_none() {
-            res.get().set_auth(capnp_rpc::new_client(auth::Auth::new()))
-        }
-
-        Promise::ok(())
-    }
-
-    fn permissions(&mut self,
-        _: Params<permissions_params::Owned>,
-        mut res: Results<permissions_results::Owned>
-    ) -> Promise<(), capnp::Error> {
-        if self.session.user.is_some() {
-        }
-
-        Promise::ok(())
-    }
-
-    fn machines(&mut self,
-        _: Params<machines_params::Owned>,
-        mut res: Results<machines_results::Owned>
-    ) -> Promise<(), capnp::Error> {
-        Promise::ok(())
     }
 }
 
