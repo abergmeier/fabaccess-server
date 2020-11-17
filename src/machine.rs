@@ -1,3 +1,5 @@
+use serde::{Serialize, Deserialize};
+
 use futures_signals::signal::Signal;
 use futures_signals::signal::SignalExt;
 use futures_signals::signal::Mutable;
@@ -17,14 +19,8 @@ use crate::db::machine::{MachineIdentifier, Status, MachineState};
 /// machine, checking that the user who wants the machine (de)activated has the required
 /// permissions.
 pub struct Machine {
-    /// Computer-readable identifier for this machine
-    id: MachineIdentifier,
-
-    /// The human-readable name of the machine. Does not need to be unique
-    name: String,
-
-    /// The required permissions to use this machine.
-    perm: access::PermIdentifier,
+    /// Descriptor of the machine
+    desc: MachineDescription,
 
     /// The state of the machine as bffh thinks the machine *should* be in.
     ///
@@ -34,11 +30,9 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub fn new(id: Uuid, name: String, perm: access::PermIdentifier) -> Machine {
+    pub fn new(desc: MachineDescription, perm: access::PermIdentifier) -> Machine {
         Machine {
-            id: id,
-            name: name,
-            perm: perm,
+            desc: desc,
             state: Mutable::new(MachineState { state: Status::Free}),
         }
     }
@@ -64,7 +58,8 @@ impl Machine {
         , who: &User
         ) -> Result<bool>
     {
-        if pp.check(who, &self.perm)? {
+        // TODO: Check different levels
+        if pp.check(who, &self.desc.privs.write)? {
             self.state.set(MachineState { state: Status::InUse(who.id.clone()) });
             return Ok(true);
         } else {
@@ -75,4 +70,21 @@ impl Machine {
     pub fn set_state(&mut self, state: Status) {
         self.state.set(MachineState { state })
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+/// A description of a machine
+///
+/// This is the struct that a machine is serialized to/from.
+/// Combining this with the actual state of the system will return a machine
+pub struct MachineDescription {
+    /// The main machine identifier. This must be unique.
+    id: MachineIdentifier,
+    /// The name of the machine. Doesn't need to be unique but is what humans will be presented.
+    name: String,
+    /// An optional description of the Machine.
+    description: Option<String>,
+
+    /// The permission required
+    privs: access::PrivilegesBuf,
 }

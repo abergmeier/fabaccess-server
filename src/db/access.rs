@@ -33,8 +33,8 @@ pub trait RoleDB {
     /// 
     /// Default implementation which adapter may overwrite with more efficient specialized
     /// implementations.
-    fn check(&self, user: &User, permID: &PermIdentifier) -> Result<bool> {
-        self.check_roles(&user.roles, permID)
+    fn check<P: AsRef<Permission>>(&self, user: &User, perm: &P) -> Result<bool> {
+        self.check_roles(&user.roles, perm)
     }
 
     /// Check if a given permission is granted by any of the given roles or their respective
@@ -42,7 +42,7 @@ pub trait RoleDB {
     ///
     /// A Default implementation exists which adapter may overwrite with more efficient specialized
     /// implementations.
-    fn check_roles(&self, roles: &[RoleIdentifier], permID: &PermIdentifier) -> Result<bool> {
+    fn check_roles<P: AsRef<Permission>>(&self, roles: &[RoleIdentifier], perm: &P) -> Result<bool> {
         // Tally all roles. Makes dependent roles easier
         let mut roleset = HashSet::new();
         for roleID in roles {
@@ -51,8 +51,8 @@ pub trait RoleDB {
 
         // Iter all unique role->permissions we've found and early return on match. 
         for role in roleset.iter() {
-            for perm in role.permissions.iter() {
-                if permID == perm {
+            for perm_rule in role.permissions.iter() {
+                if perm_rule.match_perm(perm) {
                     return Ok(true);
                 }
             }
@@ -104,7 +104,7 @@ pub struct Role {
     /// level of access sets the lower levels of access as parent, inheriting their permission; if
     /// you are allowed to manage a machine you are then also allowed to use it and so on
     parents: Vec<RoleIdentifier>,
-    permissions: Vec<PermIdentifier>,
+    permissions: Vec<PermRule>,
 }
 
 type SourceID = String;
@@ -186,16 +186,17 @@ fn is_sep_char(c: char) -> bool {
     c == '.'
 }
 
+#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
 /// A set of privileges to a thing
 pub struct PrivilegesBuf {
     /// Which permission is required to know about the existance of this thing
-    disclose: PermissionBuf,
+    pub disclose: PermissionBuf,
     /// Which permission is required to read this thing
-    read: PermissionBuf,
+    pub read: PermissionBuf,
     /// Which permission is required to write parts of this thing
-    write: PermissionBuf,
+    pub write: PermissionBuf,
     /// Which permission is required to manage all parts of this thing
-    manage: PermissionBuf
+    pub manage: PermissionBuf
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -341,11 +342,11 @@ pub enum PermRule {
 
 impl PermRule {
     // Does this rule match that permission
-    fn match_perm<P: AsRef<Permission>>(rule: &PermRule, perm: P) -> bool {
-        match rule {
-            PermRule::Base(base) => base.as_permission() == perm.as_ref(),
-            PermRule::Children(parent) => parent.as_permission() > perm.as_ref() ,
-            PermRule::Subtree(parent) => parent.as_permission() >= perm.as_ref(),
+    fn match_perm<P: AsRef<Permission>>(&self, perm: &P) -> bool {
+        match self {
+            PermRule::Base(ref base) => base.as_permission() == perm.as_ref(),
+            PermRule::Children(ref parent) => parent.as_permission() > perm.as_ref() ,
+            PermRule::Subtree(ref parent) => parent.as_permission() >= perm.as_ref(),
         }
     }
 }
@@ -371,5 +372,22 @@ mod tests {
     fn permission_ord_test() {
         assert!(PermissionBuf::from_string("bffh.perm".to_string()) 
             > PermissionBuf::from_string("bffh.perm.sub".to_string()));
+    }
+
+    #[test]
+    fn permission_simple_check_test() {
+        let perm = PermissionBuf::from_string("test.perm".to_string());
+        let rule = PermRule::Base(perm.clone());
+
+        assert!(rule.match_perm(&perm));
+    }
+
+    #[test]
+    #[should_panic]
+    fn permission_children_checks_only_children() {
+        let perm = PermissionBuf::from_string("test.perm".to_string());
+        let rule = PermRule::Children(perm.clone());
+
+        assert!(rule.match_perm(&perm));
     }
 }

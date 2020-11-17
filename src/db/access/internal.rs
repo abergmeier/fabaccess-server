@@ -16,7 +16,7 @@ use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 use crate::config::Settings;
 use crate::error::Result;
 
-use crate::db::access::{PermIdentifier, Role, RoleIdentifier, RoleDB};
+use crate::db::access::{Permission, Role, RoleIdentifier, RoleDB};
 use crate::db::user::{UserIdentifier, User};
 
 #[derive(Clone, Debug)]
@@ -34,7 +34,9 @@ impl Internal {
 
     /// Check if a given user has the given permission
     #[allow(unused)]
-    pub fn _check<T: Transaction>(&self, txn: &T, user: &User, permID: &PermIdentifier) -> Result<bool> {
+    pub fn _check<T: Transaction, P: AsRef<Permission>>(&self, txn: &T, user: &User, perm: &P)
+        -> Result<bool>
+    {
         // Tally all roles. Makes dependent roles easier
         let mut roles = HashSet::new();
         for roleID in user.roles.iter() {
@@ -44,8 +46,8 @@ impl Internal {
         // Iter all unique role->permissions we've found and early return on match. 
         // TODO: Change this for negative permissions?
         for role in roles.iter() {
-            for perm in role.permissions.iter() {
-                if permID == perm {
+            for perm_rule in role.permissions.iter() {
+                if perm_rule.match_perm(perm) {
                     return Ok(true);
                 }
             }
@@ -201,9 +203,9 @@ impl Internal {
 }
 
 impl RoleDB for Internal {
-    fn check(&self, user: &User, permID: &PermIdentifier) -> Result<bool> {
+    fn check<P: AsRef<Permission>>(&self, user: &User, perm: &P) -> Result<bool> {
         let txn = self.env.begin_ro_txn()?;
-        self._check(&txn, user, permID)
+        self._check(&txn, user, perm)
     }
 
     fn get_role(&self, roleID: &RoleIdentifier) -> Result<Option<Role>> {
