@@ -54,7 +54,7 @@ async fn handshake(log: &Logger, stream: &mut TcpStream) -> Result<()> {
     }
 }
 
-pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()> {
+pub async fn handle_connection(log: Logger, stream: TcpStream) -> Result<()> {
     //handshake(&log, &mut stream).await?;
 
     let session = Arc::new(Session::new(log));

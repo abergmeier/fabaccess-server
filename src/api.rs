@@ -1,6 +1,6 @@
 use std::sync::Arc;
 
-use capnp::capability::{Params, Results, Promise, FromServer};
+use capnp::capability::{Params, Results, Promise};
 
 use crate::schema::connection_capnp;
 use crate::connection::Session;
@@ -39,11 +39,8 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
 
     fn permissions(&mut self,
         _: Params<permissions_params::Owned>,
-        mut res: Results<permissions_results::Owned>
+        _: Results<permissions_results::Owned>
     ) -> Promise<(), capnp::Error> {
-        if self.session.user.is_some() {
-        }
-
         Promise::ok(())
     }
 
