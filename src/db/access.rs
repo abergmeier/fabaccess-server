@@ -21,10 +21,9 @@ use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 use crate::config::Settings;
 use crate::error::Result;
 
-mod internal;
+pub mod internal;
 
 use crate::db::user::User;
-use internal::PermissionsDB;
 pub use internal::init;
 
 pub trait RoleDB {

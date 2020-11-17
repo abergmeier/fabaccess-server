@@ -14,7 +14,7 @@ use smol::lock::RwLock;
 
 use crate::error::Result;
 use crate::config::Settings;
-use crate::access;
+use crate::db::access;
 
 use crate::db::user::UserIdentifier;
 
@@ -32,7 +32,7 @@ use futures_signals::signal::*;
 use crate::registries::StatusSignal;
 use crate::db::user::User;
 
-mod internal;
+pub mod internal;
 use internal::Internal;
 
 pub type MachineIdentifier = Uuid;
@@ -71,17 +71,7 @@ fn api_from_uuid(uuid: Uuid, mut wr: crate::api::api_capnp::u_u_i_d::Builder) {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// The status of the machine
 pub struct MachineState {
-    state: Status,
-}
-
-// TODO split up for non-writable Definition Databases
-pub trait MachineDB {
-    fn get_status(&self, machID: &MachineIdentifier) 
-        -> impl Future<Output=Result<Option<MachineState>>>;
-    fn put_status(&self, machID: &MachineIdentifier, machine: MachineState) 
-        -> impl Future<Output=Result<()>>;
-
-    fn iter_status(&self) -> impl Stream<Output=Result<MachineState>>;
+    pub state: Status,
 }
 
 pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> Result<Internal> {

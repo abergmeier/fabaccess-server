@@ -13,7 +13,6 @@ pub mod user;
 pub mod machine;
 
 pub struct Databases {
-    pub roles: Box<dyn access::RoleDB>,
-    pub user: Box<dyn user::UserDB>,
-    pub machine: Box<dyn machine::MachineDB>,
+    pub access: access::internal::Internal,
+    pub machine: machine::internal::Internal,
 }

@@ -14,7 +14,7 @@ use futures::stream;
 use futures::future::Ready;
 use futures::stream::Iter;
 
-use super::{MachineIdentifier, MachineState, MachineDB};
+use super::{MachineIdentifier, MachineState};
 use crate::error::Result;
 
 #[derive(Clone, Debug)]
@@ -34,9 +34,7 @@ impl Internal {
     {
         match txn.get(self.db, uuid.as_bytes()) {
             Ok(bytes) => {
-                let mut machine: Machine = flexbuffers::from_slice(bytes)?;
-                machine.id = *uuid;
-
+                let mut machine: MachineState = flexbuffers::from_slice(bytes)?;
                 Ok(Some(machine))
             },
             Err(lmdb::Error::NotFound) => { Ok(None) },
@@ -44,7 +42,7 @@ impl Internal {
         }
     }
 
-    pub fn put(&self, txn: &mut RwTransaction, uuid: &Uuid, status: MachineStatus) 
+    pub fn put(&self, txn: &mut RwTransaction, uuid: &Uuid, status: MachineState) 
         -> Result<()>
     {
         let bytes = flexbuffers::to_vec(status)?;
@@ -115,32 +113,12 @@ impl Internal {
        Ok(())
     }
 
-    pub fn iter<T: Transaction>(&self, txn: &T) -> _ {
+    pub fn iter<T: Transaction>(&self, txn: &T) -> Result<impl Iterator<Item=MachineState>> {
        let mut cursor = txn.open_ro_cursor(self.db)?;
        Ok(cursor.iter_start().map(|buf| {
            let (kbuf, vbuf) = buf.unwrap();
            let machID = uuid::Uuid::from_slice(kbuf).unwrap();
            flexbuffers::from_slice(vbuf).unwrap()
        }))
-    }
-}
-
-impl MachineDB for Internal {
-    fn get_status(&self, machID: &MachineIdentifier) -> Ready<Result<Option<MachineState>>> {
-        let txn = self.env.begin_ro_txn().unwrap();
-        futures::future::ready(self.get(&txn, machID))
-    }
-
-    fn put_status(&self, machID: &MachineIdentifier, machine: MachineState) -> Ready<Result<()>> {
-        let mut txn = self.env.begin_rw_txn().unwrap();
-        self.put(&mut txn, machID, machine).unwrap();
-        txn.commit().unwrap();
-
-        futures::future::ready(Ok(()))
-    }
-
-    fn iter_status(&self) -> _ {
-        let txn = self.env.begin_ro_txn().unwrap();
-        stream::iter(self.iter(&txn))
     }
 }

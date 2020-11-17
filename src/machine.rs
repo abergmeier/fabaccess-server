@@ -2,6 +2,8 @@ use futures_signals::signal::Signal;
 use futures_signals::signal::SignalExt;
 use futures_signals::signal::Mutable;
 
+use uuid::Uuid;
+
 use crate::error::Result;
 
 use crate::db::user::User;

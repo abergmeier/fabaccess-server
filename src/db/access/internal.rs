@@ -20,16 +20,16 @@ use crate::db::access::{PermIdentifier, Role, RoleIdentifier, RoleDB};
 use crate::db::user::{UserIdentifier, User};
 
 #[derive(Clone, Debug)]
-pub struct PermissionsDB {
+pub struct Internal {
     log: Logger,
     env: Arc<Environment>,
     roledb: lmdb::Database,
     userdb: lmdb::Database,
 }
 
-impl PermissionsDB {
+impl Internal {
     pub fn new(log: Logger, env: Arc<Environment>, roledb: lmdb::Database, userdb: lmdb::Database) -> Self {
-        PermissionsDB { log, env, roledb, userdb }
+        Self { log, env, roledb, userdb }
     }
 
     /// Check if a given user has the given permission
@@ -200,7 +200,7 @@ impl PermissionsDB {
    }
 }
 
-impl RoleDB for PermissionsDB {
+impl RoleDB for Internal {
     fn check(&self, user: &User, permID: &PermIdentifier) -> Result<bool> {
         let txn = self.env.begin_ro_txn()?;
         self._check(&txn, user, permID)
@@ -221,7 +221,7 @@ impl RoleDB for PermissionsDB {
 
 /// Initialize the access db by loading all the lmdb databases
 pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) 
-    -> std::result::Result<PermissionsDB, crate::error::Error> 
+    -> std::result::Result<Internal, crate::error::Error> 
 {
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
@@ -233,5 +233,5 @@ pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>)
     debug!(&log, "Opened access database '{}' successfully.", "user");
     info!(&log, "Opened all access databases");
 
-    Ok(PermissionsDB::new(log, env, roledb, userdb))
+    Ok(Internal::new(log, env, roledb, userdb))
 }
