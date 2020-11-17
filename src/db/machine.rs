@@ -54,13 +54,13 @@ pub enum Status {
     Reserved(UserIdentifier),
 }
 
-fn uuid_from_api(uuid: crate::api::api_capnp::u_u_i_d::Reader) -> Uuid {
+fn uuid_from_api(uuid: crate::schema::api_capnp::u_u_i_d::Reader) -> Uuid {
     let uuid0 = uuid.get_uuid0() as u128;
     let uuid1 = uuid.get_uuid1() as u128;
     let num: u128 = (uuid1 << 64) + uuid0;
     Uuid::from_u128(num)
 }
-fn api_from_uuid(uuid: Uuid, mut wr: crate::api::api_capnp::u_u_i_d::Builder) {
+fn api_from_uuid(uuid: Uuid, mut wr: crate::schema::api_capnp::u_u_i_d::Builder) {
     let num = uuid.to_u128_le();
     let uuid0 = num as u64;
     let uuid1 = (num >> 64) as u64;
