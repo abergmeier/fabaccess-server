@@ -11,3 +11,9 @@ pub mod user;
 ///
 /// Stores&Retrieves Machines
 pub mod machine;
+
+pub struct Databases {
+    pub roles: Box<dyn access::RoleDB>,
+    pub user: Box<dyn user::UserDB>,
+    pub machine: Box<dyn machine::MachineDB>,
+}

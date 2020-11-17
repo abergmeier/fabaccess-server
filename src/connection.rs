@@ -7,6 +7,7 @@ use crate::auth;
 use crate::api;
 
 pub use crate::schema::connection_capnp;
+use crate::db::Databases;
 
 use capnp_rpc::{twoparty, rpc_twoparty_capnp};
 
@@ -50,6 +51,13 @@ impl connection_capnp::bootstrap::Server for Connection {
         if self.user.is_some() {
         }
 
+        Promise::ok(())
+    }
+
+    fn machines(&mut self,
+        _: Params<machines_params::Owned>,
+        mut res: Results<machines_results::Owned>
+    ) -> Promise<(), capnp::Error> {
         Promise::ok(())
     }
 }

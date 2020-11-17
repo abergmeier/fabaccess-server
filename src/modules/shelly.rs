@@ -3,7 +3,7 @@ use slog::Logger;
 use crate::config::Settings;
 use crate::registries::{Registries, Actuator, ActBox, StatusSignal};
 use crate::error::Result;
-use crate::machine::Status;
+use crate::db::machine::Status;
 
 use std::pin::Pin;
 use futures::prelude::*;

@@ -10,7 +10,7 @@ use futures::channel::mpsc;
 use futures::task::{Context, Poll, Spawn};
 use futures_signals::signal::Signal;
 
-use crate::machine::Status;
+use crate::db::machine::Status;
 
 use std::collections::HashMap;
 

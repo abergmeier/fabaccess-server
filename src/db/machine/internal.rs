@@ -9,7 +9,12 @@ use uuid::Uuid;
 
 use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 
-use super::{MachineIdentifier, Machine, MachineDB};
+use futures::{Future, Stream, StreamExt};
+use futures::stream;
+use futures::future::Ready;
+use futures::stream::Iter;
+
+use super::{MachineIdentifier, MachineState, MachineDB};
 use crate::error::Result;
 
 #[derive(Clone, Debug)]
@@ -24,8 +29,8 @@ impl Internal {
         Self { log, env, db }
     }
 
-    pub fn _get_machine<T: Transaction>(&self, txn: &T, uuid: &Uuid) 
-        -> Result<Option<Machine>> 
+    pub fn get<T: Transaction>(&self, txn: &T, uuid: &Uuid) 
+        -> Result<Option<MachineState>> 
     {
         match txn.get(self.db, uuid.as_bytes()) {
             Ok(bytes) => {
@@ -39,10 +44,10 @@ impl Internal {
         }
     }
 
-    pub fn _put_machine( &self, txn: &mut RwTransaction, uuid: &Uuid, machine: Machine) 
+    pub fn put(&self, txn: &mut RwTransaction, uuid: &Uuid, status: MachineStatus) 
         -> Result<()>
     {
-        let bytes = flexbuffers::to_vec(machine)?;
+        let bytes = flexbuffers::to_vec(status)?;
         txn.put(self.db, uuid.as_bytes(), &bytes, lmdb::WriteFlags::empty())?;
 
         Ok(())
@@ -74,7 +79,7 @@ impl Internal {
                        continue;
                    }
                };
-               let mach: Machine = match toml::from_str(&s) {
+               let mach: MachineState = match toml::from_str(&s) {
                    Ok(r) => r,
                    Err(e) => {
                        warn!(self.log, "Failed to parse mach at path {}: {}, skipping!"
@@ -83,7 +88,7 @@ impl Internal {
                        continue;
                    }
                };
-               self._put_machine(txn, &machID, mach)?;
+               self.put(txn, &machID, mach)?;
                debug!(self.log, "Loaded machine {}", machID);
            } else {
                warn!(self.log, "Path {} is not a file, skipping!", path.display());
@@ -99,7 +104,7 @@ impl Internal {
        for buf in mach_cursor.iter_start() {
            let (kbuf, vbuf) = buf?;
            let machID = uuid::Uuid::from_slice(kbuf).unwrap();
-           let mach: Machine = flexbuffers::from_slice(vbuf)?;
+           let mach: MachineState = flexbuffers::from_slice(vbuf)?;
            let filename = format!("{}.yml", machID.to_hyphenated().to_string());
            path.set_file_name(filename);
            let mut fp = std::fs::File::create(&path)?;
@@ -109,19 +114,33 @@ impl Internal {
 
        Ok(())
     }
+
+    pub fn iter<T: Transaction>(&self, txn: &T) -> _ {
+       let mut cursor = txn.open_ro_cursor(self.db)?;
+       Ok(cursor.iter_start().map(|buf| {
+           let (kbuf, vbuf) = buf.unwrap();
+           let machID = uuid::Uuid::from_slice(kbuf).unwrap();
+           flexbuffers::from_slice(vbuf).unwrap()
+       }))
+    }
 }
 
 impl MachineDB for Internal {
-    fn get_machine(&self, machID: &MachineIdentifier) -> Result<Option<Machine>> {
-        let txn = self.env.begin_ro_txn()?;
-        self._get_machine(&txn, machID)
+    fn get_status(&self, machID: &MachineIdentifier) -> Ready<Result<Option<MachineState>>> {
+        let txn = self.env.begin_ro_txn().unwrap();
+        futures::future::ready(self.get(&txn, machID))
     }
 
-    fn put_machine(&self, machID: &MachineIdentifier, machine: Machine) -> Result<()> {
-        let mut txn = self.env.begin_rw_txn()?;
-        self._put_machine(&mut txn, machID, machine)?;
-        txn.commit()?;
+    fn put_status(&self, machID: &MachineIdentifier, machine: MachineState) -> Ready<Result<()>> {
+        let mut txn = self.env.begin_rw_txn().unwrap();
+        self.put(&mut txn, machID, machine).unwrap();
+        txn.commit().unwrap();
 
-        Ok(())
+        futures::future::ready(Ok(()))
+    }
+
+    fn iter_status(&self) -> _ {
+        let txn = self.env.begin_ro_txn().unwrap();
+        stream::iter(self.iter(&txn))
     }
 }

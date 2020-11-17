@@ -12,7 +12,7 @@ use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp::capability::FromServer;
 
-use crate::db::machine::Machines;
+use crate::machines::Machines;
 use crate::db::user::User;
 
 use uuid::Uuid;
@@ -20,11 +20,11 @@ use uuid::Uuid;
 pub struct MachinesAPI {
     log: Logger,
     user: User,
-    machines: Arc<Machines>,
+    machines: Machines,
 }
 
 impl MachinesAPI {
-    pub fn new(log: Logger, user: User, machines: Arc<Machines>) -> Self {
+    pub fn new(log: Logger, user: User, machines: Machines) -> Self {
         Self { log, user, machines }
     }
 }
@@ -35,9 +35,6 @@ impl api_capnp::machines::Server for MachinesAPI {
         mut results: api_capnp::machines::ListMachinesResults)
         -> Promise<(), Error>
     {
-        let l = results.get();
-        let keys: Vec<api_capnp::machine::Reader> = self.machines.iter().map(|x| x.into()).collect();
-        l.set_machines(keys);
         Promise::ok(())
     }
 
