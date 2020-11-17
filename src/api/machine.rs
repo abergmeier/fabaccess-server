@@ -6,7 +6,15 @@ use capnp::Error;
 
 struct Machine;
 
-impl read::Server for Machine {
+impl Machine {
+    pub fn new() -> Self {
+        Machine
+    }
+}
+
+struct Read;
+
+impl read::Server for Read {
     fn info(&mut self,
         _params: read::InfoParams,
         _results: read::InfoResults) 
@@ -16,7 +24,9 @@ impl read::Server for Machine {
     }
 }
 
-impl write::Server for Machine {
+struct Write;
+
+impl write::Server for Write {
     fn use_(&mut self,
         _params: write::UseParams,
         _results: write::UseResults)
@@ -26,7 +36,9 @@ impl write::Server for Machine {
     }
 }
 
-impl manage::Server for Machine {
+struct Manage;
+
+impl manage::Server for Manage {
     fn ok(&mut self,
         _params: manage::OkParams,
         _results: manage::OkResults)
@@ -36,7 +48,9 @@ impl manage::Server for Machine {
     }
 }
 
-impl admin::Server for Machine {
+struct Admin;
+
+impl admin::Server for Admin {
     fn force_set_state(&mut self,
         _params: admin::ForceSetStateParams,
         _results: admin::ForceSetStateResults)

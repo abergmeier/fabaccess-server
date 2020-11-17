@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use slog::Logger;
 
 use smol::net::TcpStream;
@@ -14,22 +16,32 @@ use capnp_rpc::{twoparty, rpc_twoparty_capnp};
 use capnp::capability::{Params, Results, Promise, FromServer};
 
 /// Connection context
-struct Connection {
+// TODO this should track over several connections
+pub struct Session {
     log: Logger,
     user: Option<auth::User>,
 }
 
-impl Connection {
+impl Session {
     pub fn new(log: Logger) -> Self {
         let user = None;
 
-        Self { log, user }
+        Session { log, user }
     }
 }
 
+struct Bootstrap {
+    session: Arc<Session>
+}
+
+impl Bootstrap {
+    pub fn new(session: Arc<Session>) -> Self {
+        Self { session }
+    }
+}
 
 use connection_capnp::bootstrap::*;
-impl connection_capnp::bootstrap::Server for Connection {
+impl connection_capnp::bootstrap::Server for Bootstrap {
     fn auth(&mut self, 
         _: Params<auth_params::Owned>,
         mut res: Results<auth_results::Owned>
@@ -37,7 +49,7 @@ impl connection_capnp::bootstrap::Server for Connection {
         // Forbid mutltiple authentication for now
         // TODO: When should we allow multiple auth and how do me make sure that does not leak
         // priviledges (e.g. due to previously issues caps)?
-        if self.user.is_none() {
+        if self.session.user.is_none() {
             res.get().set_auth(capnp_rpc::new_client(auth::Auth::new()))
         }
 
@@ -48,7 +60,7 @@ impl connection_capnp::bootstrap::Server for Connection {
         _: Params<permissions_params::Owned>,
         mut res: Results<permissions_results::Owned>
     ) -> Promise<(), capnp::Error> {
-        if self.user.is_some() {
+        if self.session.user.is_some() {
         }
 
         Promise::ok(())
@@ -92,14 +104,15 @@ async fn handshake(log: &Logger, stream: &mut TcpStream) -> Result<()> {
 pub async fn handle_connection(log: Logger, mut stream: TcpStream) -> Result<()> {
     //handshake(&log, &mut stream).await?;
 
-    let mut conn = Connection::new(log);
-    let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(conn);
+    let session = Arc::new(Session::new(log));
+    let boots = Bootstrap::new(session);
+    let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
 
     let network = twoparty::VatNetwork::new(stream.clone(), stream,
         rpc_twoparty_capnp::Side::Server, Default::default());
     let rpc_system = capnp_rpc::RpcSystem::new(Box::new(network), 
         Some(rpc.client));
 
-    rpc_system.await;
+    rpc_system.await.unwrap();
     Ok(())
 }
