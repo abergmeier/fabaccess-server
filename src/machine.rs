@@ -112,38 +112,40 @@ mod tests {
 
     #[test]
     fn load_examples_descriptions_test() {
-        let machines = MachineDescription::load_file("examples/machines.toml")
+        let mut machines = MachineDescription::load_file("examples/machines.toml")
             .expect("Couldn't load the example machine defs. Does `examples/machines.toml` exist?");
 
-        let expected: HashMap<MachineIdentifier, MachineDescription>
-            = HashMap::from_iter(vec![
+        let expected = 
+            vec![
             (Uuid::parse_str("e5408099-d3e5-440b-a92b-3aabf7683d6b").unwrap(),
-             MachineDescription {
-                 name: "Somemachine".to_string(),
-                 description: None,
-                 privs: PrivilegesBuf {
-                     disclose: PermissionBuf::from_string("lab.some.disclose".to_string()),
-                     read: PermissionBuf::from_string("lab.some.read".to_string()),
-                     write: PermissionBuf::from_string("lab.some.write".to_string()),
-                     manage: PermissionBuf::from_string("lab.some.admin".to_string()),
-                 },
-             }),
+            MachineDescription {
+                name: "Somemachine".to_string(),
+                description: None,
+                privs: PrivilegesBuf {
+                    disclose: PermissionBuf::from_string("lab.some.disclose".to_string()),
+                    read: PermissionBuf::from_string("lab.some.read".to_string()),
+                    write: PermissionBuf::from_string("lab.some.write".to_string()),
+                    manage: PermissionBuf::from_string("lab.some.admin".to_string()),
+                },
+            }),
             (Uuid::parse_str("eaabebae-34d1-4a3a-912a-967b495d3d6e").unwrap(),
-             MachineDescription {
-                 name: "Testmachine".to_string(),
-                 description: Some("An optional description".to_string()),
-                 privs: PrivilegesBuf {
-                     disclose: PermissionBuf::from_string("lab.test.read".to_string()),
-                     read: PermissionBuf::from_string("lab.test.read".to_string()),
-                     write: PermissionBuf::from_string("lab.test.write".to_string()),
-                     manage: PermissionBuf::from_string("lab.test.admin".to_string()),
-                 },
-             }),
-        ].into_iter());
+            MachineDescription {
+                name: "Testmachine".to_string(),
+                description: Some("An optional description".to_string()),
+                privs: PrivilegesBuf {
+                    disclose: PermissionBuf::from_string("lab.test.read".to_string()),
+                    read: PermissionBuf::from_string("lab.test.read".to_string()),
+                    write: PermissionBuf::from_string("lab.test.write".to_string()),
+                    manage: PermissionBuf::from_string("lab.test.admin".to_string()),
+                },
+            }),
+            ];
 
-        for u in ["e5408099-d3e5-440b-a92b-3aabf7683d6b", "eaabebae-34d1-4a3a-912a-967b495d3d6e"].iter() {
-            let uuid = Uuid::parse_str(u).unwrap();
-            assert_eq!(machines[&uuid], expected[&uuid]);
+        for (id, machine) in expected.into_iter() {
+
+            assert_eq!(machines.remove(&id).unwrap(), machine);
         }
+
+        assert!(machines.is_empty());
     }
 }

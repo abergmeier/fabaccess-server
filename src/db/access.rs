@@ -187,8 +187,10 @@ impl TryFrom<String> for RoleIdentifier {
 
     fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
         if let Some((name, location)) = split_once(&s, '@') {
+            let location = &location[1..];
             Ok(RoleIdentifier::Remote { name: name.to_string(), location: location.to_string() })
         } else if let Some((name, source)) = split_once(&s, '%') {
+            let source = &source[1..];
             Ok(RoleIdentifier::Local { name: name.to_string(), source: source.to_string() })
         } else {
             Err(RoleFromStrError::Invalid)
@@ -500,11 +502,45 @@ mod tests {
 
     #[test]
     fn load_examples_roles_test() {
-        let roles = Role::load_file("examples/roles.toml")
+        let mut roles = Role::load_file("examples/roles.toml")
             .expect("Couldn't load the example role defs. Does `examples/roles.toml` exist?");
 
+        let expected = vec![
+            (RoleIdentifier::Local { name: "testrole".to_string(), source: "lmdb".to_string() },
+            Role {
+                name: "Testrole".to_string(),
+                parents: vec![],
+                permissions: vec![
+                    PermRule::Subtree(PermissionBuf::from_string("lab.test".to_string()))
+                ],
+            }),
+            (RoleIdentifier::Local { name: "somerole".to_string(), source: "lmdb".to_string() },
+            Role {
+                name: "Somerole".to_string(),
+                parents: vec![
+                    RoleIdentifier::local_from_str("lmdb".to_string(), "testparent".to_string()),
+                ],
+                permissions: vec![
+                    PermRule::Base(PermissionBuf::from_string("lab.some.admin".to_string()))
+                ],
+            }),
+            (RoleIdentifier::Local { name: "testparent".to_string(), source: "lmdb".to_string() },
+            Role {
+                name: "Testparent".to_string(),
+                parents: vec![],
+                permissions: vec![
+                    PermRule::Base(PermissionBuf::from_string("lab.some.write".to_string())),
+                    PermRule::Base(PermissionBuf::from_string("lab.some.read".to_string())),
+                    PermRule::Base(PermissionBuf::from_string("lab.some.disclose".to_string())),
+                ],
+            }),
+        ];
 
-        assert!(true)
+        for (id, role) in expected {
+            assert_eq!(roles.remove(&id).unwrap(), role);
+        }
+
+        assert!(roles.is_empty())
     }
 
     #[test]
