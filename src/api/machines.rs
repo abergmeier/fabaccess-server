@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use slog::Logger;
+
 use capnp::capability::Promise;
 use capnp::Error;
 
@@ -15,6 +17,7 @@ pub struct Machines {
 
 impl Machines {
     pub fn new(session: Arc<Session>) -> Self {
+        info!(session.log, "Machines created");
         Self { session }
     }
 }

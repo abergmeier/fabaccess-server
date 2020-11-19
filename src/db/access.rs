@@ -4,16 +4,22 @@
 use std::fmt;
 use std::collections::HashSet;
 use std::cmp::Ordering;
-
-use std::convert::TryInto;
-
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::Write;
 use std::sync::Arc;
+use std::collections::HashMap;
+use std::iter::FromIterator;
+use std::convert::{TryFrom, Into};
 
 use flexbuffers;
-use serde::{Serialize, Deserialize};
+use serde::{
+    Serialize,
+    Serializer,
+
+    Deserialize,
+    Deserializer,
+};
 
 use slog::Logger;
 use lmdb::{Environment, Transaction, RwTransaction, Cursor};
@@ -98,13 +104,29 @@ pub trait RoleDB {
 pub struct Role {
     name: String,
 
+    // If a role doesn't define parents, default to an empty Vec.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     /// A Role can have parents, inheriting all permissions
     ///
     /// This makes situations where different levels of access are required easier: Each higher
     /// level of access sets the lower levels of access as parent, inheriting their permission; if
     /// you are allowed to manage a machine you are then also allowed to use it and so on
     parents: Vec<RoleIdentifier>,
+
+    // If a role doesn't define permissions, default to an empty Vec.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
     permissions: Vec<PermRule>,
+}
+
+impl Role {
+    fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<RoleIdentifier, Role>> {
+        let content = fs::read(path)?;
+        let file_roles: HashMap<String, Role> = toml::from_slice(&content[..])?;
+
+        Ok(HashMap::from_iter(file_roles.into_iter().map(|(key, value)| {
+            (RoleIdentifier::local_from_str("lmdb".to_string(), key), value)
+        })))
+    }
 }
 
 type SourceID = String;
@@ -116,6 +138,7 @@ fn split_once(s: &str, split: char) -> Option<(&str, &str)> {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
 /// Universal (relative) id of a role
 pub enum RoleIdentifier {
     /// The role comes from this instance
@@ -135,6 +158,16 @@ pub enum RoleIdentifier {
         location: String,
     }
 }
+
+impl fmt::Display for RoleIdentifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RoleIdentifier::Local {name, source} => write!(f, "{}/{}@local", name, source),
+            RoleIdentifier::Remote {name, location} => write!(f, "{}@{}", name, location),
+        }
+    }
+}
+
 impl std::str::FromStr for RoleIdentifier {
     type Err = RoleFromStrError;
 
@@ -148,12 +181,24 @@ impl std::str::FromStr for RoleIdentifier {
         }
     }
 }
-impl fmt::Display for RoleIdentifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            RoleIdentifier::Local {name, source} => write!(f, "{}/{}@local", name, source),
-            RoleIdentifier::Remote {name, location} => write!(f, "{}@{}", name, location),
+
+impl TryFrom<String> for RoleIdentifier {
+    type Error = RoleFromStrError;
+
+    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
+        if let Some((name, location)) = split_once(&s, '@') {
+            Ok(RoleIdentifier::Remote { name: name.to_string(), location: location.to_string() })
+        } else if let Some((name, source)) = split_once(&s, '%') {
+            Ok(RoleIdentifier::Local { name: name.to_string(), source: source.to_string() })
+        } else {
+            Err(RoleFromStrError::Invalid)
         }
+    }
+}
+
+impl RoleIdentifier {
+    pub fn local_from_str(source: String, name: String) -> Self {
+        RoleIdentifier::Local { name, source }
     }
 }
 
@@ -161,6 +206,15 @@ impl fmt::Display for RoleIdentifier {
 pub enum RoleFromStrError {
     /// No '@' or '%' found. That's strange, huh?
     Invalid
+}
+
+impl fmt::Display for RoleFromStrError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            RoleFromStrError::Invalid 
+                => write!(f, "Rolename are of form 'name%source' or 'name@realm'."),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -201,6 +255,7 @@ pub struct PrivilegesBuf {
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[repr(transparent)]
+#[serde(transparent)]
 /// An owned permission string
 ///
 /// This is under the hood just a fancy std::String.
@@ -241,6 +296,10 @@ impl PermissionBuf {
 
     pub fn from_string(inner: String) -> Self {
         Self { inner }
+    }
+
+    pub fn into_string(self) -> String {
+        self.inner
     }
 }
 impl AsRef<str> for PermissionBuf {
@@ -317,8 +376,16 @@ impl PartialOrd for Permission {
     }
 }
 
+impl AsRef<Permission> for Permission {
+    #[inline]
+    fn as_ref(&self) -> &Permission {
+        self
+    }
+}
 
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[serde(try_from = "String")]
+#[serde(into = "String")]
 pub enum PermRule {
     /// The permission is precise, 
     ///
@@ -364,6 +431,46 @@ impl fmt::Display for PermRule {
     }
 }
 
+impl Into<String> for PermRule {
+    fn into(self) -> String {
+        match self {
+            PermRule::Base(perm) => perm.into_string(),
+            PermRule::Children(mut perm) => {
+                perm.push(Permission::new("+"));
+                perm.into_string()
+            },
+            PermRule::Subtree(mut perm) => {
+                perm.push(Permission::new("+"));
+                perm.into_string()
+            }
+        }
+    }
+}
+
+impl TryFrom<String> for PermRule {
+    type Error = &'static str;
+
+    fn try_from(mut input: String) -> std::result::Result<Self, Self::Error> {
+        // Check out specifically the last two chars
+        let len = input.len();
+        if len <= 2 {
+            Err("Input string for PermRule is too short")
+        } else {
+            match &input[len-2..len] {
+                ".+" => {
+                    input.truncate(len-2);
+                    Ok(PermRule::Children(PermissionBuf::from_string(input)))
+                },
+                ".*" => {
+                    input.truncate(len-2);
+                    Ok(PermRule::Subtree(PermissionBuf::from_string(input)))
+                },
+                _ => Ok(PermRule::Base(PermissionBuf::from_string(input))),
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -389,5 +496,36 @@ mod tests {
         let rule = PermRule::Children(perm.clone());
 
         assert!(rule.match_perm(&perm));
+    }
+
+    #[test]
+    fn load_examples_roles_test() {
+        let roles = Role::load_file("examples/roles.toml")
+            .expect("Couldn't load the example role defs. Does `examples/roles.toml` exist?");
+
+
+        assert!(true)
+    }
+
+    #[test]
+    fn rules_from_string_test() {
+        assert_eq!(
+            PermRule::Base(PermissionBuf::from_string("bffh.perm".to_string())),
+            PermRule::try_from("bffh.perm".to_string()).unwrap()
+        );
+        assert_eq!(
+            PermRule::Children(PermissionBuf::from_string("bffh.perm".to_string())),
+            PermRule::try_from("bffh.perm.+".to_string()).unwrap()
+        );
+        assert_eq!(
+            PermRule::Subtree(PermissionBuf::from_string("bffh.perm".to_string())),
+            PermRule::try_from("bffh.perm.*".to_string()).unwrap()
+        );
+    }
+
+    #[test]
+    fn rules_from_string_edgecases_test() {
+        assert!(PermRule::try_from("*".to_string()).is_err());
+        assert!(PermRule::try_from("+".to_string()).is_err());
     }
 }

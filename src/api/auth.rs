@@ -3,22 +3,28 @@
 //! Authorization is over in `access.rs`
 //! Authentication using SASL
 
+use std::sync::Arc;
+
 use slog::Logger;
 
 use rsasl::{
     SASL,
     Property,
-    Session,
+    Session as SaslSession,
     ReturnCode,
     Callback,
     SaslCtx,
     Step,
 };
 
+use serde::{Serialize, Deserialize};
+
 use capnp::capability::{Params, Results, Promise};
 
 use crate::error::Result;
 use crate::config::Settings;
+
+use crate::api::Session;
 
 pub use crate::schema::auth_capnp;
 
@@ -27,7 +33,7 @@ pub struct SessionData;
 
 struct CB;
 impl Callback<AppData, SessionData> for CB {
-    fn callback(sasl: SaslCtx<AppData, SessionData>, session: Session<SessionData>, prop: Property) -> libc::c_int {
+    fn callback(sasl: SaslCtx<AppData, SessionData>, session: SaslSession<SessionData>, prop: Property) -> libc::c_int {
         let ret = match prop {
             Property::GSASL_VALIDATE_SIMPLE => {
                 let authid = session.get_property(Property::GSASL_AUTHID).unwrap().to_string_lossy();
@@ -50,10 +56,11 @@ impl Callback<AppData, SessionData> for CB {
 
 pub struct Auth {
     pub ctx: SASL<AppData, SessionData>,
+    session: Arc<Session>,
 }
 
 impl Auth {
-    pub fn new() -> Self {
+    pub fn new(session: Arc<Session>) -> Self {
         let mut ctx = SASL::new().unwrap();
 
         let mut appdata = Box::new(AppData);
@@ -62,7 +69,9 @@ impl Auth {
 
         ctx.install_callback::<CB>();
 
-        Self { ctx }
+        info!(session.log, "Auth created");
+
+        Self { ctx, session }
     }
 }
 
@@ -156,20 +165,19 @@ impl auth_capnp::authentication::Server for Auth {
     }
 }
 
-pub async fn init(log: Logger, config: Settings) -> Result<Auth> {
-    Ok(Auth::new())
-}
-
 // Use the newtype pattern here to make the type system work for us; even though AuthCId is for all
 // intents and purposes just a String the compiler will still complain if you return or more
 // importantly pass a String intead of a AuthCId. This prevents bugs where you get an object from
 // somewhere and pass it somewhere else and in between don't check if it's the right type and
 // accidentally pass the authzid where the authcid should have gone.
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 /// Authentication Identity
 ///
 /// Under the hood a string because the form depends heavily on the method
 struct AuthCId(String);
+
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 /// Authorization Identity
 ///
 /// This identity is internal to FabAccess and completely independent from the authentication
@@ -191,6 +199,7 @@ struct AuthZId {
 }
 
 // What is a man?! A miserable little pile of secrets!
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 /// Authentication/Authorization user object.
 ///
 /// This struct contains the user as is passed to the actual authentication/authorization
@@ -218,7 +227,7 @@ pub struct User {
     /// Contains the authentication method used
     ///
     /// For the most part this is the SASL method
-    authMethod: String,
+    auth_method: String,
 
     /// Method-specific key-value pairs
     ///
@@ -236,6 +245,7 @@ pub struct User {
 // b) the given authcid may authenticate as the given authzid. E.g. if a given client certificate
 //    has been configured for that user, if a GSSAPI user maps to a given user, 
 
+#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AuthError {
     /// Authentication ID is bad/unknown/..
     BadAuthcid,
@@ -246,8 +256,4 @@ pub enum AuthError {
     /// User may not use that authorization id
     NotAllowedAuthzid,
 
-}
-
-fn grant_auth(user: User) -> std::result::Result<(), AuthError> {
-    unimplemented!()
 }

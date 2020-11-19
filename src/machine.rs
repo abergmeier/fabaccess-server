@@ -1,3 +1,7 @@
+use std::path::Path;
+use std::collections::HashMap;
+use std::fs;
+
 use serde::{Serialize, Deserialize};
 
 use futures_signals::signal::Signal;
@@ -19,6 +23,9 @@ use crate::db::machine::{MachineIdentifier, Status, MachineState};
 /// machine, checking that the user who wants the machine (de)activated has the required
 /// permissions.
 pub struct Machine {
+    /// Globally unique machine readable identifier
+    id: MachineIdentifier,
+
     /// Descriptor of the machine
     desc: MachineDescription,
 
@@ -30,8 +37,9 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub fn new(desc: MachineDescription, perm: access::PermIdentifier) -> Machine {
+    pub fn new(id: MachineIdentifier, desc: MachineDescription, perm: access::PermIdentifier) -> Machine {
         Machine {
+            id: id,
             desc: desc,
             state: Mutable::new(MachineState { state: Status::Free}),
         }
@@ -72,19 +80,70 @@ impl Machine {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// A description of a machine
 ///
 /// This is the struct that a machine is serialized to/from.
 /// Combining this with the actual state of the system will return a machine
 pub struct MachineDescription {
-    /// The main machine identifier. This must be unique.
-    id: MachineIdentifier,
     /// The name of the machine. Doesn't need to be unique but is what humans will be presented.
     name: String,
     /// An optional description of the Machine.
     description: Option<String>,
 
     /// The permission required
+    #[serde(flatten)]
     privs: access::PrivilegesBuf,
+}
+
+impl MachineDescription {
+    fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<MachineIdentifier, MachineDescription>> {
+        let content = fs::read(path)?;
+        Ok(toml::from_slice(&content[..])?)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::iter::FromIterator;
+
+    use crate::db::access::{PermissionBuf, PrivilegesBuf};
+
+    #[test]
+    fn load_examples_descriptions_test() {
+        let machines = MachineDescription::load_file("examples/machines.toml")
+            .expect("Couldn't load the example machine defs. Does `examples/machines.toml` exist?");
+
+        let expected: HashMap<MachineIdentifier, MachineDescription>
+            = HashMap::from_iter(vec![
+            (Uuid::parse_str("e5408099-d3e5-440b-a92b-3aabf7683d6b").unwrap(),
+             MachineDescription {
+                 name: "Somemachine".to_string(),
+                 description: None,
+                 privs: PrivilegesBuf {
+                     disclose: PermissionBuf::from_string("lab.some.disclose".to_string()),
+                     read: PermissionBuf::from_string("lab.some.read".to_string()),
+                     write: PermissionBuf::from_string("lab.some.write".to_string()),
+                     manage: PermissionBuf::from_string("lab.some.admin".to_string()),
+                 },
+             }),
+            (Uuid::parse_str("eaabebae-34d1-4a3a-912a-967b495d3d6e").unwrap(),
+             MachineDescription {
+                 name: "Testmachine".to_string(),
+                 description: Some("An optional description".to_string()),
+                 privs: PrivilegesBuf {
+                     disclose: PermissionBuf::from_string("lab.test.read".to_string()),
+                     read: PermissionBuf::from_string("lab.test.read".to_string()),
+                     write: PermissionBuf::from_string("lab.test.write".to_string()),
+                     manage: PermissionBuf::from_string("lab.test.admin".to_string()),
+                 },
+             }),
+        ].into_iter());
+
+        for u in ["e5408099-d3e5-440b-a92b-3aabf7683d6b", "eaabebae-34d1-4a3a-912a-967b495d3d6e"].iter() {
+            let uuid = Uuid::parse_str(u).unwrap();
+            assert_eq!(machines[&uuid], expected[&uuid]);
+        }
+    }
 }

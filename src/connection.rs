@@ -15,7 +15,7 @@ use crate::schema::connection_capnp;
 /// Connection context
 // TODO this should track over several connections
 pub struct Session {
-    log: Logger,
+    pub log: Logger,
     pub user: Option<auth::User>,
 }
 
@@ -57,6 +57,7 @@ async fn handshake(log: &Logger, stream: &mut TcpStream) -> Result<()> {
 pub async fn handle_connection(log: Logger, stream: TcpStream) -> Result<()> {
     //handshake(&log, &mut stream).await?;
 
+    info!(log, "New connection from on {:?}", stream);
     let session = Arc::new(Session::new(log));
     let boots = Bootstrap::new(session);
     let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);

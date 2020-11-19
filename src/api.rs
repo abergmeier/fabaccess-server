@@ -1,5 +1,7 @@
 use std::sync::Arc;
 
+use slog::Logger;
+
 use capnp::capability::{Params, Results, Promise};
 
 use crate::schema::connection_capnp;
@@ -17,6 +19,7 @@ pub struct Bootstrap {
 
 impl Bootstrap {
     pub fn new(session: Arc<Session>) -> Self {
+        info!(session.log, "Created Bootstrap");
         Self { session }
     }
 }
@@ -31,7 +34,7 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         // TODO: When should we allow multiple auth and how do me make sure that does not leak
         // priviledges (e.g. due to previously issues caps)?
         if self.session.user.is_none() {
-            res.get().set_auth(capnp_rpc::new_client(auth::Auth::new()))
+            res.get().set_auth(capnp_rpc::new_client(auth::Auth::new(self.session.clone())))
         }
 
         Promise::ok(())

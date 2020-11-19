@@ -143,7 +143,6 @@ fn main() -> Result<(), Error> {
     let env = Arc::new(env);
     let mdb = db::machine::init(log.new(o!("system" => "machines")), &config, env.clone());
     let pdb = db::access::init(log.new(o!("system" => "permissions")), &config, env.clone());
-    let authentication_f = api::auth::init(log.new(o!("system" => "authentication")), config.clone());
 
     // If --load or --dump is given we can stop at this point and load/dump the database and then
     // exit.
