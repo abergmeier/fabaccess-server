@@ -113,38 +113,9 @@ impl Internal {
    }
 
    fn dump_roles<T: Transaction>(&mut self, txn: &T, mut path: PathBuf) -> Result<()> {
-       let mut role_cursor = txn.open_ro_cursor(self.roledb)?;
-       for buf in role_cursor.iter_start() {
-           let (kbuf, vbuf) = buf?;
-           let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
-           let roleID = u64::from_ne_bytes(kbytes.try_into().unwrap());
-           let role: Role = flexbuffers::from_slice(vbuf)?;
-           let filename = format!("{:x}.toml", roleID);
-           path.set_file_name(filename);
-           let mut fp = std::fs::File::create(&path)?;
-           let out = toml::to_vec(&role)?;
-           fp.write_all(&out)?;
-       }
-
-       Ok(())
+       // TODO implement this for the new format
+       unimplemented!()
    }
-
-   //fn dump_perms<T: Transaction>(&mut self, txn: &T, mut path: PathBuf) -> Result<()> {
-   //    let mut perm_cursor = txn.open_ro_cursor(self.permdb)?;
-   //    for buf in perm_cursor.iter_start() {
-   //        let (kbuf, vbuf) = buf?;
-   //        let (kbytes, _rest) = kbuf.split_at(std::mem::size_of::<u64>());
-   //        let permID = u64::from_ne_bytes(kbytes.try_into().unwrap());
-   //        let perm: Perm = flexbuffers::from_slice(vbuf)?;
-   //        let filename = format!("{:x}.toml", permID);
-   //        path.set_file_name(filename);
-   //        let mut fp = std::fs::File::create(&path)?;
-   //        let out = toml::to_vec(&perm)?;
-   //        fp.write_all(&out)?;
-   //    }
-
-   //    Ok(())
-   //}
 
    pub fn load_db(&mut self, txn: &mut RwTransaction, mut path: PathBuf) -> Result<()> {
        path.push("roles");
@@ -158,43 +129,19 @@ impl Internal {
    }
 
    fn load_roles(&mut self, txn: &mut RwTransaction, path: &Path) -> Result<()> {
-       for entry in std::fs::read_dir(path)? {
-           let entry = entry?;
-           let path = entry.path();
-           if path.is_file() {
-               // will only ever be none if the path has no file name and then how is it a file?!
-               let roleID_str = path
-                   .file_stem().expect("Found a file with no filename?")
-                   .to_str().expect("Found an OsStr that isn't valid Unicode. Fix your OS!");
-               let roleID = match str::parse(roleID_str) {
-                   Ok(i) => i,
-                   Err(e) => {
-                       warn!(self.log, "File {} had a invalid name.", path.display());
-                       continue;
-                   }
-               };
-               let s = match fs::read_to_string(path.as_path()) {
-                   Ok(s) => s,
-                   Err(e) => {
-                       warn!(self.log, "Failed to open file {}: {}, skipping!"
-                            , path.display()
-                            , e);
-                       continue;
-                   }
-               };
-               let role: Role = match toml::from_str(&s) {
-                   Ok(r) => r,
-                   Err(e) => {
-                       warn!(self.log, "Failed to parse role at path {}: {}, skipping!"
-                            , path.display()
-                            , e);
-                       continue;
-                   }
-               };
-               self.put_role(txn, &roleID, role)?;
-               debug!(self.log, "Loaded role {}", &roleID);
-           } else {
-               warn!(self.log, "Path {} is not a file, skipping!", path.display());
+       if path.is_file() {
+           let roles = Role::load_file(path)?;
+
+           for (k,v) in roles.iter() {
+               self.put_role(txn, k, v.clone())?;
+           }
+       } else {
+           for entry in std::fs::read_dir(path)? {
+               let roles = Role::load_file(entry?.path())?;
+
+               for (k,v) in roles.iter() {
+                   self.put_role(txn, k, v.clone())?;
+               }
            }
        }
 

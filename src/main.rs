@@ -149,16 +149,12 @@ fn main() -> Result<(), Error> {
     if matches.is_present("load") {
         if let Some(pathstr) = matches.value_of("load") {
             let path = std::path::Path::new(pathstr);
-            if !path.is_dir() {
-                error!(log, "The provided path is not a directory or does not exist");
-                return Ok(())
-            }
 
             let mut txn = env.begin_rw_txn()?;
             let path = path.to_path_buf();
             pdb?.load_db(&mut txn, path.clone())?;
             mdb?.load_db(&mut txn, path)?;
-            txn.commit();
+            txn.commit()?;
         } else {
             error!(log, "You must provide a directory path to load from");
         }
