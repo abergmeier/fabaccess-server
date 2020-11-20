@@ -150,9 +150,9 @@ impl Internal {
 }
 
 impl RoleDB for Internal {
-    fn check<P: AsRef<Permission>>(&self, user: &User, perm: &P) -> Result<bool> {
+    fn check(&self, user: &User, perm: &Permission) -> Result<bool> {
         let txn = self.env.begin_ro_txn()?;
-        self._check(&txn, user, perm)
+        self._check(&txn, user, &perm)
     }
 
     fn get_role(&self, roleID: &RoleIdentifier) -> Result<Option<Role>> {

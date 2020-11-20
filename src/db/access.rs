@@ -3,12 +3,12 @@
 
 use std::fmt;
 use std::collections::HashSet;
+use std::collections::HashMap;
 use std::cmp::Ordering;
 use std::path::{Path, PathBuf};
 use std::fs;
 use std::io::Write;
 use std::sync::Arc;
-use std::collections::HashMap;
 use std::iter::FromIterator;
 use std::convert::{TryFrom, Into};
 
@@ -32,6 +32,34 @@ pub mod internal;
 use crate::db::user::User;
 pub use internal::init;
 
+pub struct AccessControl {
+    sources: HashMap<String, Box<dyn RoleDB>>,
+}
+
+impl AccessControl {
+    pub fn new() -> Self {
+        Self {
+            sources: HashMap::new()
+        }
+    }
+
+    /// Adds an access control source. If a source with the same name already existed it is
+    /// replaced.
+    pub fn add_source_unchecked(&mut self, name: String, source: Box<dyn RoleDB>) {
+        self.sources.insert(name, source);
+    }
+
+    pub async fn check<P: AsRef<Permission>>(&self, user: &User, perm: &P) -> Result<bool> {
+        for v in self.sources.values() {
+            if v.check(user, perm.as_ref())? {
+                return Ok(true);
+            }
+        }
+
+        return Ok(false);
+    }
+}
+
 pub trait RoleDB {
     fn get_role(&self, roleID: &RoleIdentifier) -> Result<Option<Role>>;
 
@@ -39,7 +67,7 @@ pub trait RoleDB {
     /// 
     /// Default implementation which adapter may overwrite with more efficient specialized
     /// implementations.
-    fn check<P: AsRef<Permission>>(&self, user: &User, perm: &P) -> Result<bool> {
+    fn check(&self, user: &User, perm: &Permission) -> Result<bool> {
         self.check_roles(&user.roles, perm)
     }
 
@@ -48,7 +76,7 @@ pub trait RoleDB {
     ///
     /// A Default implementation exists which adapter may overwrite with more efficient specialized
     /// implementations.
-    fn check_roles<P: AsRef<Permission>>(&self, roles: &[RoleIdentifier], perm: &P) -> Result<bool> {
+    fn check_roles(&self, roles: &[RoleIdentifier], perm: &Permission) -> Result<bool> {
         // Tally all roles. Makes dependent roles easier
         let mut roleset = HashSet::new();
         for roleID in roles {
@@ -58,7 +86,7 @@ pub trait RoleDB {
         // Iter all unique role->permissions we've found and early return on match. 
         for role in roleset.iter() {
             for perm_rule in role.permissions.iter() {
-                if perm_rule.match_perm(perm) {
+                if perm_rule.match_perm(&perm) {
                     return Ok(true);
                 }
             }

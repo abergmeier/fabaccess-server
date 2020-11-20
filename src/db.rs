@@ -1,3 +1,6 @@
+use std::sync::Arc;
+
+
 /// Access control storage
 ///
 /// Stores&Retrieves Permissions and Roles
@@ -12,7 +15,8 @@ pub mod user;
 /// Stores&Retrieves Machines
 pub mod machine;
 
+#[derive(Clone)]
 pub struct Databases {
-    pub access: access::internal::Internal,
-    pub machine: machine::internal::Internal,
+    pub access: Arc<access::AccessControl>,
+    pub machine: Arc<machine::MachineDB>,
 }

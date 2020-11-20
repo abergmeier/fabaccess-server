@@ -25,7 +25,8 @@ pub fn read(path: &Path) -> Result<Settings> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
     pub listens: Box<[Listen]>,
-    pub shelly: Option<ShellyCfg>
+    pub shelly: Option<ShellyCfg>,
+    pub machines: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -53,6 +54,7 @@ impl Default for Settings {
             shelly: Some(ShellyCfg {
                 mqtt_url: "127.0.0.1:1883".to_string()
             }),
+            machines: PathBuf::from("/etc/bffh/machines/")
         }
     }
 }

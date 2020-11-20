@@ -7,6 +7,8 @@ use capnp::capability::{Params, Results, Promise};
 use crate::schema::connection_capnp;
 use crate::connection::Session;
 
+use crate::db::Databases;
+
 pub mod auth;
 mod machine;
 mod machines;
@@ -14,13 +16,14 @@ mod machines;
 use machines::Machines;
 
 pub struct Bootstrap {
-    session: Arc<Session>
+    session: Arc<Session>,
+    db: Databases,
 }
 
 impl Bootstrap {
-    pub fn new(session: Arc<Session>) -> Self {
+    pub fn new(session: Arc<Session>, db: Databases) -> Self {
         info!(session.log, "Created Bootstrap");
-        Self { session }
+        Self { session, db }
     }
 }
 
@@ -53,7 +56,7 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
     ) -> Promise<(), capnp::Error> {
         // TODO actual permission check and stuff
         if self.session.user.is_some() {
-            let c = capnp_rpc::new_client(Machines::new(self.session.clone()));
+            let c = capnp_rpc::new_client(Machines::new(self.session.clone(), self.db.clone()));
             res.get().set_machines(c);
         }
 

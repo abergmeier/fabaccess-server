@@ -12,6 +12,9 @@ use capnp_rpc::{twoparty, rpc_twoparty_capnp};
 
 use crate::schema::connection_capnp;
 
+use crate::db::Databases;
+
+#[derive(Debug, Clone)]
 /// Connection context
 // TODO this should track over several connections
 pub struct Session {
@@ -54,12 +57,12 @@ async fn handshake(log: &Logger, stream: &mut TcpStream) -> Result<()> {
     }
 }
 
-pub async fn handle_connection(log: Logger, stream: TcpStream) -> Result<()> {
+pub async fn handle_connection(log: Logger, stream: TcpStream, db: Databases) -> Result<()> {
     //handshake(&log, &mut stream).await?;
 
     info!(log, "New connection from on {:?}", stream);
     let session = Arc::new(Session::new(log));
-    let boots = Bootstrap::new(session);
+    let boots = Bootstrap::new(session, db);
     let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
 
     let network = twoparty::VatNetwork::new(stream.clone(), stream,

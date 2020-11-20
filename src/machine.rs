@@ -60,14 +60,14 @@ impl Machine {
     /// Requests to use a machine. Returns `true` if successful.
     ///
     /// This will update the internal state of the machine, notifying connected actors, if any.
-    pub fn request_use<P: access::RoleDB>
+    pub async fn request_use
         ( &mut self
-        , pp: &P
+        , access: access::AccessControl
         , who: &User
         ) -> Result<bool>
     {
         // TODO: Check different levels
-        if pp.check(who, &self.desc.privs.write)? {
+        if access.check(who, &self.desc.privs.write).await? {
             self.state.set(MachineState { state: Status::InUse(who.id.clone()) });
             return Ok(true);
         } else {
@@ -97,7 +97,7 @@ pub struct MachineDescription {
 }
 
 impl MachineDescription {
-    fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<MachineIdentifier, MachineDescription>> {
+    pub fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<MachineIdentifier, MachineDescription>> {
         let content = fs::read(path)?;
         Ok(toml::from_slice(&content[..])?)
     }

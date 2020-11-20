@@ -32,6 +32,8 @@ use futures_signals::signal::*;
 use crate::registries::StatusSignal;
 use crate::db::user::User;
 
+use crate::machine::MachineDescription;
+
 pub mod internal;
 use internal::Internal;
 
@@ -54,13 +56,13 @@ pub enum Status {
     Reserved(UserIdentifier),
 }
 
-fn uuid_from_api(uuid: crate::schema::api_capnp::u_u_i_d::Reader) -> Uuid {
+pub fn uuid_from_api(uuid: crate::schema::api_capnp::u_u_i_d::Reader) -> Uuid {
     let uuid0 = uuid.get_uuid0() as u128;
     let uuid1 = uuid.get_uuid1() as u128;
     let num: u128 = (uuid1 << 64) + uuid0;
     Uuid::from_u128(num)
 }
-fn api_from_uuid(uuid: Uuid, mut wr: crate::schema::api_capnp::u_u_i_d::Builder) {
+pub fn api_from_uuid(uuid: Uuid, mut wr: crate::schema::api_capnp::u_u_i_d::Builder) {
     let num = uuid.to_u128_le();
     let uuid0 = num as u64;
     let uuid1 = (num >> 64) as u64;
@@ -75,10 +77,37 @@ pub struct MachineState {
 }
 
 pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> Result<Internal> {
+    let mut machine_descriptions = MachineDescription::load_file(&config.machines)?;
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
     let machdb = env.create_db(Some("machines"), flags)?;
     debug!(&log, "Opened machine db successfully.");
 
     Ok(Internal::new(log, env, machdb))
+}
+
+type MachMap = HashMap<MachineIdentifier, MachineDescription>;
+
+pub struct MachineDB {
+    state_db: Internal,
+    def_db: MachMap,
+}
+
+impl MachineDB {
+    pub fn new(state_db: Internal, def_db: MachMap) -> Self {
+        Self { state_db, def_db }
+    }
+
+    pub fn exists(&self, id: MachineIdentifier) -> bool {
+        self.def_db.get(&id).is_some()
+    }
+
+    pub fn get_desc(&self, id: &MachineIdentifier) -> Option<&MachineDescription> {
+        self.def_db.get(&id)
+    }
+
+    pub fn get_state(&self, id: &MachineIdentifier) -> Option<MachineState> {
+        // TODO: Error Handling
+        self.state_db.get(id).unwrap_or(None)
+    }
 }

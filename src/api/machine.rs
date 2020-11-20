@@ -1,18 +1,27 @@
-use crate::schema::api_capnp::machine::*;
+use std::sync::Arc;
 
 use capnp::capability::Promise;
 use capnp::Error;
 
+use crate::schema::api_capnp::machine::*;
+use crate::db::machine::MachineIdentifier;
+use crate::connection::Session;
+use crate::db::Databases;
 
-struct Machine;
+#[derive(Clone)]
+pub struct Machine {
+    session: Arc<Session>,
+    id: MachineIdentifier,
+    db: Databases,
+}
 
 impl Machine {
-    pub fn new() -> Self {
-        Machine
+    pub fn new(session: Arc<Session>, id: MachineIdentifier, db: Databases) -> Self {
+        Machine { session, id, db }
     }
 }
 
-struct Read;
+struct Read(Arc<Machine>);
 
 impl read::Server for Read {
     fn info(&mut self,
@@ -24,7 +33,7 @@ impl read::Server for Read {
     }
 }
 
-struct Write;
+struct Write(Arc<Machine>);
 
 impl write::Server for Write {
     fn use_(&mut self,
@@ -36,7 +45,7 @@ impl write::Server for Write {
     }
 }
 
-struct Manage;
+struct Manage(Arc<Machine>);
 
 impl manage::Server for Manage {
     fn ok(&mut self,
@@ -48,7 +57,7 @@ impl manage::Server for Manage {
     }
 }
 
-struct Admin;
+struct Admin(Arc<Machine>);
 
 impl admin::Server for Admin {
     fn force_set_state(&mut self,

@@ -1,24 +1,30 @@
 use std::sync::Arc;
 
-use slog::Logger;
-
 use capnp::capability::Promise;
 use capnp::Error;
 
 use crate::schema::api_capnp::machines;
 use crate::connection::Session;
 
+use crate::db::Databases;
+use crate::db::machine::uuid_from_api;
+use crate::db::machine::MachineDB;
+
+use super::machine::Machine;
+
 /// An implementation of the `Machines` API
 pub struct Machines {
     /// A reference to the connection — as long as at least one API endpoint is
     /// still alive the session has to be as well.
     session: Arc<Session>,
+
+    db: Databases,
 }
 
 impl Machines {
-    pub fn new(session: Arc<Session>) -> Self {
+    pub fn new(session: Arc<Session>, db: Databases) -> Self {
         info!(session.log, "Machines created");
-        Self { session }
+        Self { session, db }
     }
 }
 
@@ -32,10 +38,25 @@ impl machines::Server for Machines {
     }
 
     fn get_machine(&mut self,
-        _params: machines::GetMachineParams,
+        params: machines::GetMachineParams,
         mut results: machines::GetMachineResults)
         -> Promise<(), Error>
     {
-        Promise::ok(())
+        match params.get() {
+            Ok(reader) => {
+                if let Ok(api_id) = reader.get_uuid() {
+                    let id = uuid_from_api(api_id);
+                    if self.db.machine.exists(id) {
+                        // TODO check disclose permission
+
+                        let builder = results.get().init_machine();
+
+                        let m = Machine::new(self.session.clone(), id, self.db.clone());
+                    }
+                }
+                Promise::ok(())
+            }
+            Err(e) => Promise::err(e),
+        }
     }
 }

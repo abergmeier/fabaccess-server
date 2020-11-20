@@ -112,7 +112,7 @@ fn main() -> Result<(), Error> {
 
 
     // If no `config` option is given use a preset default.
-    let configpath = matches.value_of("config").unwrap_or("/etc/diflouroborane.toml");
+    let configpath = matches.value_of("config").unwrap_or("/etc/bffh/config.toml");
     let config = config::read(&PathBuf::from_str(configpath).unwrap())?;
 
     // Initialize the logging subsystem first to be able to better document the progress from now
@@ -153,7 +153,7 @@ fn main() -> Result<(), Error> {
             let mut txn = env.begin_rw_txn()?;
             let path = path.to_path_buf();
             pdb?.load_db(&mut txn, path.clone())?;
-            mdb?.load_db(&mut txn, path)?;
+            //mdb?.load_db(&mut txn, path)?;
             txn.commit()?;
         } else {
             error!(log, "You must provide a directory path to load from");
@@ -171,7 +171,7 @@ fn main() -> Result<(), Error> {
             let txn = env.begin_ro_txn()?;
             let path = path.to_path_buf();
             pdb?.dump_db(&txn, path.clone())?;
-            mdb?.dump_db(&txn, path)?;
+            //mdb?.dump_db(&txn, path)?;
         } else {
             error!(log, "You must provide a directory path to dump into");
         }
@@ -210,8 +210,15 @@ fn main() -> Result<(), Error> {
 
     // Error out if any of the subsystems failed to start.
     let mdb = mdb?;
+    let defs = machine::MachineDescription::load_file(&config.machines)?;
+    let machdb = db::machine::MachineDB::new(mdb, defs);
     let pdb = pdb?;
-    //let auth = auth?;
+    let mut ac = db::access::AccessControl::new();
+    ac.add_source_unchecked("Internal".to_string(), Box::new(pdb));
+    let db = db::Databases {
+        access: Arc::new(db::access::AccessControl::new()),
+        machine: Arc::new(machdb),
+    };
 
     // Since the below closures will happen at a much later time we need to make sure all pointers
     // are still valid. Thus, Arc.
@@ -270,7 +277,7 @@ fn main() -> Result<(), Error> {
                     let elog = log.clone();
 
                     // We handle the error using map_err
-                    let f = connection::handle_connection(log.clone(), socket)
+                    let f = connection::handle_connection(log.clone(), socket, db.clone())
                         .map_err(move |e| {
                             error!(log, "Error occured during protocol handling: {}", e);
                         })
