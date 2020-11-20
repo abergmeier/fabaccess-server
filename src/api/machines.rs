@@ -47,11 +47,16 @@ impl machines::Server for Machines {
                 if let Ok(api_id) = reader.get_uuid() {
                     let id = uuid_from_api(api_id);
                     if self.db.machine.exists(id) {
+                        debug!(self.session.log, "Accessing machine {}", id);
                         // TODO check disclose permission
 
-                        let builder = results.get().init_machine();
+                        let mut builder = results.get().init_machine();
 
                         let m = Machine::new(self.session.clone(), id, self.db.clone());
+
+                        Machine::fill(Arc::new(m), &mut builder);
+                    } else {
+                        debug!(self.session.log, "Client requested nonexisting machine {}", id);
                     }
                 }
                 Promise::ok(())

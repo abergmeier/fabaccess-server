@@ -139,6 +139,7 @@ impl auth_capnp::authentication::Server for Auth {
         };
 
         // The step may either return an error, a success or the need for more data
+        // TODO: Set the session user. Needs a lookup though <.>
         match step_res {
             Ok(Step::Done(b)) => {
                 use auth_capnp::response::Result;

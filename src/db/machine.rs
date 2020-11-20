@@ -63,7 +63,7 @@ pub fn uuid_from_api(uuid: crate::schema::api_capnp::u_u_i_d::Reader) -> Uuid {
     Uuid::from_u128(num)
 }
 pub fn api_from_uuid(uuid: Uuid, mut wr: crate::schema::api_capnp::u_u_i_d::Builder) {
-    let num = uuid.to_u128_le();
+    let num = uuid.as_u128();
     let uuid0 = num as u64;
     let uuid1 = (num >> 64) as u64;
     wr.set_uuid0(uuid0);
@@ -88,6 +88,7 @@ pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> Resu
 
 type MachMap = HashMap<MachineIdentifier, MachineDescription>;
 
+#[derive(Debug)]
 pub struct MachineDB {
     state_db: Internal,
     def_db: MachMap,

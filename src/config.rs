@@ -24,9 +24,9 @@ pub fn read(path: &Path) -> Result<Settings> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Settings {
+    pub machines: PathBuf,
     pub listens: Box<[Listen]>,
     pub shelly: Option<ShellyCfg>,
-    pub machines: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

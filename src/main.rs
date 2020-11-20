@@ -212,6 +212,7 @@ fn main() -> Result<(), Error> {
     let mdb = mdb?;
     let defs = machine::MachineDescription::load_file(&config.machines)?;
     let machdb = db::machine::MachineDB::new(mdb, defs);
+    info!(log, "{:?}", machdb);
     let pdb = pdb?;
     let mut ac = db::access::AccessControl::new();
     ac.add_source_unchecked("Internal".to_string(), Box::new(pdb));

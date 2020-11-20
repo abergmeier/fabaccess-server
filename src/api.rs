@@ -55,10 +55,8 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         mut res: Results<machines_results::Owned>
     ) -> Promise<(), capnp::Error> {
         // TODO actual permission check and stuff
-        if self.session.user.is_some() {
-            let c = capnp_rpc::new_client(Machines::new(self.session.clone(), self.db.clone()));
-            res.get().set_machines(c);
-        }
+        let c = capnp_rpc::new_client(Machines::new(self.session.clone(), self.db.clone()));
+        res.get().set_machines(c);
 
         Promise::ok(())
     }

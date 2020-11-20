@@ -24,10 +24,10 @@ use crate::db::machine::{MachineIdentifier, Status, MachineState};
 /// permissions.
 pub struct Machine {
     /// Globally unique machine readable identifier
-    id: MachineIdentifier,
+    pub id: MachineIdentifier,
 
     /// Descriptor of the machine
-    desc: MachineDescription,
+    pub desc: MachineDescription,
 
     /// The state of the machine as bffh thinks the machine *should* be in.
     ///
@@ -87,9 +87,9 @@ impl Machine {
 /// Combining this with the actual state of the system will return a machine
 pub struct MachineDescription {
     /// The name of the machine. Doesn't need to be unique but is what humans will be presented.
-    name: String,
+    pub name: String,
     /// An optional description of the Machine.
-    description: Option<String>,
+    pub description: Option<String>,
 
     /// The permission required
     #[serde(flatten)]
