@@ -30,10 +30,13 @@ impl Actuators {
         }
     }
 
-    pub async fn register(&self, name: String, tx: mpsc::Sender<StatusSignal>) {
+    pub async fn register(&self, name: String) -> mpsc::Receiver<StatusSignal> {
+        let (tx, rx) = mpsc::channel(1);
         let mut wlock = self.inner.write().await;
         // TODO: Log an error or something if that name was already taken
         wlock.insert(name, tx);
+
+        return rx;
     }
 
     pub async fn subscribe(&mut self, name: String, signal: StatusSignal) {

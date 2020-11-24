@@ -48,13 +48,19 @@ impl Internal {
         self.get_with_txn(&txn, id)
     }
 
-    pub fn put_with_txn(&self, txn: &mut RwTransaction, uuid: &Uuid, status: MachineState) 
+    pub fn put_with_txn(&self, txn: &mut RwTransaction, uuid: &Uuid, status: &MachineState) 
         -> Result<()>
     {
         let bytes = flexbuffers::to_vec(status)?;
         txn.put(self.db, uuid.as_bytes(), &bytes, lmdb::WriteFlags::empty())?;
 
         Ok(())
+    }
+
+    pub fn put(&self, id: &MachineIdentifier, status: &MachineState) -> Result<()> {
+        let mut txn = self.env.begin_rw_txn()?;
+        self.put_with_txn(&mut txn, id, status)?;
+        txn.commit().map_err(Into::into)
     }
 
     pub fn iter<T: Transaction>(&self, txn: &T) -> Result<impl Iterator<Item=MachineState>> {

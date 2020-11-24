@@ -19,10 +19,8 @@ use paho_mqtt as mqtt;
 // entirety. This works reasonably enough for this static modules here but if we do dynamic loading
 // via dlopen(), lua API, python API etc it will not.
 pub async fn run<S: Spawn>(log: Logger, config: Settings, registries: Registries, spawner: S) {
-    let (tx, rx) = mpsc::channel(1);
+    let rx = registries.actuators.register("shelly".to_string()).await;
     let mut shelly = Shelly::new(log, config, rx).await;
-
-    let r = registries.actuators.register("shelly".to_string(), tx).await;
 
     let f = shelly.for_each(|f| f);
     spawner.spawn_obj(FutureObj::from(Box::pin(f)));

@@ -92,11 +92,16 @@ type MachMap = HashMap<MachineIdentifier, MachineDescription>;
 pub struct MachineDB {
     state_db: Internal,
     def_db: MachMap,
+    signals_db: HashMap<MachineIdentifier, Mutable<MachineState>>,
 }
 
 impl MachineDB {
     pub fn new(state_db: Internal, def_db: MachMap) -> Self {
-        Self { state_db, def_db }
+        Self {
+            state_db: state_db,
+            def_db: def_db,
+            signals_db: HashMap::new(),
+        }
     }
 
     pub fn exists(&self, id: MachineIdentifier) -> bool {
@@ -110,5 +115,17 @@ impl MachineDB {
     pub fn get_state(&self, id: &MachineIdentifier) -> Option<MachineState> {
         // TODO: Error Handling
         self.state_db.get(id).unwrap_or(None)
+    }
+
+    pub fn update_state(&self, id: &MachineIdentifier, new_state: MachineState) -> Result<()> {
+        // If an error happens the new state was not applied so this will not desync the sources
+        self.state_db.put(id, &new_state)?;
+        self.signals_db.get(id).map(|mutable| mutable.set(new_state));
+
+        Ok(())
+    }
+
+    pub fn get_signal(&self, id: &MachineIdentifier) -> Option<MutableSignalCloned<MachineState>> {
+        self.signals_db.get(&id).map(|mutable| mutable.signal_cloned())
     }
 }
