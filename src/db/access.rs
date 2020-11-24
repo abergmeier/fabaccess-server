@@ -29,7 +29,7 @@ use crate::error::Result;
 
 pub mod internal;
 
-use crate::db::user::User;
+use crate::db::user::AuthzContext;
 pub use internal::init;
 
 pub struct AccessControl {
@@ -49,7 +49,7 @@ impl AccessControl {
         self.sources.insert(name, source);
     }
 
-    pub async fn check<P: AsRef<Permission>>(&self, user: &User, perm: &P) -> Result<bool> {
+    pub async fn check<P: AsRef<Permission>>(&self, user: &AuthzContext, perm: &P) -> Result<bool> {
         for v in self.sources.values() {
             if v.check(user, perm.as_ref())? {
                 return Ok(true);
@@ -91,7 +91,7 @@ pub trait RoleDB {
     /// 
     /// Default implementation which adapter may overwrite with more efficient specialized
     /// implementations.
-    fn check(&self, user: &User, perm: &Permission) -> Result<bool> {
+    fn check(&self, user: &AuthzContext, perm: &Permission) -> Result<bool> {
         self.check_roles(&user.roles, perm)
     }
 

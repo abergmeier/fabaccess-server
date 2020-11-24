@@ -12,7 +12,6 @@ use uuid::Uuid;
 
 use crate::error::Result;
 
-use crate::db::user::User;
 use crate::db::access;
 use crate::db::machine::{MachineIdentifier, Status, MachineState};
 

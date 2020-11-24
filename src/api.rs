@@ -9,6 +9,8 @@ use crate::connection::Session;
 
 use crate::db::Databases;
 
+use crate::builtin;
+
 pub mod auth;
 mod machine;
 mod machines;
@@ -36,11 +38,18 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         // Forbid mutltiple authentication for now
         // TODO: When should we allow multiple auth and how do me make sure that does not leak
         // priviledges (e.g. due to previously issues caps)?
-        if self.session.user.is_none() {
-            res.get().set_auth(capnp_rpc::new_client(auth::Auth::new(self.session.clone())))
-        }
+        let session = self.session.clone();
+        let check_perm_future = session.check_permission(&builtin::AUTH_PERM);
+        let f = async {
+            let r = check_perm_future.await.unwrap();
+            if r {
+                res.get().set_auth(capnp_rpc::new_client(auth::Auth::new(session.clone())))
+            }
 
-        Promise::ok(())
+            Ok(())
+        };
+
+        Promise::from_future(f)
     }
 
     fn permissions(&mut self,

@@ -16,8 +16,6 @@ use crate::error::Result;
 use crate::config::Settings;
 use crate::db::access;
 
-use crate::db::user::UserIdentifier;
-
 use capnp::Error;
 
 use uuid::Uuid;
@@ -30,7 +28,6 @@ use futures::{Future, Stream, StreamExt};
 use futures_signals::signal::*;
 
 use crate::registries::StatusSignal;
-use crate::db::user::User;
 
 use crate::machine::MachineDescription;
 

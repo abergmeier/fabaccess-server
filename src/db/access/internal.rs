@@ -17,7 +17,7 @@ use crate::config::Settings;
 use crate::error::Result;
 
 use crate::db::access::{Permission, Role, RoleIdentifier, RoleDB};
-use crate::db::user::{UserIdentifier, User};
+use crate::db::user::AuthzContext;
 
 #[derive(Clone, Debug)]
 pub struct Internal {
@@ -34,7 +34,7 @@ impl Internal {
 
     /// Check if a given user has the given permission
     #[allow(unused)]
-    pub fn _check<T: Transaction, P: AsRef<Permission>>(&self, txn: &T, user: &User, perm: &P)
+    pub fn _check<T: Transaction, P: AsRef<Permission>>(&self, txn: &T, user: &AuthzContext, perm: &P)
         -> Result<bool>
     {
         // Tally all roles. Makes dependent roles easier
@@ -154,7 +154,7 @@ impl RoleDB for Internal {
         "Internal"
     }
 
-    fn check(&self, user: &User, perm: &Permission) -> Result<bool> {
+    fn check(&self, user: &AuthzContext, perm: &Permission) -> Result<bool> {
         let txn = self.env.begin_ro_txn()?;
         self._check(&txn, user, &perm)
     }
