@@ -14,7 +14,7 @@ use crate::schema::connection_capnp;
 
 use crate::db::Databases;
 use crate::db::access::{AccessControl, Permission};
-use crate::db::user::AuthzContext;
+use crate::db::user::User;
 use crate::builtin;
 
 #[derive(Debug, Clone)]
@@ -23,23 +23,23 @@ use crate::builtin;
 pub struct Session {
     // Session-spezific log
     pub log: Logger,
-    authz_data: Option<AuthzContext>,
+    user: Option<User>,
     accessdb: Arc<AccessControl>,
 }
 
 impl Session {
     pub fn new(log: Logger, accessdb: Arc<AccessControl>) -> Self {
-        let authz_data = None;
+        let user = None;
 
-        Session { log, authz_data, accessdb }
+        Session { log, user, accessdb }
     }
 
     /// Check if the current session has a certain permission
     pub async fn check_permission<P: AsRef<Permission>>(&self, perm: &P) -> Result<bool> {
-        if let Some(user) = self.authz_data.as_ref() {
-            self.accessdb.check(user, perm).await
+        if let Some(user) = self.user.as_ref() {
+            self.accessdb.check(&user.data, perm).await
         } else {
-            self.accessdb.check_roles(builtin::DEFAULT_ROLEIDS, perm).await
+            Ok(false)
         }
     }
 }

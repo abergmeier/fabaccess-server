@@ -38,18 +38,10 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         // Forbid mutltiple authentication for now
         // TODO: When should we allow multiple auth and how do me make sure that does not leak
         // priviledges (e.g. due to previously issues caps)?
-        let session = self.session.clone();
-        let check_perm_future = session.check_permission(&builtin::AUTH_PERM);
-        let f = async {
-            let r = check_perm_future.await.unwrap();
-            if r {
-                res.get().set_auth(capnp_rpc::new_client(auth::Auth::new(session.clone())))
-            }
 
-            Ok(())
-        };
+        res.get().set_auth(capnp_rpc::new_client(auth::Auth::new(self.session.clone())));
 
-        Promise::from_future(f)
+        Promise::ok(())
     }
 
     fn permissions(&mut self,

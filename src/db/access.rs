@@ -29,7 +29,7 @@ use crate::error::Result;
 
 pub mod internal;
 
-use crate::db::user::AuthzContext;
+use crate::db::user::UserData;
 pub use internal::init;
 
 pub struct AccessControl {
@@ -49,7 +49,7 @@ impl AccessControl {
         self.sources.insert(name, source);
     }
 
-    pub async fn check<P: AsRef<Permission>>(&self, user: &AuthzContext, perm: &P) -> Result<bool> {
+    pub async fn check<P: AsRef<Permission>>(&self, user: &UserData, perm: &P) -> Result<bool> {
         for v in self.sources.values() {
             if v.check(user, perm.as_ref())? {
                 return Ok(true);
@@ -74,7 +74,7 @@ impl AccessControl {
 
 impl fmt::Debug for AccessControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let b = f.debug_struct("AccessControl");
+        let mut b = f.debug_struct("AccessControl");
         for (name, roledb) in self.sources.iter() {
            b.field(name, &roledb.get_type_name().to_string());
         }
@@ -91,7 +91,7 @@ pub trait RoleDB {
     /// 
     /// Default implementation which adapter may overwrite with more efficient specialized
     /// implementations.
-    fn check(&self, user: &AuthzContext, perm: &Permission) -> Result<bool> {
+    fn check(&self, user: &UserData, perm: &Permission) -> Result<bool> {
         self.check_roles(&user.roles, perm)
     }
 
@@ -394,7 +394,7 @@ pub struct Permission {
     inner: str
 }
 impl Permission {
-    pub const fn new<S: AsRef<str> + ?Sized>(s: &S) -> &Permission {
+    pub fn new<S: AsRef<str> + ?Sized>(s: &S) -> &Permission {
         unsafe { &*(s.as_ref() as *const str as *const Permission) }
     }
 

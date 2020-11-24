@@ -31,6 +31,8 @@ use crate::registries::StatusSignal;
 
 use crate::machine::MachineDescription;
 
+use crate::db::user::UserId;
+
 pub mod internal;
 use internal::Internal;
 
@@ -42,15 +44,15 @@ pub enum Status {
     /// Not currently used by anybody
     Free,
     /// Used by somebody
-    InUse(UserIdentifier),
+    InUse(UserId),
     /// Was used by somebody and now needs to be checked for cleanliness
-    ToCheck(UserIdentifier),
+    ToCheck(UserId),
     /// Not used by anybody but also can not be used. E.g. down for maintenance
-    Blocked(UserIdentifier),
+    Blocked(UserId),
     /// Disabled for some other reason
     Disabled,
     /// Reserved
-    Reserved(UserIdentifier),
+    Reserved(UserId),
 }
 
 pub fn uuid_from_api(uuid: crate::schema::api_capnp::u_u_i_d::Reader) -> Uuid {

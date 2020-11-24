@@ -66,6 +66,9 @@ impl fmt::Display for Error {
             Error::Config(e) => {
                 write!(f, "Failed to parse config: {}", e)
             }
+            Error::Argon2(e) => {
+                write!(f, "Argon2 en/decoding failure: {}", e)
+            }
             Error::BadVersion((major,minor)) => {
                 write!(f, "Peer uses API version {}.{} which is incompatible!", major, minor)
             }

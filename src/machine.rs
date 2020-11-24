@@ -14,6 +14,7 @@ use crate::error::Result;
 
 use crate::db::access;
 use crate::db::machine::{MachineIdentifier, Status, MachineState};
+use crate::db::user::User;
 
 #[derive(Debug)]
 /// Internal machine representation
@@ -66,7 +67,7 @@ impl Machine {
         ) -> Result<bool>
     {
         // TODO: Check different levels
-        if access.check(who, &self.desc.privs.write).await? {
+        if access.check(&who.data, &self.desc.privs.write).await? {
             self.state.set(MachineState { state: Status::InUse(who.id.clone()) });
             return Ok(true);
         } else {
