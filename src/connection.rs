@@ -13,20 +13,33 @@ use capnp_rpc::{twoparty, rpc_twoparty_capnp};
 use crate::schema::connection_capnp;
 
 use crate::db::Databases;
+use crate::db::access::{AccessControl, Permission};
+use crate::builtin;
 
 #[derive(Debug, Clone)]
 /// Connection context
 // TODO this should track over several connections
 pub struct Session {
+    // Session-spezific log
     pub log: Logger,
-    pub user: Option<auth::User>,
+    authz_data: Option<AuthorizationContext>,
+    accessdb: Arc<AccessControl>,
 }
 
 impl Session {
-    pub fn new(log: Logger) -> Self {
+    pub fn new(log: Logger, accessdb: Arc<AccessControl>) -> Self {
         let user = None;
 
-        Session { log, user }
+        Session { log, user, accessdb }
+    }
+
+    /// Check if the current session has a certain permission
+    pub async fn check_permission<P: AsRef<Permission>>(&self, perm: &P) -> Result<bool> {
+        if let Some(user) = self.user.as_ref() {
+            self.accessdb.check(user, perm).await
+        } else {
+            self.accessdb.check_roles(builtin::DEFAULT_ROLEIDS, perm).await
+        }
     }
 }
 
@@ -61,7 +74,7 @@ pub async fn handle_connection(log: Logger, mut stream: TcpStream, db: Databases
     handshake(&log, &mut stream).await?;
 
     info!(log, "New connection from on {:?}", stream);
-    let session = Arc::new(Session::new(log));
+    let session = Arc::new(Session::new(log, db.access.clone()));
     let boots = Bootstrap::new(session, db);
     let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
 

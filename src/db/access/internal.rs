@@ -150,6 +150,10 @@ impl Internal {
 }
 
 impl RoleDB for Internal {
+    fn get_type_name(&self) -> &'static str {
+        "Internal"
+    }
+
     fn check(&self, user: &User, perm: &Permission) -> Result<bool> {
         let txn = self.env.begin_ro_txn()?;
         self._check(&txn, user, &perm)

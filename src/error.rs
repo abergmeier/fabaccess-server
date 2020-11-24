@@ -24,6 +24,7 @@ pub enum Error {
     MQTT(mqtt::Error),
     Config(config::ConfigError),
     BadVersion((u32,u32)),
+    Argon2(argon2::Error)
 }
 
 impl fmt::Display for Error {
@@ -141,6 +142,12 @@ impl From<mqtt::Error> for Error {
 impl From<config::ConfigError> for Error {
     fn from(e: config::ConfigError) -> Error {
         Error::Config(e)
+    }
+}
+
+impl From<argon2::Error> for Error {
+    fn from(e: argon2::Error) -> Error {
+        Error::Argon2(e)
     }
 }
 

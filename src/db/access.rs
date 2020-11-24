@@ -58,9 +58,33 @@ impl AccessControl {
 
         return Ok(false);
     }
+
+    pub async fn check_roles<P: AsRef<Permission>>(&self, roles: &[RoleIdentifier], perm: &P) 
+        -> Result<bool> 
+    {
+        for v in self.sources.values() {
+            if v.check_roles(roles, perm.as_ref())? {
+                return Ok(true);
+            }
+        }
+
+        return Ok(false);
+    }
+}
+
+impl fmt::Debug for AccessControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let b = f.debug_struct("AccessControl");
+        for (name, roledb) in self.sources.iter() {
+           b.field(name, &roledb.get_type_name().to_string());
+        }
+        b.finish()
+    }
 }
 
 pub trait RoleDB {
+    fn get_type_name(&self) -> &'static str;
+
     fn get_role(&self, roleID: &RoleIdentifier) -> Result<Option<Role>>;
 
     /// Check if a given user has the given permission
@@ -130,8 +154,6 @@ pub trait RoleDB {
 /// assign to all users.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Role {
-    name: String,
-
     // If a role doesn't define parents, default to an empty Vec.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     /// A Role can have parents, inheriting all permissions
@@ -328,6 +350,10 @@ impl PermissionBuf {
         Self { inner }
     }
 
+    pub fn from_perm(perm: &Permission) -> Self {
+        Self { inner: perm.inner.to_string() }
+    }
+
     pub fn into_string(self) -> String {
         self.inner
     }
@@ -368,7 +394,7 @@ pub struct Permission {
     inner: str
 }
 impl Permission {
-    pub fn new<S: AsRef<str> + ?Sized>(s: &S) -> &Permission {
+    pub const fn new<S: AsRef<str> + ?Sized>(s: &S) -> &Permission {
         unsafe { &*(s.as_ref() as *const str as *const Permission) }
     }
 

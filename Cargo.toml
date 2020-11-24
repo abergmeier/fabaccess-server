@@ -55,5 +55,10 @@ lmdb-rkv = "0.14"
 
 async-trait = "0.1"
 
+lazy_static = "1.4.0"
+
+rust-argon2 = "0.8"
+rand = "0.7"
+
 [build-dependencies]
 capnpc = "0.13"

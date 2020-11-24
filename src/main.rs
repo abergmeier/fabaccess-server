@@ -17,6 +17,7 @@ mod registries;
 mod schema;
 mod db;
 mod machine;
+mod builtin;
 
 use clap::{App, Arg};
 

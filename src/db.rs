@@ -15,6 +15,9 @@ pub mod user;
 /// Stores&Retrieves Machines
 pub mod machine;
 
+/// Authenticate users
+pub mod pass;
+
 #[derive(Clone)]
 pub struct Databases {
     pub access: Arc<access::AccessControl>,
