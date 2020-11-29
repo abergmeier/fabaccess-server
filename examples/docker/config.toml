@@ -1,0 +1,12 @@
+machines = "/etc/bffh/machines.toml"
+
+[[listens]]
+address = "127.0.0.1"
+port = 59661
+
+[[listens]]
+address = "::1"
+port = 59661
+
+[shelly]
+mqtt_url = "mqtt:1883"
