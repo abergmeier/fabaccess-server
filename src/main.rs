@@ -123,8 +123,7 @@ fn main() -> Result<(), Error> {
     let log = Arc::new(log::init(&config));
     info!(log, "Starting");
 
-    // Initialize the LMDB environment. Since this would usually block untill the mmap() finishes
-    // we wrap it in smol::unblock which runs this as future in a different thread.
+    // Initialize the LMDB environment. This blocks untill the mmap() finishes
     let e_config = config.clone();
     info!(log, "LMDB env");
     let env = lmdb::Environment::new()
