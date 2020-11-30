@@ -217,11 +217,12 @@ fn main() -> Result<(), Error> {
     let pdb = pdb?;
     let mut ac = db::access::AccessControl::new();
     ac.add_source_unchecked("Internal".to_string(), Box::new(pdb));
+    let machdb = Arc::new(machdb);
 
     let passdb = db::pass::PassDB::init(log.new(o!("system" => "passwords")), env.clone()).unwrap();
     let db = db::Databases {
         access: Arc::new(db::access::AccessControl::new()),
-        machine: Arc::new(machdb),
+        machine: machdb.clone(),
         passdb: Arc::new(passdb),
     };
 
@@ -245,7 +246,7 @@ fn main() -> Result<(), Error> {
     // FIXME: implement notification so the modules can shut down cleanly instead of being killed
     // without warning.
     let modlog = log.clone();
-    let mut regs = Registries::new();
+    let mut regs = Registries::new(machdb.clone());
     match exec.run_until(modules::init(modlog.new(o!("system" => "modules")), config.clone(), pool.clone(), regs.clone())) {
         Ok(()) => {}
         Err(e) => {

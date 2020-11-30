@@ -1,4 +1,8 @@
 use std::path::Path;
+use std::task::{Poll, Context};
+use std::pin::Pin;
+use std::future::Future;
+
 use std::collections::HashMap;
 use std::fs;
 
@@ -10,7 +14,7 @@ use futures_signals::signal::Mutable;
 
 use uuid::Uuid;
 
-use crate::error::Result;
+use crate::error::{Result, Error};
 
 use crate::db::access;
 use crate::db::machine::{MachineIdentifier, Status, MachineState};
@@ -34,14 +38,21 @@ pub struct Machine {
     /// This is a Signal generator. Subscribers to this signal will be notified of changes. In the
     /// case of an actor it should then make sure that the real world matches up with the set state
     state: Mutable<MachineState>,
+    reset: Option<MachineState>,
+    rx: Option<futures::channel::oneshot::Receiver<()>>,
+
+    access: access::AccessControl,
 }
 
 impl Machine {
-    pub fn new(id: MachineIdentifier, desc: MachineDescription, perm: access::PermIdentifier) -> Machine {
+    pub fn new(id: MachineIdentifier, desc: MachineDescription, access: access::AccessControl, state: MachineState) -> Machine {
         Machine {
             id: id,
             desc: desc,
-            state: Mutable::new(MachineState { state: Status::Free}),
+            state: Mutable::new(state),
+            reset: None,
+            rx: None,
+            access: access,
         }
     }
 
@@ -57,26 +68,67 @@ impl Machine {
         Box::pin(self.state.signal_cloned().dedupe_cloned())
     }
 
-    /// Requests to use a machine. Returns `true` if successful.
+    /// Requests to use a machine. Returns a return token if successful.
     ///
     /// This will update the internal state of the machine, notifying connected actors, if any.
-    pub async fn request_use
-        ( &mut self
-        , access: access::AccessControl
-        , who: &User
-        ) -> Result<bool>
+    /// The return token is a channel that considers the machine 'returned' if anything is sent
+    /// along it or if the sending end gets dropped. Anybody who holds this token needs to check if
+    /// the receiving end was canceled which indicates that the machine has been taken off their
+    /// hands.
+    pub async fn request_state_change(&mut self, who: &User, new_state: MachineState) 
+        -> Result<ReturnToken>
     {
-        // TODO: Check different levels
-        if access.check(&who.data, &self.desc.privs.write).await? {
-            self.state.set(MachineState { state: Status::InUse(who.id.clone()) });
-            return Ok(true);
-        } else {
-            return Ok(false);
+        if self.access.check(&who.data, &self.desc.privs.write).await? {
+            if self.state.lock_ref().is_higher_priority(who.data.priority) {
+                let (tx, rx) = futures::channel::oneshot::channel();
+                let old_state = self.state.replace(new_state);
+                self.reset.replace(old_state);
+                // Also this drops the old receiver, which will signal to the initiator that the
+                // machine has been taken off their hands.
+                self.rx.replace(rx);
+                return Ok(tx);
+            }
         }
+
+        return Err(Error::Denied);
     }
 
     pub fn set_state(&mut self, state: Status) {
         self.state.set(MachineState { state })
+    }
+
+    pub fn get_signal(&self) -> impl Signal {
+        self.state.signal_cloned().dedupe_cloned()
+    }
+
+    pub fn reset_state(&mut self) {
+        if let Some(state) = self.reset.take() {
+            self.state.replace(state);
+        }
+    }
+}
+
+type ReturnToken = futures::channel::oneshot::Sender<()>;
+
+impl Future for Machine {
+    type Output = MachineState;
+
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
+        let mut this = &mut *self;
+        // TODO Return this on exit
+        if false {
+            return Poll::Ready(self.state.get_cloned());
+        }
+
+        if let Some(mut rx) = this.rx.take() {
+            match Future::poll(Pin::new(&mut rx), cx) {
+                // Regardless if we were canceled or properly returned, reset.
+                Poll::Ready(_) => self.reset_state(),
+                Poll::Pending => { this.rx.replace(rx); },
+            }
+        }
+
+        Poll::Pending
     }
 }
 

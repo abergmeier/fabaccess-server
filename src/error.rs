@@ -24,7 +24,8 @@ pub enum Error {
     MQTT(mqtt::Error),
     Config(config::ConfigError),
     BadVersion((u32,u32)),
-    Argon2(argon2::Error)
+    Argon2(argon2::Error),
+    Denied,
 }
 
 impl fmt::Display for Error {
@@ -71,6 +72,9 @@ impl fmt::Display for Error {
             }
             Error::BadVersion((major,minor)) => {
                 write!(f, "Peer uses API version {}.{} which is incompatible!", major, minor)
+            }
+            Error::Denied => {
+                write!(f, "You do not have the permission required to do that.")
             }
         }
     }

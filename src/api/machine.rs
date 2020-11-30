@@ -40,17 +40,17 @@ impl Machine {
             if let Some(state) = self.db.machine.get_state(&self.id) {
                 match state.state {
                     Status::Free => builder.set_state(State::Free),
-                    Status::InUse(_u) => {
+                    Status::InUse(_u, _p) => {
                         builder.set_state(State::InUse);
                     }
-                    Status::ToCheck(_u) => {
+                    Status::ToCheck(_u, _p) => {
                         builder.set_state(State::ToCheck);
                     }
-                    Status::Blocked(_u) => {
+                    Status::Blocked(_u, _p) => {
                         builder.set_state(State::Blocked);
                     }
                     Status::Disabled => builder.set_state(State::Disabled),
-                    Status::Reserved(_u) => {
+                    Status::Reserved(_u, _p) => {
                         builder.set_state(State::Reserved);
                     }
                 }

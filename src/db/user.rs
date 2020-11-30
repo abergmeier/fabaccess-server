@@ -66,9 +66,23 @@ pub struct UserData {
     /// Persons are only ever given roles, not permissions directly
     pub roles: Vec<RoleIdentifier>,
 
+    #[serde(skip_serializing_if = "is_zero")]
+    #[serde(default = "default_priority")]
+    /// A priority number, defaulting to 0.
+    ///
+    /// The higher, the higher the priority. Higher priority users overwrite lower priority ones.
+    pub priority: u64,
+
     /// Additional data storage
     #[serde(flatten)]
     kv: HashMap<Box<[u8]>, Box<[u8]>>,
+}
+
+fn is_zero(i: &u64) -> bool {
+    *i == 0
+}
+const fn default_priority() -> u64 {
+    0
 }
 
 #[cfg(test)]

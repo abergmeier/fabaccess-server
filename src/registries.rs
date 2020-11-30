@@ -1,8 +1,11 @@
+use std::sync::Arc;
+
+use crate::db::machine::MachineDB;
+
 mod actuators;
 mod sensors;
 
 pub use actuators::{Actuator, ActBox, StatusSignal};
-pub use sensors::{Sensor, SensBox};
 
 #[derive(Clone)]
 /// BFFH registries
@@ -15,10 +18,10 @@ pub struct Registries {
 }
 
 impl Registries {
-    pub fn new() -> Self {
+    pub fn new(db: Arc<MachineDB>) -> Self {
         Registries {
             actuators: actuators::Actuators::new(),
-            sensors: sensors::Sensors::new(),
+            sensors: sensors::Sensors::new(db),
         }
     }
 }

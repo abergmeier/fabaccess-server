@@ -37,6 +37,7 @@ pub mod internal;
 use internal::Internal;
 
 pub type MachineIdentifier = Uuid;
+pub type Priority = u64;
 
 /// Status of a Machine
 #[derive(Clone, PartialEq, Eq, Debug, Serialize, Deserialize)]
@@ -44,15 +45,15 @@ pub enum Status {
     /// Not currently used by anybody
     Free,
     /// Used by somebody
-    InUse(UserId),
+    InUse(UserId, Priority),
     /// Was used by somebody and now needs to be checked for cleanliness
-    ToCheck(UserId),
+    ToCheck(UserId, Priority),
     /// Not used by anybody but also can not be used. E.g. down for maintenance
-    Blocked(UserId),
+    Blocked(UserId, Priority),
     /// Disabled for some other reason
     Disabled,
     /// Reserved
-    Reserved(UserId),
+    Reserved(UserId, Priority),
 }
 
 pub fn uuid_from_api(uuid: crate::schema::api_capnp::u_u_i_d::Reader) -> Uuid {
@@ -73,6 +74,24 @@ pub fn api_from_uuid(uuid: Uuid, mut wr: crate::schema::api_capnp::u_u_i_d::Buil
 /// The status of the machine
 pub struct MachineState {
     pub state: Status,
+}
+
+impl MachineState {
+    /// Check if the given priority is higher than one's own.
+    ///
+    /// If `self` does not have a priority then this function always returns `true`
+    pub fn is_higher_priority(&self, priority: u64) -> bool {
+        match self.state {
+            Status::Disabled | Status::Free => { true },
+            Status::Blocked(_, self_prio) |
+            Status::InUse(_, self_prio) |
+            Status::ToCheck(_, self_prio) |
+            Status::Reserved(_, self_prio) =>
+            {
+                priority > self_prio
+            }
+        }
+    }
 }
 
 pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> Result<Internal> {
