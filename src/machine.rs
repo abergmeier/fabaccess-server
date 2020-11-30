@@ -1,3 +1,6 @@
+use std::ops::{Deref, DerefMut};
+use std::sync::Arc;
+use futures_util::lock::Mutex;
 use std::path::Path;
 use std::task::{Poll, Context};
 use std::pin::Pin;
@@ -20,13 +23,63 @@ use crate::db::access;
 use crate::db::machine::{MachineIdentifier, Status, MachineState};
 use crate::db::user::User;
 
+#[derive(Debug, Clone)]
+pub struct Index {
+    inner: HashMap<String, Machine>,
+}
+
+impl Index {
+    pub fn new() -> Self {
+        Self {
+            inner: HashMap::new(),
+        }
+    }
+
+    pub fn insert(&mut self, key: String, value: Machine) -> Option<Machine> {
+        self.inner.insert(key, value)
+    }
+
+    pub fn get(&mut self, key: &String) -> Option<Machine> {
+        self.inner.get(key).map(|m| m.clone())
+    }
+}
+
+#[derive(Debug, Clone)]
+pub struct Machine {
+    inner: Arc<Mutex<Inner>>
+}
+
+impl Machine {
+    pub fn new(inner: Inner) -> Self {
+        Self { inner: Arc::new(Mutex::new(inner)) }
+    }
+
+    pub fn construct
+        ( id: MachineIdentifier
+        , desc: MachineDescription
+        , access: access::AccessControl
+        , state: MachineState
+        ) -> Machine
+    {
+        Self::new(Inner::new(id, desc, access, state))
+    }
+}
+
+impl Deref for Machine {
+    type Target = Mutex<Inner>;
+
+    fn deref(&self) -> &Self::Target {
+        &self.inner
+    }
+}
+
 #[derive(Debug)]
 /// Internal machine representation
 ///
 /// A machine connects an event from a sensor to an actor activating/deactivating a real-world
 /// machine, checking that the user who wants the machine (de)activated has the required
 /// permissions.
-pub struct Machine {
+pub struct Inner {
     /// Globally unique machine readable identifier
     pub id: MachineIdentifier,
 
@@ -44,9 +97,9 @@ pub struct Machine {
     access: access::AccessControl,
 }
 
-impl Machine {
-    pub fn new(id: MachineIdentifier, desc: MachineDescription, access: access::AccessControl, state: MachineState) -> Machine {
-        Machine {
+impl Inner {
+    pub fn new(id: MachineIdentifier, desc: MachineDescription, access: access::AccessControl, state: MachineState) -> Inner {
+        Inner {
             id: id,
             desc: desc,
             state: Mutable::new(state),
@@ -110,7 +163,7 @@ impl Machine {
 
 type ReturnToken = futures::channel::oneshot::Sender<()>;
 
-impl Future for Machine {
+impl Future for Inner {
     type Output = MachineState;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
