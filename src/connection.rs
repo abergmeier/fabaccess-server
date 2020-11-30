@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::future::Future;
+use futures::FutureExt;
 
 use slog::Logger;
 
@@ -71,17 +73,27 @@ async fn handshake(log: &Logger, stream: &mut TcpStream) -> Result<()> {
     }
 }
 
-pub async fn handle_connection(log: Logger, mut stream: TcpStream, db: Databases) -> Result<()> {
-    info!(log, "New connection from on {:?}", stream);
-    let session = Arc::new(Session::new(log, db.access.clone()));
-    let boots = Bootstrap::new(session, db);
-    let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
+pub struct ConnectionHandler {
+    log: Logger,
+    db: Databases,
+}
 
-    let network = twoparty::VatNetwork::new(stream.clone(), stream,
-        rpc_twoparty_capnp::Side::Server, Default::default());
-    let rpc_system = capnp_rpc::RpcSystem::new(Box::new(network), 
-        Some(rpc.client));
+impl ConnectionHandler {
+    pub fn new(log: Logger, db: Databases) -> Self {
+        Self { log, db }
+    }
 
-    rpc_system.await.unwrap();
-    Ok(())
+    pub fn handle(&mut self, mut stream: TcpStream) -> impl Future<Output=Result<()>> {
+        info!(self.log, "New connection from on {:?}", stream);
+        let session = Arc::new(Session::new(self.log.new(o!()), self.db.access.clone()));
+        let boots = Bootstrap::new(session, self.db.clone());
+        let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
+
+        let network = twoparty::VatNetwork::new(stream.clone(), stream,
+            rpc_twoparty_capnp::Side::Server, Default::default());
+        let rpc_system = capnp_rpc::RpcSystem::new(Box::new(network), Some(rpc.client));
+
+        // Convert the error type to one of our errors
+        rpc_system.map(|r| r.map_err(Into::into))
+    }
 }
