@@ -39,7 +39,7 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         // TODO: When should we allow multiple auth and how do me make sure that does not leak
         // priviledges (e.g. due to previously issues caps)?
 
-        res.get().set_auth(capnp_rpc::new_client(auth::Auth::new(self.session.clone())));
+        res.get().set_auth(capnp_rpc::new_client(auth::Auth::new(self.db.passdb.clone(), self.session.clone())));
 
         Promise::ok(())
     }

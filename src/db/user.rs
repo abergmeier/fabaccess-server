@@ -9,8 +9,11 @@ use std::collections::HashMap;
 mod internal;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+/// An user
 pub struct User {
+    /// The precise (and unique) identifier of this user
     pub id: UserId,
+    /// Data BFFH stores on this user to base decisions on
     pub data: UserData,
 }
 
@@ -20,7 +23,7 @@ pub struct User {
 /// This identity is internal to FabAccess and completely independent from the authentication
 /// method or source
 pub struct UserId {
-    /// Main User ID. Generally an user name or similar
+    /// Main User ID. Generally an user name or similar. Locally unique
     uid: String,
     /// Sub user ID. 
     ///
@@ -55,7 +58,9 @@ impl fmt::Display for UserId {
 }
 
 #[derive(PartialEq, Eq, Debug, Clone, Serialize, Deserialize)]
-/// A Person, from the Authorization perspective
+/// Data on an user to base decisions on
+///
+/// This of course includes authorization data, i.e. that users set roles
 pub struct UserData {
     /// A Person has N ≥ 0 roles.
     /// Persons are only ever given roles, not permissions directly

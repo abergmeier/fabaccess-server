@@ -18,7 +18,18 @@ impl PassDB {
         Self { log, env, db }
     }
 
-    pub fn check<T: Transaction>(&self, txn: &T, authcid: &str, password: &[u8]) -> Result<Option<bool>> {
+    pub fn init(log: Logger, env: Arc<Environment>) -> Result<Self> {
+        let mut flags = lmdb::DatabaseFlags::empty();
+        flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
+        let db = env.create_db(Some("pass"), flags)?;
+
+        Ok(Self::new(log, env, db))
+    }
+
+    /// Check a password for a given authcid.
+    ///
+    /// `Ok(None)` means the given authcid is not stored in the database
+    pub fn check_with_txn<T: Transaction>(&self, txn: &T, authcid: &str, password: &[u8]) -> Result<Option<bool>> {
         match txn.get(self.db, &authcid.as_bytes()) {
             Ok(bytes) => {
                 let encoded = unsafe { std::str::from_utf8_unchecked(bytes) };
@@ -29,8 +40,13 @@ impl PassDB {
             Err(e) => { Err(e.into()) },
         }
     }
+    pub fn check(&self, authcid: &str, password: &[u8]) -> Result<Option<bool>> {
+        let txn = self.env.begin_ro_txn()?;
+        self.check_with_txn(&txn, authcid, password)
+    }
 
-    pub fn store(&self, txn: &mut RwTransaction, authcid: &str, password: &[u8]) -> Result<()> {
+    /// Store a password for a given authcid, potentially overwriting an existing password
+    pub fn store_with_txn(&self, txn: &mut RwTransaction, authcid: &str, password: &[u8]) -> Result<()> {
         let config = argon2::Config::default();
         let salt: [u8; 16] = rand::random();
         let hash = argon2::hash_encoded(password, &salt, &config)?;

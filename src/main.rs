@@ -217,9 +217,12 @@ fn main() -> Result<(), Error> {
     let pdb = pdb?;
     let mut ac = db::access::AccessControl::new();
     ac.add_source_unchecked("Internal".to_string(), Box::new(pdb));
+
+    let passdb = db::pass::PassDB::init(log.new(o!("system" => "passwords")), env.clone()).unwrap();
     let db = db::Databases {
         access: Arc::new(db::access::AccessControl::new()),
         machine: Arc::new(machdb),
+        passdb: Arc::new(passdb),
     };
 
     // Since the below closures will happen at a much later time we need to make sure all pointers

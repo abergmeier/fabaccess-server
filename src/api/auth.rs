@@ -27,20 +27,46 @@ use crate::config::Settings;
 use crate::api::Session;
 
 pub use crate::schema::auth_capnp;
+use crate::db::pass::PassDB;
 
-pub struct AppData;
+pub struct AppData {
+    passdb: Arc<PassDB>,
+}
 pub struct SessionData;
+
 
 struct CB;
 impl Callback<AppData, SessionData> for CB {
-    fn callback(sasl: SaslCtx<AppData, SessionData>, session: SaslSession<SessionData>, prop: Property) -> libc::c_int {
+    fn callback(mut sasl: SaslCtx<AppData, SessionData>, session: SaslSession<SessionData>, prop: Property) -> libc::c_int {
         let ret = match prop {
             Property::GSASL_VALIDATE_SIMPLE => {
-                let authid = session.get_property(Property::GSASL_AUTHID).unwrap().to_string_lossy();
-                let pass = session.get_property(Property::GSASL_PASSWORD).unwrap().to_string_lossy();
+                let authid = match session.get_property(Property::GSASL_AUTHID) {
+                    None => return ReturnCode::GSASL_NO_AUTHID as libc::c_int,
+                    Some(a) => {
+                        match a.to_str() {
+                            Ok(s) => s,
+                            Err(e) => return ReturnCode::GSASL_SASLPREP_ERROR as libc::c_int,
+                        }
+                    },
+                };
 
-                if authid == "test" && pass == "secret" {
-                    ReturnCode::GSASL_OK
+                let pass = session.get_property(Property::GSASL_PASSWORD);
+                if pass.is_none() {
+                    return ReturnCode::GSASL_NO_PASSWORD as libc::c_int;
+                }
+                let pass = pass.unwrap();
+
+
+                if let Some(sessiondata) = sasl.retrieve_mut() {
+                    if let Ok(Some(b)) = sessiondata.passdb.check(authid, pass.to_bytes()) {
+                        if b {
+                            ReturnCode::GSASL_OK
+                        } else {
+                            ReturnCode::GSASL_AUTHENTICATION_ERROR
+                        }
+                    } else {
+                        ReturnCode::GSASL_AUTHENTICATION_ERROR
+                    }
                 } else {
                     ReturnCode::GSASL_AUTHENTICATION_ERROR
                 }
@@ -60,10 +86,10 @@ pub struct Auth {
 }
 
 impl Auth {
-    pub fn new(session: Arc<Session>) -> Self {
+    pub fn new(passdb: Arc<PassDB>, session: Arc<Session>) -> Self {
         let mut ctx = SASL::new().unwrap();
 
-        let mut appdata = Box::new(AppData);
+        let mut appdata = Box::new(AppData { passdb });
 
         ctx.store(appdata);
 
