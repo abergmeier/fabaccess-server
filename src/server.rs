@@ -24,8 +24,6 @@ use std::str::FromStr;
 
 use std::sync::Arc;
 
-use super::LoopResult;
-
 use crate::db::Databases;
 
 pub fn serve_api_connections(log: Arc<Logger>, config: Settings, db: Databases) -> Result<(), Error> {
@@ -156,4 +154,14 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Settings, db: Databases) 
 
     // Returning () is an implicit success so this will properly set the exit code as well
     Ok(())
+}
+
+/// The result of one iteration of the core loop
+pub enum LoopResult {
+    /// Everything was fine, keep going
+    Continue,
+    /// Something happened that means we should shut down
+    Stop,
+    /// The Server is currently overloaded
+    Overloaded,
 }

@@ -35,7 +35,7 @@ const LMDB_MAX_DB: u32 = 16;
 impl Databases {
     pub fn new(log: &Logger, config: &Settings) -> Result<Self> {
 
-        // Initialize the LMDB environment. This blocks untill the mmap() finishes
+        // Initialize the LMDB environment. This blocks until the mmap() finishes
         info!(log, "LMDB env");
         let env = lmdb::Environment::new()
             .set_flags(lmdb::EnvironmentFlags::MAP_ASYNC | lmdb::EnvironmentFlags::NO_SUB_DIR)

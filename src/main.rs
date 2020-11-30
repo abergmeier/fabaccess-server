@@ -44,7 +44,7 @@ use registries::Registries;
 
 // Returning a `Result` from `main` allows us to use the `?` shorthand.
 // In the case of an Err it will be printed using `fmt::Debug`
-fn main() -> Result<(), Error> {
+fn maybe() -> Result<i32, Error> {
     use clap::{crate_version, crate_description, crate_name};
 
     // Argument parsing
@@ -89,17 +89,12 @@ fn main() -> Result<(), Error> {
         handle.write_all(&encoded)?;
 
         // Early return to exit.
-        return Ok(())
-    } else if matches.is_present("dump") {
-    } else if matches.is_present("load") {
-    } else {
+        return Ok(0)
     }
-
 
     // If no `config` option is given use a preset default.
     let configpath = matches.value_of("config").unwrap_or("/etc/bffh/config.toml");
     let config = config::read(&PathBuf::from_str(configpath).unwrap())?;
-
     // Initialize the logging subsystem first to be able to better document the progress from now
     // on.
     // TODO: Now would be a really good time to close stdin/out and move logging to syslog
@@ -107,17 +102,38 @@ fn main() -> Result<(), Error> {
     let log = Arc::new(log::init(&config));
     info!(log, "Starting");
 
-    let db = db::Databases::new(&log, &config)?;
 
-    server::serve_api_connections(log, config, db)
+    if matches.is_present("dump") {
+        error!(log, "Dumping is currently not implemented");
+        Ok(-2)
+    } else if matches.is_present("load") {
+        error!(log, "Loading is currently not implemented");
+        Ok(-2)
+    } else {
+        let db = match db::Databases::new(&log, &config) {
+            Err(e) => {
+                error!(log, "{}", e);
+                return Ok(-1);
+            },
+            Ok(ok) => ok
+        };
+
+        match server::serve_api_connections(log.clone(), config, db) {
+            Err(e) => {
+                error!(log, "{}", e);
+                Ok(-1)
+            },
+            ok => Ok(0)
+        }
+    }
 }
 
-/// The result of one iteration of the core loop
-pub enum LoopResult {
-    /// Everything was fine, keep going
-    Continue,
-    /// Something happened that means we should shut down
-    Stop,
-    /// The Server is currently overloaded
-    Overloaded,
+fn main() {
+    match maybe() {
+        Ok(i) => std::process::exit(i),
+        Err(e) => {
+            println!("{}", e);
+            std::process::exit(-1);
+        }
+    }
 }
