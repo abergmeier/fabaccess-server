@@ -72,8 +72,6 @@ async fn handshake(log: &Logger, stream: &mut TcpStream) -> Result<()> {
 }
 
 pub async fn handle_connection(log: Logger, mut stream: TcpStream, db: Databases) -> Result<()> {
-    handshake(&log, &mut stream).await?;
-
     info!(log, "New connection from on {:?}", stream);
     let session = Arc::new(Session::new(log, db.access.clone()));
     let boots = Bootstrap::new(session, db);
