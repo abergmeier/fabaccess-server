@@ -36,7 +36,7 @@ use crate::db::user::UserId;
 pub mod internal;
 use internal::Internal;
 
-pub type MachineIdentifier = Uuid;
+pub type MachineIdentifier = String;
 pub type Priority = u64;
 
 /// Status of a Machine
@@ -77,6 +77,10 @@ pub struct MachineState {
 }
 
 impl MachineState {
+    pub fn new() -> Self {
+        Self { state: Status::Free }
+    }
+
     /// Check if the given priority is higher than one's own.
     ///
     /// If `self` does not have a priority then this function always returns `true`
@@ -102,48 +106,4 @@ pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> Resu
     debug!(&log, "Opened machine db successfully.");
 
     Ok(Internal::new(log, env, machdb))
-}
-
-type MachMap = HashMap<MachineIdentifier, MachineDescription>;
-
-#[derive(Debug)]
-pub struct MachineDB {
-    state_db: Internal,
-    def_db: MachMap,
-    signals_db: HashMap<MachineIdentifier, Mutable<MachineState>>,
-}
-
-impl MachineDB {
-    pub fn new(state_db: Internal, def_db: MachMap) -> Self {
-        Self {
-            state_db: state_db,
-            def_db: def_db,
-            signals_db: HashMap::new(),
-        }
-    }
-
-    pub fn exists(&self, id: MachineIdentifier) -> bool {
-        self.def_db.get(&id).is_some()
-    }
-
-    pub fn get_desc(&self, id: &MachineIdentifier) -> Option<&MachineDescription> {
-        self.def_db.get(&id)
-    }
-
-    pub fn get_state(&self, id: &MachineIdentifier) -> Option<MachineState> {
-        // TODO: Error Handling
-        self.state_db.get(id).unwrap_or(None)
-    }
-
-    pub fn update_state(&self, id: &MachineIdentifier, new_state: MachineState) -> Result<()> {
-        // If an error happens the new state was not applied so this will not desync the sources
-        self.state_db.put(id, &new_state)?;
-        self.signals_db.get(id).map(|mutable| mutable.set(new_state));
-
-        Ok(())
-    }
-
-    pub fn get_signal(&self, id: &MachineIdentifier) -> Option<MutableSignalCloned<MachineState>> {
-        self.signals_db.get(&id).map(|mutable| mutable.signal_cloned())
-    }
 }

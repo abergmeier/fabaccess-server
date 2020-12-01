@@ -8,7 +8,6 @@ use crate::connection::Session;
 
 use crate::db::Databases;
 use crate::db::machine::uuid_from_api;
-use crate::db::machine::MachineDB;
 
 use super::machine::Machine;
 

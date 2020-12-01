@@ -26,7 +26,7 @@ pub mod machine;
 #[derive(Clone)]
 pub struct Databases {
     pub access: Arc<access::AccessControl>,
-    pub machine: Arc<machine::MachineDB>,
+    pub machine: Arc<machine::internal::Internal>,
     pub passdb: Arc<pass::PassDB>,
 }
 
@@ -50,7 +50,6 @@ impl Databases {
 
         // Error out if any of the subsystems failed to start.
         let defs = crate::machine::MachineDescription::load_file(&config.machines)?;
-        let machdb = machine::MachineDB::new(mdb, defs);
 
 
         let mut ac = access::AccessControl::new();
@@ -62,8 +61,8 @@ impl Databases {
 
         Ok(Self {
             access: Arc::new(ac),
-            machine: Arc::new(machdb),
             passdb: Arc::new(passdb),
+            machine: Arc::new(mdb)
         })
     }
 }

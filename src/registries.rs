@@ -1,7 +1,5 @@
 use std::sync::Arc;
 
-use crate::db::machine::MachineDB;
-
 mod actuators;
 mod sensors;
 
@@ -18,10 +16,10 @@ pub struct Registries {
 }
 
 impl Registries {
-    pub fn new(db: Arc<MachineDB>) -> Self {
+    pub fn new() -> Self {
         Registries {
             actuators: actuators::Actuators::new(),
-            sensors: sensors::Sensors::new(db),
+            sensors: sensors::Sensors::new(),
         }
     }
 }

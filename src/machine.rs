@@ -57,11 +57,17 @@ impl Machine {
     pub fn construct
         ( id: MachineIdentifier
         , desc: MachineDescription
-        , access: access::AccessControl
         , state: MachineState
         ) -> Machine
     {
-        Self::new(Inner::new(id, desc, access, state))
+        Self::new(Inner::new(id, desc, state))
+    }
+
+    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Vec<Machine>> {
+        let map: HashMap<MachineIdentifier, MachineDescription> = MachineDescription::load_file(path)?;
+        map.drain().map(|(id, desc)| {
+            Self::construct(id, desc, MachineState::new())
+        }).collect()
     }
 }
 
@@ -93,19 +99,16 @@ pub struct Inner {
     state: Mutable<MachineState>,
     reset: Option<MachineState>,
     rx: Option<futures::channel::oneshot::Receiver<()>>,
-
-    access: access::AccessControl,
 }
 
 impl Inner {
-    pub fn new(id: MachineIdentifier, desc: MachineDescription, access: access::AccessControl, state: MachineState) -> Inner {
+    pub fn new(id: MachineIdentifier, desc: MachineDescription, state: MachineState) -> Inner {
         Inner {
             id: id,
             desc: desc,
             state: Mutable::new(state),
             reset: None,
             rx: None,
-            access: access,
         }
     }
 
@@ -131,16 +134,14 @@ impl Inner {
     pub async fn request_state_change(&mut self, who: &User, new_state: MachineState) 
         -> Result<ReturnToken>
     {
-        if self.access.check(&who.data, &self.desc.privs.write).await? {
-            if self.state.lock_ref().is_higher_priority(who.data.priority) {
-                let (tx, rx) = futures::channel::oneshot::channel();
-                let old_state = self.state.replace(new_state);
-                self.reset.replace(old_state);
-                // Also this drops the old receiver, which will signal to the initiator that the
-                // machine has been taken off their hands.
-                self.rx.replace(rx);
-                return Ok(tx);
-            }
+        if self.state.lock_ref().is_higher_priority(who.data.priority) {
+            let (tx, rx) = futures::channel::oneshot::channel();
+            let old_state = self.state.replace(new_state);
+            self.reset.replace(old_state);
+            // Also this drops the old receiver, which will signal to the initiator that the
+            // machine has been taken off their hands.
+            self.rx.replace(rx);
+            return Ok(tx);
         }
 
         return Err(Error::Denied);
