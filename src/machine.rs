@@ -213,7 +213,7 @@ pub fn load(config: &crate::config::Settings) -> Result<Vec<Machine>> {
     unimplemented!()
 }
 
-#[cfg(test)]
+#[cfg(test_DISABLED)]
 mod tests {
     use super::*;
     use std::iter::FromIterator;

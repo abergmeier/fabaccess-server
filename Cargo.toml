@@ -65,3 +65,6 @@ easy-parallel = "3.1"
 
 [build-dependencies]
 capnpc = "0.13"
+
+[dev-dependencies]
+futures-test = "0.3"

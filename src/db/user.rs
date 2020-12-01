@@ -85,7 +85,7 @@ const fn default_priority() -> u64 {
     0
 }
 
-#[cfg(test)]
+#[cfg(test_DISABLED)]
 mod tests {
     use super::*;
 

@@ -527,7 +527,7 @@ impl TryFrom<String> for PermRule {
     }
 }
 
-#[cfg(test)]
+#[cfg(test_DISABLED)]
 mod tests {
     use super::*;
 

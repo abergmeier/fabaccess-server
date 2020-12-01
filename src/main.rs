@@ -141,10 +141,8 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         // handle signals (a cli if stdin is not closed?) and make it stop and clean up all threads
         // when bffh should exit
         let machines = machine::load(&config)?;
-        let actors = actor::load(&config)?;
+        let actors = actor::load()?;
         let initiators = initiator::load(&config)?;
-
-        // TODO restore connections between initiators, machines, actors
 
         let ex = Executor::new();
 
@@ -152,9 +150,7 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
             ex.spawn(i.run());
         }
 
-        for a in actors.into_iter() {
-            ex.spawn(a);
-        }
+        // TODO HERE: restore connections between initiators, machines, actors
 
         let (signal, shutdown) = async_channel::bounded::<()>(1);
         easy_parallel::Parallel::new()

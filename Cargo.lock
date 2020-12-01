@@ -422,6 +422,7 @@ dependencies = [
  "flexbuffers",
  "futures 0.3.7",
  "futures-signals",
+ "futures-test",
  "futures-util",
  "glob",
  "lazy_static",
@@ -676,6 +677,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "96d502af37186c4fef99453df03e374683f8a1eec9dcc1e66b3b82dc8278ce3c"
 dependencies = [
  "once_cell",
+]
+
+[[package]]
+name = "futures-test"
+version = "0.3.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a493f2b7cb378c703e494b8c7e1f4505236ca54e9db6d7f1f769d4f1441d6771"
+dependencies = [
+ "futures-core",
+ "futures-executor",
+ "futures-io",
+ "futures-sink",
+ "futures-task",
+ "futures-util",
+ "once_cell",
+ "pin-project",
+ "pin-utils",
 ]
 
 [[package]]
