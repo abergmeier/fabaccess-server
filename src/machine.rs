@@ -65,9 +65,9 @@ impl Machine {
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Vec<Machine>> {
         let map: HashMap<MachineIdentifier, MachineDescription> = MachineDescription::load_file(path)?;
-        map.drain().map(|(id, desc)| {
+        Ok(map.drain().map(|(id, desc)| {
             Self::construct(id, desc, MachineState::new())
-        }).collect()
+        }).collect())
     }
 }
 
@@ -207,6 +207,10 @@ impl MachineDescription {
         let content = fs::read(path)?;
         Ok(toml::from_slice(&content[..])?)
     }
+}
+
+pub fn load(config: &crate::config::Settings) -> Result<Vec<Machine>> {
+    unimplemented!()
 }
 
 #[cfg(test)]
