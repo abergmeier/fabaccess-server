@@ -64,7 +64,7 @@ impl Machine {
     }
 
     pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Vec<Machine>> {
-        let map: HashMap<MachineIdentifier, MachineDescription> = MachineDescription::load_file(path)?;
+        let mut map: HashMap<MachineIdentifier, MachineDescription> = MachineDescription::load_file(path)?;
         Ok(map.drain().map(|(id, desc)| {
             Self::construct(id, desc, MachineState::new())
         }).collect())

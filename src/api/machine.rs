@@ -29,33 +29,7 @@ impl Machine {
     }
 
     pub fn fill_info(&self, builder: &mut m_info::Builder) {
-        if let Some(desc) = self.db.machine.get_desc(&self.id) {
-            builder.set_name(&desc.name);
-            if let Some(d) = desc.description.as_ref() {
-                builder.set_description(d);
-            }
-
-            // TODO: Set `responsible`
-            // TODO: Error Handling
-            if let Some(state) = self.db.machine.get_state(&self.id) {
-                match state.state {
-                    Status::Free => builder.set_state(State::Free),
-                    Status::InUse(_u, _p) => {
-                        builder.set_state(State::InUse);
-                    }
-                    Status::ToCheck(_u, _p) => {
-                        builder.set_state(State::ToCheck);
-                    }
-                    Status::Blocked(_u, _p) => {
-                        builder.set_state(State::Blocked);
-                    }
-                    Status::Disabled => builder.set_state(State::Disabled),
-                    Status::Reserved(_u, _p) => {
-                        builder.set_state(State::Reserved);
-                    }
-                }
-            }
-        }
+        unimplemented!()
     }
 }
 

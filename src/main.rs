@@ -94,7 +94,7 @@ fn main() {
         handle.write_all(&encoded).unwrap();
 
         // Early return to exit.
-        return Ok(());
+        return;
     }
 
     let retval;
@@ -142,24 +142,23 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         // when bffh should exit
         let machines = machine::load(&config)?;
         let actors = actor::load(&config)?;
-        let initiators = load_initiators(&config)?;
+        let initiators = initiator::load(&config)?;
 
         // TODO restore connections between initiators, machines, actors
 
-        let ex = Arc::new(Executor::new());
+        let ex = Executor::new();
 
         for i in initiators.into_iter() {
             ex.spawn(i.run());
         }
 
         for a in actors.into_iter() {
-            ex.spawn(a.run());
+            ex.spawn(a);
         }
 
-        let (signal, shutdown) = futures::channel::oneshot::channel();
-        for i in 0..4 {
-            std::thread::spawn(|| smol::block_on(ex.run(shutdown.recv())));
-        }
+        let (signal, shutdown) = async_channel::bounded::<()>(1);
+        easy_parallel::Parallel::new()
+            .each(0..4, |_| smol::block_on(ex.run(shutdown.recv())));
 
         server::serve_api_connections(log.clone(), config, db)
         // Signal is dropped here, stopping all executor threads as well.

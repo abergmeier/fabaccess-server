@@ -410,6 +410,7 @@ dependencies = [
 name = "diflouroborane"
 version = "0.1.0"
 dependencies = [
+ "async-channel",
  "async-trait",
  "capnp",
  "capnp-futures",
@@ -417,6 +418,7 @@ dependencies = [
  "capnpc",
  "clap",
  "config",
+ "easy-parallel",
  "flexbuffers",
  "futures 0.3.7",
  "futures-signals",
@@ -465,6 +467,12 @@ name = "discard"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "212d0f5754cb6769937f4501cc0e67f4f4483c8d2c3e1e922ee9edbe4ab4c7c0"
+
+[[package]]
+name = "easy-parallel"
+version = "3.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "1dd4afd79212583ff429b913ad6605242ed7eec277e950b1438f300748f948f4"
 
 [[package]]
 name = "env_logger"
