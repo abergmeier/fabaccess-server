@@ -10,7 +10,7 @@ use futures::channel::mpsc;
 use futures_signals::signal::{Signal, MutableSignalCloned, MutableSignal, Mutable};
 
 use crate::db::machine::MachineState;
-use crate::registries::Actuator;
+use crate::registries::actuators::Actuator;
 use crate::config::Settings;
 use crate::error::Result;
 
@@ -22,88 +22,74 @@ pub struct Actor<S: Signal> {
     // of a task context. In short, using Mutable isn't possible and we would have to write our own
     // implementation of MutableSignal*'s . Preferably with the correct optimizations for our case
     // where there is only one consumer. So a mpsc channel that drops all but the last input.
-    rx: mpsc::Receiver<Option<S>>
-    inner: S,
+    rx: mpsc::Receiver<Option<S>>,
+    inner: Option<S>,
+
+    actuator: Box<dyn Actuator + Send + Sync>,
+    future: Option<Box<dyn Future<Output=()> + Unpin + Send>>,
 }
 
-pub fn load() {
-    let s = Mutable::new(MachineState::new());
+impl<S: Signal + Unpin> Actor<S> {
+    pub fn new(rx: mpsc::Receiver<Option<S>>, actuator: Box<dyn Actuator + Send + Sync>) -> Self {
+        Self { 
+            rx: rx,
+            inner: None,
+            actuator: actuator,
+            future: None,
+        }
+    }
 
-    Ok(())
+    pub fn wrap(actuator: Box<dyn Actuator + Send + Sync>) -> (mpsc::Sender<Option<S>>, Self) {
+        let (tx, rx) = mpsc::channel(1);
+        (tx, Self::new(rx, actuator))
+    }
 }
 
-#[must_use = "Signals do nothing unless polled"]
-pub struct MaybeFlatten<A: Signal, B: Signal> {
-    signal: Option<A>,
-    inner: Option<B>,
-}
+impl<S: Signal<Item=MachineState> + Unpin> Future for Actor<S> {
+    type Output = ();
 
-// Poll parent => Has inner   => Poll inner  => Output
-// --------------------------------------------------------
-// Some(Some(inner)) =>             => Some(value) => Some(value)
-// Some(Some(inner)) =>             =>             => Pending
-// Some(None)        =>             =>             => Pending
-// None              => Some(inner) => Some(value) => Some(value)
-// None              => Some(inner) => None        => None
-// None              => Some(inner) => Pending     => Pending
-// None              => None        =>             => None
-// Pending           => Some(inner) => Some(value) => Some(value)
-// Pending           => Some(inner) => None        => Pending
-// Pending           => Some(inner) => Pending     => Pending
-// Pending           => None        =>             => Pending
-impl<A, B> Signal for MaybeFlatten<A, B>
-    where A: Signal<Item=Option<B>> + Unpin,
-          B: Signal + Unpin,
-{
-    type Item = B::Item;
-
-    #[inline]
-    fn poll_change(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
+    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let mut this = &mut *self;
+        let mut done = false; // Is the channel with new state-signals exhausted?
 
-        let done = match this.signal.as_mut().map(|signal| Signal::poll_change(Pin::new(signal), cx)) {
-            None => true,
-            Some(Poll::Ready(None)) => {
-                this.signal = None;
-                true
-            },
-            Some(Poll::Ready(Some(new_inner))) => {
-                this.inner = new_inner;
-                false
-            },
-            Some(Poll::Pending) => false,
-        };
+        // Update the signal we're polling from, if there is an update that is.
+        match Stream::poll_next(Pin::new(&mut this.rx), cx) {
+            Poll::Ready(None) => done = true,
+            Poll::Ready(Some(new_signal)) => this.inner = new_signal,
+            Poll::Pending => { },
+        }
 
+        // Poll the `apply` future.
+        match this.future.as_mut().map(|future| Future::poll(Pin::new(future), cx)) {
+            None => { }
+            Some(Poll::Ready(_)) => this.future = None,
+            Some(Poll::Pending) => return Poll::Pending,
+        }
+
+        // Poll the signal and apply all changes that happen to the inner Actuator
         match this.inner.as_mut().map(|inner| Signal::poll_change(Pin::new(inner), cx)) {
+            None => Poll::Pending,
+            Some(Poll::Pending) => Poll::Pending,
             Some(Poll::Ready(None)) => {
                 this.inner = None;
-            },
-            Some(poll) => {
-                return poll;
-            },
-            None => {},
-        }
 
-        if done {
-            Poll::Ready(None)
-
-        } else {
-            Poll::Pending
+                if done {
+                    Poll::Ready(())
+                } else {
+                    Poll::Pending
+                }
+            },
+            Some(Poll::Ready(Some(state))) => {
+                this.actuator.apply(state);
+                Poll::Pending
+            }
         }
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use futures_test::*;
-    use futures_signals::signal::Signal;
+pub fn load<S: Signal<Item=MachineState> + Unpin>() -> Result<(mpsc::Sender<Option<S>>, Actor<S>)> {
+    let d = Box::new(crate::registries::actuators::Dummy);
+    let a = Actor::wrap(d);
 
-    #[test]
-    fn load_test() {
-        let (a, s, m) = super::load().unwrap();
-
-        let cx = task::panic_context();
-        a.signal.poll_change(&mut cx);
-    }
+    Ok(a)
 }

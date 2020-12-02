@@ -1,9 +1,7 @@
 use std::sync::Arc;
 
-mod actuators;
-mod sensors;
-
-pub use actuators::{Actuator, ActBox, StatusSignal};
+pub mod actuators;
+pub mod sensors;
 
 #[derive(Clone)]
 /// BFFH registries
@@ -11,14 +9,12 @@ pub use actuators::{Actuator, ActBox, StatusSignal};
 /// This struct is only a reference to the underlying registries - cloning it will generate a new
 /// reference, not clone the registries
 pub struct Registries {
-    pub actuators: actuators::Actuators,
     pub sensors: sensors::Sensors,
 }
 
 impl Registries {
     pub fn new() -> Self {
         Registries {
-            actuators: actuators::Actuators::new(),
             sensors: sensors::Sensors::new(),
         }
     }

@@ -135,27 +135,32 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         error!(log, "Loading is currently not implemented");
         Ok(())
     } else {
-        let db = db::Databases::new(&log, &config)?;
 
-        // TODO: Spawn api connections on their own (non-main) thread, use the main thread to
-        // handle signals (a cli if stdin is not closed?) and make it stop and clean up all threads
-        // when bffh should exit
-        let machines = machine::load(&config)?;
-        let actors = actor::load()?;
-        let initiators = initiator::load(&config)?;
-
+        //let machines = machine::load(&config)?;
+        //let initiators = initiator::load(&config)?;
         let ex = Executor::new();
 
-        for i in initiators.into_iter() {
-            ex.spawn(i.run());
-        }
+        let m = futures_signals::signal::Mutable::new(crate::db::machine::MachineState::new());
+        let (mut tx, actor) = actor::load()?;
 
         // TODO HERE: restore connections between initiators, machines, actors
+
+        // Like so
+        tx.try_send(Some(m.signal_cloned())).unwrap();
+
+        // TODO HERE: Spawn all actors & inits
+
+        // Like so
+        ex.spawn(actor);
 
         let (signal, shutdown) = async_channel::bounded::<()>(1);
         easy_parallel::Parallel::new()
             .each(0..4, |_| smol::block_on(ex.run(shutdown.recv())));
 
+        let db = db::Databases::new(&log, &config)?;
+        // TODO: Spawn api connections on their own (non-main) thread, use the main thread to
+        // handle signals (a cli if stdin is not closed?) and make it stop and clean up all threads
+        // when bffh should exit
         server::serve_api_connections(log.clone(), config, db)
         // Signal is dropped here, stopping all executor threads as well.
     }

@@ -27,8 +27,6 @@ use smol::channel::{Receiver, Sender};
 use futures::{Future, Stream, StreamExt};
 use futures_signals::signal::*;
 
-use crate::registries::StatusSignal;
-
 use crate::machine::MachineDescription;
 
 use crate::db::user::UserId;
