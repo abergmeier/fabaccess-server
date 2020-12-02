@@ -69,6 +69,13 @@ impl Machine {
             Self::construct(id, desc, MachineState::new())
         }).collect())
     }
+
+    pub fn request_state_change(&self, who: Option<&User>, new_state: MachineState) 
+        -> Result<ReturnToken> 
+    {
+        let mut guard = self.inner.try_lock().unwrap();
+        guard.request_state_change(who, new_state)
+    }
 }
 
 impl Deref for Machine {
@@ -131,10 +138,23 @@ impl Inner {
     /// along it or if the sending end gets dropped. Anybody who holds this token needs to check if
     /// the receiving end was canceled which indicates that the machine has been taken off their
     /// hands.
-    pub async fn request_state_change(&mut self, who: &User, new_state: MachineState) 
+    pub fn request_state_change(&mut self, who: Option<&User>, new_state: MachineState) 
         -> Result<ReturnToken>
     {
-        if self.state.lock_ref().is_higher_priority(who.data.priority) {
+        if who.is_none() {
+            if new_state.state == Status::Free {
+                return self.do_state_change(new_state);
+            }
+        } else {
+            if self.state.lock_ref().is_higher_priority(who.unwrap().data.priority) {
+                return self.do_state_change(new_state);
+            }
+        }
+
+        return Err(Error::Denied);
+    }
+
+    fn do_state_change(&mut self, new_state: MachineState) -> Result<ReturnToken> {
             let (tx, rx) = futures::channel::oneshot::channel();
             let old_state = self.state.replace(new_state);
             self.reset.replace(old_state);
@@ -142,9 +162,6 @@ impl Inner {
             // machine has been taken off their hands.
             self.rx.replace(rx);
             return Ok(tx);
-        }
-
-        return Err(Error::Denied);
     }
 
     pub fn set_state(&mut self, state: Status) {
@@ -162,7 +179,7 @@ impl Inner {
     }
 }
 
-type ReturnToken = futures::channel::oneshot::Sender<()>;
+pub type ReturnToken = futures::channel::oneshot::Sender<()>;
 
 impl Future for Inner {
     type Output = MachineState;

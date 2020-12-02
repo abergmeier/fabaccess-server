@@ -17,6 +17,12 @@ pub struct User {
     pub data: UserData,
 }
 
+impl User {
+    pub fn new(id: UserId, data: UserData) -> Self {
+        Self { id, data }
+    }
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 /// Authorization Identity
 ///
@@ -76,6 +82,16 @@ pub struct UserData {
     /// Additional data storage
     #[serde(flatten)]
     kv: HashMap<Box<[u8]>, Box<[u8]>>,
+}
+
+impl UserData {
+    pub fn new(roles: Vec<RoleIdentifier>, priority: u64) -> Self {
+        Self { 
+            roles: roles,
+            priority: priority,
+            kv: HashMap::new(),
+        }
+    }
 }
 
 fn is_zero(i: &u64) -> bool {

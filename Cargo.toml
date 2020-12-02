@@ -62,6 +62,7 @@ rand = "0.7"
 
 async-channel = "1.5"
 easy-parallel = "3.1"
+genawaiter = "0.99"
 
 [build-dependencies]
 capnpc = "0.13"
