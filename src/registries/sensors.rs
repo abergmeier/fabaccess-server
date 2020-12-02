@@ -5,6 +5,5 @@ use crate::db::user::User;
 use crate::db::machine::MachineState;
 
 pub trait Sensor {
-    type State: Sized;
-    fn run_sensor(&mut self, state: Option<Self::State>) -> BoxFuture<'static, (Self::State, Option<User>, MachineState)>;
+    fn run_sensor(&mut self) -> BoxFuture<'static, (Option<User>, MachineState)>;
 }

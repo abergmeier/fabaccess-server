@@ -20,9 +20,8 @@ use crate::error::Result;
 pub struct Initiator<S: Sensor> {
     signal: MutableSignalCloned<Option<Machine>>,
     machine: Option<Machine>,
-    future: Option<BoxFuture<'static, (S::State, Option<User>, MachineState)>>,
+    future: Option<BoxFuture<'static, (Option<User>, MachineState)>>,
     token: Option<ReturnToken>,
-    //state: Option<S::State>,
     sensor: Box<S>,
 }
 
@@ -33,7 +32,6 @@ impl<S: Sensor> Initiator<S> {
             machine: None,
             future: None,
             token: None,
-            //state: None,
             sensor: sensor,
         }
     }
@@ -58,11 +56,10 @@ impl<S: Sensor> Future for Initiator<S> {
             // If there is a future, poll it
             match this.future.as_mut().map(|future| Future::poll(Pin::new(future), cx)) {
                 None => {
-                    this.future = Some(this.sensor.run_sensor(None));
+                    this.future = Some(this.sensor.run_sensor());
                 },
-                Some(Poll::Ready((fut_state, user, state))) => {
+                Some(Poll::Ready((user, state))) => {
                     this.future.take();
-                    //this.state.replace(fut_state);
                     this.machine.as_mut().map(|machine| machine.request_state_change(user.as_ref(), state));
                 }
                 Some(Poll::Pending) => return Poll::Pending,
@@ -75,19 +72,27 @@ pub fn load<S: Sensor>() -> Result<Initiator<S>> {
     unimplemented!()
 }
 
-pub struct Dummy;
+pub struct Dummy {
+    step: bool
+}
+
+impl Dummy {
+    pub fn new() -> Self {
+        Self { step: false }
+    }
+}
 
 impl Sensor for Dummy {
-    type State = bool;
-
-    fn run_sensor(&mut self, state: Option<bool>)
-        -> BoxFuture<'static, (Self::State, Option<User>, MachineState)>
+    fn run_sensor(&mut self)
+        -> BoxFuture<'static, (Option<User>, MachineState)>
     {
-        let step = state.map(|b| !b).unwrap_or(false);
+        let step = self.step;
+        self.step != self.step;
+
         let f = async move {
             Timer::after(std::time::Duration::from_secs(1)).await;
             if step {
-                return (step, None, MachineState::free());
+                return (None, MachineState::free());
             } else {
                 let user = User::new(
                     UserId::new("test".to_string(), None, None),
@@ -95,7 +100,7 @@ impl Sensor for Dummy {
                 );
                 let p = user.data.priority;
                 let id = user.id.clone();
-                return (step, Some(user), MachineState::used(id, p));
+                return (Some(user), MachineState::used(id, p));
             }
         };
 
