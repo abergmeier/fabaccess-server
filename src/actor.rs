@@ -26,7 +26,7 @@ pub struct Actor<S: Signal> {
     inner: Option<S>,
 
     actuator: Box<dyn Actuator + Send + Sync>,
-    future: Option<Box<dyn Future<Output=()> + Unpin + Send>>,
+    future: Option<BoxFuture<'static, ()>>,
 }
 
 impl<S: Signal + Unpin> Actor<S> {
@@ -80,7 +80,7 @@ impl<S: Signal<Item=MachineState> + Unpin> Future for Actor<S> {
                 }
             },
             Some(Poll::Ready(Some(state))) => {
-                this.actuator.apply(state);
+                this.future.replace(this.actuator.apply(state));
                 Poll::Pending
             }
         }

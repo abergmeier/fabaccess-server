@@ -151,11 +151,16 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         // TODO HERE: Spawn all actors & inits
 
         // Like so
-        ex.spawn(actor);
+        let t = ex.spawn(actor);
 
         let (signal, shutdown) = async_channel::bounded::<()>(1);
         easy_parallel::Parallel::new()
-            .each(0..4, |_| smol::block_on(ex.run(shutdown.recv())));
+            .each(0..4, |_| smol::block_on(ex.run(shutdown.recv())))
+            .run();
+
+        smol::block_on(t);
+
+
 
         let db = db::Databases::new(&log, &config)?;
         // TODO: Spawn api connections on their own (non-main) thread, use the main thread to
