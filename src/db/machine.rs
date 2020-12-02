@@ -79,6 +79,14 @@ impl MachineState {
         Self { state: Status::Free }
     }
 
+    pub fn free() -> Self {
+        Self { state: Status::Free }
+    }
+
+    pub fn used(uid: UserId, priority: Priority) -> Self {
+        Self { state: Status::InUse(uid, priority) }
+    }
+
     /// Check if the given priority is higher than one's own.
     ///
     /// If `self` does not have a priority then this function always returns `true`
