@@ -47,8 +47,6 @@ use error::Error;
 
 use slog::Logger;
 
-use registries::Registries;
-
 fn main() {
     use clap::{crate_version, crate_description, crate_name};
 
