@@ -133,10 +133,9 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         error!(log, "Loading is currently not implemented");
         Ok(())
     } else {
-
-        //let machines = machine::load(&config)?;
         let ex = Executor::new();
 
+        let machines = machine::load(&config)?;
         let m = futures_signals::signal::Mutable::new(crate::db::machine::MachineState::new());
         let (mut tx, actor) = actor::load()?;
 
@@ -145,7 +144,8 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         // TODO HERE: restore connections between initiators, machines, actors
 
         // Like so
-        tx.try_send(Some(m.signal_cloned())).unwrap();
+        let m = machines[0].signal();
+        tx.try_send(Some(m)).unwrap();
 
         // TODO HERE: Spawn all actors & inits
 

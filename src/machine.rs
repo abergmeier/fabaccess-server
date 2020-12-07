@@ -76,6 +76,11 @@ impl Machine {
         let mut guard = self.inner.try_lock().unwrap();
         guard.request_state_change(who, new_state)
     }
+
+    pub fn signal(&self) -> impl Signal<Item=MachineState> {
+        let mut guard = self.inner.try_lock().unwrap();
+        guard.signal()
+    }
 }
 
 impl Deref for Machine {
@@ -227,7 +232,14 @@ impl MachineDescription {
 }
 
 pub fn load(config: &crate::config::Settings) -> Result<Vec<Machine>> {
-    unimplemented!()
+    let mut map = MachineDescription::load_file(&config.machines)?;
+
+    Ok(map.drain()
+        .map(|(k,v)| {
+            // TODO: Read state from the state db
+            Machine::construct(k, v, MachineState::new())
+        })
+        .collect())
 }
 
 #[cfg(test_DISABLED)]
