@@ -1,6 +1,7 @@
 use std::pin::Pin;
 use std::task::{Poll, Context};
 use std::sync::Arc;
+use std::collections::HashMap;
 use std::future::Future;
 
 use smol::Executor;
@@ -14,7 +15,11 @@ use crate::registries::actuators::Actuator;
 use crate::config::Settings;
 use crate::error::Result;
 
-pub struct Actor<S: Signal> {
+use crate::network::ActorMap;
+
+pub type ActorSignal = Box<dyn Signal<Item=MachineState> + Unpin + Send>;
+
+pub struct Actor {
     // FIXME: This should really be a Signal.
     // But, alas, MutableSignalCloned is itself not `Clone`. For good reason as keeping track of
     // the changes itself happens in a way that Clone won't work (well).
@@ -22,15 +27,15 @@ pub struct Actor<S: Signal> {
     // of a task context. In short, using Mutable isn't possible and we would have to write our own
     // implementation of MutableSignal*'s . Preferably with the correct optimizations for our case
     // where there is only one consumer. So a mpsc channel that drops all but the last input.
-    rx: mpsc::Receiver<Option<S>>,
-    inner: Option<S>,
+    rx: mpsc::Receiver<Option<ActorSignal>>,
+    inner: Option<ActorSignal>,
 
     actuator: Box<dyn Actuator + Send + Sync>,
     future: Option<BoxFuture<'static, ()>>,
 }
 
-impl<S: Signal + Unpin> Actor<S> {
-    pub fn new(rx: mpsc::Receiver<Option<S>>, actuator: Box<dyn Actuator + Send + Sync>) -> Self {
+impl Actor {
+    pub fn new(rx: mpsc::Receiver<Option<ActorSignal>>, actuator: Box<dyn Actuator + Send + Sync>) -> Self {
         Self { 
             rx: rx,
             inner: None,
@@ -39,13 +44,13 @@ impl<S: Signal + Unpin> Actor<S> {
         }
     }
 
-    pub fn wrap(actuator: Box<dyn Actuator + Send + Sync>) -> (mpsc::Sender<Option<S>>, Self) {
+    pub fn wrap(actuator: Box<dyn Actuator + Send + Sync>) -> (mpsc::Sender<Option<ActorSignal>>, Self) {
         let (tx, rx) = mpsc::channel(1);
         (tx, Self::new(rx, actuator))
     }
 }
 
-impl<S: Signal<Item=MachineState> + Unpin> Future for Actor<S> {
+impl Future for Actor {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
@@ -87,9 +92,12 @@ impl<S: Signal<Item=MachineState> + Unpin> Future for Actor<S> {
     }
 }
 
-pub fn load<S: Signal<Item=MachineState> + Unpin>() -> Result<(mpsc::Sender<Option<S>>, Actor<S>)> {
+pub fn load() -> Result<(ActorMap, Vec<Actor>)> {
     let d = Box::new(crate::registries::actuators::Dummy);
-    let a = Actor::wrap(d);
+    let (tx, a) = Actor::wrap(d);
 
-    Ok(a)
+    let mut map = HashMap::new();
+    map.insert("Dummy".to_string(), tx);
+
+    Ok(( map, vec![a] ))
 }

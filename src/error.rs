@@ -140,8 +140,8 @@ impl From<flexbuffers::SerializationError> for Error {
     }
 }
 
-impl From<futures::SpawnError> for Error {
-    fn from(e: futures::SpawnError) -> Error {
+impl From<futures_task::SpawnError> for Error {
+    fn from(e: futures_task::SpawnError) -> Error {
         Error::FuturesSpawn(e)
     }
 }

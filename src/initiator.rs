@@ -1,6 +1,7 @@
 use std::pin::Pin;
 use std::task::{Poll, Context};
 use std::future::Future;
+use std::collections::HashMap;
 use smol::{Task, Timer};
 
 use futures::FutureExt;
@@ -14,19 +15,22 @@ use crate::db::machine::MachineState;
 use crate::db::user::{User, UserId, UserData};
 
 use crate::registries::sensors::Sensor;
+use crate::network::InitMap;
 
 use crate::error::Result;
 
-pub struct Initiator<S: Sensor> {
+type BoxSensor = Box<dyn Sensor + Send>;
+
+pub struct Initiator {
     signal: MutableSignalCloned<Option<Machine>>,
     machine: Option<Machine>,
     future: Option<BoxFuture<'static, (Option<User>, MachineState)>>,
     token: Option<ReturnToken>,
-    sensor: Box<S>,
+    sensor: BoxSensor,
 }
 
-impl<S: Sensor> Initiator<S> {
-    pub fn new(sensor: Box<S>, signal: MutableSignalCloned<Option<Machine>>) -> Self {
+impl Initiator {
+    pub fn new(sensor: BoxSensor, signal: MutableSignalCloned<Option<Machine>>) -> Self {
         Self {
             signal: signal,
             machine: None,
@@ -36,7 +40,7 @@ impl<S: Sensor> Initiator<S> {
         }
     }
 
-    pub fn wrap(sensor: Box<S>) -> (Mutable<Option<Machine>>, Self) {
+    pub fn wrap(sensor: BoxSensor) -> (Mutable<Option<Machine>>, Self) {
         let m = Mutable::new(None);
         let s = m.signal_cloned();
 
@@ -44,7 +48,7 @@ impl<S: Sensor> Initiator<S> {
     }
 }
 
-impl<S: Sensor> Future for Initiator<S> {
+impl Future for Initiator {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
@@ -75,9 +79,14 @@ impl<S: Sensor> Future for Initiator<S> {
     }
 }
 
-pub fn load() -> Result<(Mutable<Option<Machine>>, Initiator<Dummy>)> {
+pub fn load() -> Result<(InitMap, Vec<Initiator>)> {
     let d = Box::new(Dummy::new());
-    Ok(Initiator::wrap(d))
+    let (m, i) = Initiator::wrap(d);
+
+    let mut map = HashMap::new();
+    map.insert("Dummy".to_string(), m);
+
+    Ok((map, vec![i]))
 }
 
 pub struct Dummy {

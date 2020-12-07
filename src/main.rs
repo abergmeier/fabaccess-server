@@ -136,31 +136,24 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         let ex = Executor::new();
 
         let machines = machine::load(&config)?;
-        let m = futures_signals::signal::Mutable::new(crate::db::machine::MachineState::new());
-        let (mut tx, actor) = actor::load()?;
+        let (mut actor_map, actors) = actor::load()?;
+        let (mut init_map, initiators) = initiator::load()?;
 
-        let (mut init_machine, initiator) = initiator::load()?;
+        let network = network::Network::new(machines, actor_map, init_map);
+
 
         // TODO HERE: restore connections between initiators, machines, actors
-
-        // Like so
-        let m = machines[0].signal();
-        tx.try_send(Some(m)).unwrap();
 
         // TODO HERE: Spawn all actors & inits
 
         // Like so
-        let t = ex.spawn(actor);
-        let t2 = ex.spawn(initiator);
+        let actor_tasks = actors.into_iter().map(|actor| ex.spawn(actor));
+        let init_tasks = initiators.into_iter().map(|init| ex.spawn(init));
 
         let (signal, shutdown) = async_channel::bounded::<()>(1);
         easy_parallel::Parallel::new()
             .each(0..4, |_| smol::block_on(ex.run(shutdown.recv())))
             .run();
-
-        smol::block_on(t);
-
-
 
         let db = db::Databases::new(&log, &config)?;
         // TODO: Spawn api connections on their own (non-main) thread, use the main thread to

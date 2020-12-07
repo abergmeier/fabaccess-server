@@ -9,16 +9,17 @@ use futures::channel::mpsc;
 use futures_signals::signal::{Signal, MutableSignalCloned, Mutable};
 
 use crate::machine::Machine;
-use crate::actor::Actor;
+use crate::actor::{Actor, ActorSignal};
 use crate::initiator::Initiator;
 use crate::db::machine::MachineState;
 
 use crate::error::Result;
 
-type MachineMap = HashMap<String, Machine>;
-type ActorMap = HashMap<String, mpsc::Sender<Option<MutableSignalCloned<MachineState>>>>;
-type InitMap = HashMap<String, Mutable<Option<Machine>>>;
+pub type MachineMap = HashMap<String, Machine>;
+pub type ActorMap = HashMap<String, mpsc::Sender<Option<ActorSignal>>>;
+pub type InitMap = HashMap<String, Mutable<Option<Machine>>>;
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Error {
     NoSuchInitiator,
     NoSuchMachine,
@@ -39,9 +40,17 @@ impl fmt::Display for Error {
 ///
 /// Network as per FRP, not the one with packages and frames
 pub struct Network {
-    machines: MachineMap,
-    actors: ActorMap,
     inits: InitMap,
+
+    // Store connections 
+    //miconn: Vec<(String, String)>,
+
+    machines: MachineMap,
+
+    // Store connections 
+    //maconn: Vec<(String, String)>,
+
+    actors: ActorMap,
 }
 
 impl Network {
@@ -55,15 +64,16 @@ impl Network {
         let machine = self.machines.get(machine_key)
             .ok_or(Error::NoSuchMachine)?;
 
-        init.set(machine);
+        init.set(Some(machine.clone()));
+        Ok(())
     }
 
-    pub fn connect_actor(&self, machine_key: &String, actor_key: &String) -> Result<()> {
+    pub fn connect_actor(&mut self, machine_key: &String, actor_key: &String) -> Result<()> {
         let machine = self.machines.get(machine_key)
             .ok_or(Error::NoSuchMachine)?;
-        let actor = self.actors.get(actor_key)
+        let actor = self.actors.get_mut(actor_key)
             .ok_or(Error::NoSuchActor)?;
 
-        actor.try_send(Some(machine.signal())).map_err(|_| Error::NoSuchActor.into())
+        actor.try_send(Some(Box::new(machine.signal()))).map_err(|_| Error::NoSuchActor.into())
     }
 }

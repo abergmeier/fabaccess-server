@@ -1,4 +1,5 @@
 use std::ops::{Deref, DerefMut};
+use std::iter::FromIterator;
 use std::sync::Arc;
 use futures_util::lock::Mutex;
 use std::path::Path;
@@ -22,6 +23,8 @@ use crate::error::{Result, Error};
 use crate::db::access;
 use crate::db::machine::{MachineIdentifier, Status, MachineState};
 use crate::db::user::User;
+
+use crate::network::MachineMap;
 
 #[derive(Debug, Clone)]
 pub struct Index {
@@ -231,15 +234,15 @@ impl MachineDescription {
     }
 }
 
-pub fn load(config: &crate::config::Settings) -> Result<Vec<Machine>> {
+pub fn load(config: &crate::config::Settings) -> Result<MachineMap> {
     let mut map = MachineDescription::load_file(&config.machines)?;
 
-    Ok(map.drain()
+    let it = map.drain()
         .map(|(k,v)| {
             // TODO: Read state from the state db
-            Machine::construct(k, v, MachineState::new())
-        })
-        .collect())
+            (v.name.clone(), Machine::construct(k, v, MachineState::new()))
+        });
+    Ok(HashMap::from_iter(it))
 }
 
 #[cfg(test_DISABLED)]
