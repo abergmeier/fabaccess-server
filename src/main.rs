@@ -135,11 +135,12 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
     } else {
 
         //let machines = machine::load(&config)?;
-        //let initiators = initiator::load(&config)?;
         let ex = Executor::new();
 
         let m = futures_signals::signal::Mutable::new(crate::db::machine::MachineState::new());
         let (mut tx, actor) = actor::load()?;
+
+        let (mut init_machine, initiator) = initiator::load()?;
 
         // TODO HERE: restore connections between initiators, machines, actors
 
@@ -150,6 +151,7 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
 
         // Like so
         let t = ex.spawn(actor);
+        let t2 = ex.spawn(initiator);
 
         let (signal, shutdown) = async_channel::bounded::<()>(1);
         easy_parallel::Parallel::new()

@@ -8,7 +8,7 @@ use futures::future::BoxFuture;
 
 use genawaiter::{sync::{Gen, GenBoxed, Co}, GeneratorState};
 
-use futures_signals::signal::{Signal, MutableSignalCloned};
+use futures_signals::signal::{Signal, Mutable, MutableSignalCloned};
 use crate::machine::{Machine, ReturnToken};
 use crate::db::machine::MachineState;
 use crate::db::user::{User, UserId, UserData};
@@ -34,6 +34,13 @@ impl<S: Sensor> Initiator<S> {
             token: None,
             sensor: sensor,
         }
+    }
+
+    pub fn wrap(sensor: Box<S>) -> (Mutable<Option<Machine>>, Self) {
+        let m = Mutable::new(None);
+        let s = m.signal_cloned();
+
+        (m, Self::new(sensor, s))
     }
 }
 
@@ -68,8 +75,9 @@ impl<S: Sensor> Future for Initiator<S> {
     }
 }
 
-pub fn load<S: Sensor>() -> Result<Initiator<S>> {
-    unimplemented!()
+pub fn load() -> Result<(Mutable<Option<Machine>>, Initiator<Dummy>)> {
+    let d = Box::new(Dummy::new());
+    Ok(Initiator::wrap(d))
 }
 
 pub struct Dummy {
