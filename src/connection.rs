@@ -46,33 +46,6 @@ impl Session {
     }
 }
 
-async fn handshake(log: &Logger, stream: &mut TcpStream) -> Result<()> {
-    if let Some(m) = capnp_futures::serialize::read_message(stream.clone(), Default::default()).await? {
-        let greeting = m.get_root::<connection_capnp::greeting::Reader>()?;
-        let major = greeting.get_major();
-        let minor = greeting.get_minor();
-
-        if major != 0 {
-            Err(Error::BadVersion((major, minor)))
-        } else {
-            let program = format!("{}-{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-
-            let mut answer = ::capnp::message::Builder::new_default();
-            let mut b = answer.init_root::<connection_capnp::greeting::Builder>();
-            b.set_program(&program);
-            b.set_host("localhost");
-            b.set_major(0);
-            b.set_minor(1);
-            capnp_futures::serialize::write_message(stream, answer).await?;
-            info!(log, "Handshake successful with peer {} running {}, API {}.{}", 
-                greeting.get_host()?, greeting.get_program()?, major, minor);
-            Ok(())
-        }
-    } else {
-        unimplemented!()
-    }
-}
-
 pub struct ConnectionHandler {
     log: Logger,
     db: Databases,
