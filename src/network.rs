@@ -1,0 +1,69 @@
+use std::fmt;
+
+use std::sync::Arc;
+use std::collections::HashMap;
+
+use smol::Executor;
+
+use futures::channel::mpsc;
+use futures_signals::signal::{Signal, MutableSignalCloned, Mutable};
+
+use crate::machine::Machine;
+use crate::actor::Actor;
+use crate::initiator::Initiator;
+use crate::db::machine::MachineState;
+
+use crate::error::Result;
+
+type MachineMap = HashMap<String, Machine>;
+type ActorMap = HashMap<String, mpsc::Sender<Option<MutableSignalCloned<MachineState>>>>;
+type InitMap = HashMap<String, Mutable<Option<Machine>>>;
+
+pub enum Error {
+    NoSuchInitiator,
+    NoSuchMachine,
+    NoSuchActor,
+}
+
+impl fmt::Display for Error {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self {
+            Error::NoSuchInitiator => write!(f, "No initiator found with that name"),
+            Error::NoSuchActor => write!(f, "No actor found with that name"),
+            Error::NoSuchMachine => write!(f, "No machine found with that name"),
+        }
+    }
+}
+
+/// Main signal network
+///
+/// Network as per FRP, not the one with packages and frames
+pub struct Network {
+    machines: MachineMap,
+    actors: ActorMap,
+    inits: InitMap,
+}
+
+impl Network {
+    pub fn new(machines: MachineMap, actors: ActorMap, inits: InitMap) -> Self {
+        Self { machines, actors, inits }
+    }
+
+    pub fn connect_init(&self, init_key: &String, machine_key: &String) -> Result<()> {
+        let init = self.inits.get(init_key)
+            .ok_or(Error::NoSuchInitiator)?;
+        let machine = self.machines.get(machine_key)
+            .ok_or(Error::NoSuchMachine)?;
+
+        init.set(machine);
+    }
+
+    pub fn connect_actor(&self, machine_key: &String, actor_key: &String) -> Result<()> {
+        let machine = self.machines.get(machine_key)
+            .ok_or(Error::NoSuchMachine)?;
+        let actor = self.actors.get(actor_key)
+            .ok_or(Error::NoSuchActor)?;
+
+        actor.try_send(Some(machine.signal())).map_err(|_| Error::NoSuchActor.into())
+    }
+}

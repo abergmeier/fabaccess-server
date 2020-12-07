@@ -5,9 +5,11 @@ use toml;
 use rsasl::SaslError;
 
 // SpawnError is a somewhat ambigous name, `use as` to make it futures::SpawnError instead.
-use futures::task as futures;
+use futures::task as futures_task;
 
 use paho_mqtt::errors as mqtt;
+
+use crate::network;
 
 #[derive(Debug)]
 pub enum Error {
@@ -20,11 +22,12 @@ pub enum Error {
     LMDB(lmdb::Error),
     FlexbuffersDe(flexbuffers::DeserializationError),
     FlexbuffersSer(flexbuffers::SerializationError),
-    FuturesSpawn(futures::SpawnError),
+    FuturesSpawn(futures_task::SpawnError),
     MQTT(mqtt::Error),
     Config(config::ConfigError),
     BadVersion((u32,u32)),
     Argon2(argon2::Error),
+    EventNetwork(network::Error),
     Denied,
 }
 
@@ -75,6 +78,9 @@ impl fmt::Display for Error {
             }
             Error::Denied => {
                 write!(f, "You do not have the permission required to do that.")
+            }
+            Error::EventNetwork(e) => {
+                e.fmt(f)
             }
         }
     }
@@ -149,6 +155,12 @@ impl From<mqtt::Error> for Error {
 impl From<config::ConfigError> for Error {
     fn from(e: config::ConfigError) -> Error {
         Error::Config(e)
+    }
+}
+
+impl From<network::Error> for Error {
+    fn from(e: network::Error) -> Error {
+        Error::EventNetwork(e)
     }
 }
 
