@@ -17,6 +17,7 @@ mod machines;
 
 use machines::Machines;
 
+// TODO Session restoration by making the Bootstrap cap a SturdyRef
 pub struct Bootstrap {
     session: Arc<Session>,
     db: Databases,
@@ -35,7 +36,7 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         _: Params<auth_params::Owned>,
         mut res: Results<auth_results::Owned>
     ) -> Promise<(), capnp::Error> {
-        // Forbid mutltiple authentication for now
+        // TODO: Forbid mutltiple authentication for now
         // TODO: When should we allow multiple auth and how do me make sure that does not leak
         // priviledges (e.g. due to previously issues caps)?
 
