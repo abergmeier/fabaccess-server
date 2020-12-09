@@ -11,11 +11,14 @@ use futures::channel::mpsc;
 use futures_signals::signal::{Signal, MutableSignalCloned, MutableSignal, Mutable};
 
 use crate::db::machine::MachineState;
-use crate::registries::actuators::Actuator;
 use crate::config::Settings;
 use crate::error::Result;
 
 use crate::network::ActorMap;
+
+pub trait Actuator {
+    fn apply(&mut self, state: MachineState) -> BoxFuture<'static, ()>;
+}
 
 pub type ActorSignal = Box<dyn Signal<Item=MachineState> + Unpin + Send>;
 
@@ -92,8 +95,17 @@ impl Future for Actor {
     }
 }
 
+pub struct Dummy;
+
+impl Actuator for Dummy {
+    fn apply(&mut self, state: MachineState) -> BoxFuture<'static, ()> {
+        println!("New state for dummy actuator: {:?}", state);
+        Box::pin(smol::future::ready(()))
+    }
+}
+
 pub fn load() -> Result<(ActorMap, Vec<Actor>)> {
-    let d = Box::new(crate::registries::actuators::Dummy);
+    let d = Box::new(Dummy);
     let (tx, a) = Actor::wrap(d);
 
     let mut map = HashMap::new();
