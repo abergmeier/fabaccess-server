@@ -13,7 +13,6 @@ mod api;
 mod config;
 mod error;
 mod connection;
-mod registries;
 mod schema;
 mod db;
 mod machine;

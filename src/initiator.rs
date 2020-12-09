@@ -14,10 +14,13 @@ use crate::machine::{Machine, ReturnToken};
 use crate::db::machine::MachineState;
 use crate::db::user::{User, UserId, UserData};
 
-use crate::registries::sensors::Sensor;
 use crate::network::InitMap;
 
 use crate::error::Result;
+
+pub trait Sensor {
+    fn run_sensor(&mut self) -> BoxFuture<'static, (Option<User>, MachineState)>;
+}
 
 type BoxSensor = Box<dyn Sensor + Send>;
 
