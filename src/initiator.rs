@@ -107,7 +107,7 @@ impl Sensor for Dummy {
         -> BoxFuture<'static, (Option<User>, MachineState)>
     {
         let step = self.step;
-        self.step != self.step;
+        self.step = !self.step;
 
         let f = async move {
             Timer::after(std::time::Duration::from_secs(1)).await;
