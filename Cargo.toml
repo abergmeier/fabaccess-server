@@ -31,11 +31,10 @@ capnp-rpc = "0.13"
 capnp-futures = "0.13"
 
 serde = { version = "1.0", features = ["derive"] }
+toml = "0.5"
 flexbuffers = "0.1"
 
-glob = "0.3"
-toml = "0.5"
-config = { version = "0.10", default-features = false, features = ["toml"] }
+serde_dhall = { version =  "0.9", default-features = false }
 
 uuid = { version = "0.8", features = ["serde", "v4"] }
 

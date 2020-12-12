@@ -1,37 +1,36 @@
+use std::default::Default;
 use std::str::FromStr;
 use std::path::{Path, PathBuf};
-use serde::{Serialize, Deserialize};
 use std::io::Read;
-use std::fs::File;
-
-use crate::error::Result;
-
-use std::default::Default;
-
+use std::fs;
 use std::collections::HashMap;
 
-use config::Config;
-pub use config::ConfigError;
-use glob::glob;
+use serde::{Serialize, Deserialize};
 
-pub fn read(path: &Path) -> Result<Settings> {
-    let mut settings = Config::default();
-    settings
-        .merge(config::File::from(path)).unwrap();
+use crate::error::Result;
+use crate::machine::MachineDescription;
+use crate::db::machine::MachineIdentifier;
 
-    Ok(settings.try_into()?)
+pub fn read(path: &Path) -> Result<Config> {
+    serde_dhall::from_file(path).parse().map_err(Into::into)
 }
 
+#[deprecated]
+pub type Settings = Config;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Settings {
-    pub machines: PathBuf,
+pub struct Config {
+    /// A list of address/port pairs to listen on.
+    // TODO: This should really be a variant type; that is something that can figure out itself if
+    // it contains enough information to open a socket (i.e. it checks if it's a valid path (=>
+    // Unix socket) or IPv4/v6 address)
     pub listens: Box<[Listen]>,
-    pub shelly: Option<ShellyCfg>,
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShellyCfg {
-    pub mqtt_url: String
+    /// Machine descriptions to load
+    pub machines: HashMap<MachineIdentifier, MachineDescription>,
+
+    /// Modules to load and their configuration options
+    pub modules: HashMap<String, HashMap<String, String>>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -42,19 +41,11 @@ pub struct Listen {
 
 impl Default for Settings {
     fn default() -> Self {
-        Settings {
-            listens: Box::new([Listen {
-                    address: "127.0.0.1".to_string(),
-                    port: Some(DEFAULT_PORT)
-                },
-                Listen {
-                    address: "::1".to_string(),
-                    port: Some(DEFAULT_PORT)
-                }]),
-            shelly: Some(ShellyCfg {
-                mqtt_url: "127.0.0.1:1883".to_string()
-            }),
-            machines: PathBuf::from("/etc/bffh/machines/")
+        let modules: HashMap::<String, HashMap<String, String>> = HashMap::new();
+        Config {
+            listens: Box::new([]),
+            machines: HashMap::new(),
+            modules: modules,
         }
     }
 }

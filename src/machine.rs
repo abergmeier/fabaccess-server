@@ -235,7 +235,7 @@ impl MachineDescription {
 }
 
 pub fn load(config: &crate::config::Settings) -> Result<MachineMap> {
-    let mut map = MachineDescription::load_file(&config.machines)?;
+    let mut map = config.machines.clone();
 
     let it = map.drain()
         .map(|(k,v)| {

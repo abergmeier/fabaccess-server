@@ -48,10 +48,6 @@ impl Databases {
         let env = Arc::new(env);
         let mdb = machine::init(log.new(o!("system" => "machines")), &config, env.clone())?;
 
-        // Error out if any of the subsystems failed to start.
-        let defs = crate::machine::MachineDescription::load_file(&config.machines)?;
-
-
         let mut ac = access::AccessControl::new();
 
         let permdb = access::init(log.new(o!("system" => "permissions")), &config, env.clone())?;

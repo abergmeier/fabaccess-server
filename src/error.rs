@@ -1,6 +1,7 @@
 use std::io;
 use std::fmt;
 use toml;
+use serde_dhall;
 
 use rsasl::SaslError;
 
@@ -15,6 +16,7 @@ use crate::network;
 pub enum Error {
     TomlDe(toml::de::Error),
     TomlSer(toml::ser::Error),
+    Dhall(serde_dhall::Error),
     SASL(SaslError),
     IO(io::Error),
     Boxed(Box<dyn std::error::Error>),
@@ -24,7 +26,6 @@ pub enum Error {
     FlexbuffersSer(flexbuffers::SerializationError),
     FuturesSpawn(futures_task::SpawnError),
     MQTT(mqtt::Error),
-    Config(config::ConfigError),
     BadVersion((u32,u32)),
     Argon2(argon2::Error),
     EventNetwork(network::Error),
@@ -39,6 +40,9 @@ impl fmt::Display for Error {
             },
             Error::TomlSer(e) => {
                 write!(f, "TOML Serialization error: {}", e)
+            },
+            Error::Dhall(e) => {
+                write!(f, "Dhall coding error: {}", e)
             },
             Error::SASL(e) => {
                 write!(f, "SASL Error: {}", e)
@@ -67,9 +71,6 @@ impl fmt::Display for Error {
             Error::MQTT(e) => {
                 write!(f, "Paho MQTT encountered an error: {}", e)
             },
-            Error::Config(e) => {
-                write!(f, "Failed to parse config: {}", e)
-            }
             Error::Argon2(e) => {
                 write!(f, "Argon2 en/decoding failure: {}", e)
             }
@@ -107,6 +108,12 @@ impl From<toml::de::Error> for Error {
 impl From<toml::ser::Error> for Error {
     fn from(e: toml::ser::Error) -> Error {
         Error::TomlSer(e)
+    }
+}
+
+impl From<serde_dhall::Error> for Error {
+    fn from(e: serde_dhall::Error) -> Error {
+        Error::Dhall(e)
     }
 }
 
@@ -149,12 +156,6 @@ impl From<futures_task::SpawnError> for Error {
 impl From<mqtt::Error> for Error {
     fn from(e: mqtt::Error) -> Error {
         Error::MQTT(e)
-    }
-}
-
-impl From<config::ConfigError> for Error {
-    fn from(e: config::ConfigError) -> Error {
-        Error::Config(e)
     }
 }
 

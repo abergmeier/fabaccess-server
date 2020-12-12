@@ -105,7 +105,6 @@ impl MachineState {
 }
 
 pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) -> Result<Internal> {
-    let mut machine_descriptions = MachineDescription::load_file(&config.machines)?;
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
     let machdb = env.create_db(Some("machines"), flags)?;
