@@ -2,7 +2,12 @@ use std::pin::Pin;
 use std::task::{Poll, Context};
 use std::future::Future;
 use std::collections::HashMap;
+
 use smol::{Task, Timer};
+
+use slog::Logger;
+
+use paho_mqtt::AsyncClient;
 
 use futures::FutureExt;
 use futures::future::BoxFuture;
@@ -17,6 +22,7 @@ use crate::db::user::{User, UserId, UserData};
 use crate::network::InitMap;
 
 use crate::error::Result;
+use crate::config::Config;
 
 pub trait Sensor {
     fn run_sensor(&mut self) -> BoxFuture<'static, (Option<User>, MachineState)>;
@@ -82,14 +88,44 @@ impl Future for Initiator {
     }
 }
 
-pub fn load() -> Result<(InitMap, Vec<Initiator>)> {
-    let d = Box::new(Dummy::new());
-    let (m, i) = Initiator::wrap(d);
-
+pub fn load(log: &Logger, client: &AsyncClient, config: &Config) -> Result<(InitMap, Vec<Initiator>)> {
     let mut map = HashMap::new();
-    map.insert("Dummy".to_string(), m);
 
-    Ok((map, vec![i]))
+    let initiators = config.initiators.iter()
+        .map(|(k,v)| (k, load_single(log, client, k, &v.module, &v.params)))
+        .filter_map(|(k,n)| match n {
+            None => None,
+            Some(i) => Some((k, i)),
+        });
+
+    let mut v = Vec::new();
+    for (name, initiator) in initiators {
+        let (m, i) = Initiator::wrap(initiator);
+        map.insert(name.clone(), m);
+        v.push(i);
+    }
+
+    Ok((map, v))
+}
+
+fn load_single(
+    log: &Logger,
+    client: &AsyncClient,
+    name: &String,
+    module_name: &String,
+    params: &HashMap<String, String>
+    ) -> Option<BoxSensor>
+{
+    match module_name.as_ref() {
+        "Dummy" => {
+            Some(Box::new(Dummy::new()))
+        },
+        _ => {
+            error!(log, "No initiator found with name \"{}\", configured as \"{}\"", 
+                module_name, name);
+            None
+        }
+    }
 }
 
 pub struct Dummy {

@@ -10,6 +10,7 @@ use serde::{Serialize, Deserialize};
 use crate::error::Result;
 use crate::machine::MachineDescription;
 use crate::db::machine::MachineIdentifier;
+use crate::db::access::*;
 
 pub fn read(path: &Path) -> Result<Config> {
     serde_dhall::from_file(path)
@@ -38,6 +39,9 @@ pub struct Config {
     pub initiators: HashMap<String, ModuleConfig>,
 
     pub mqtt_url: String,
+
+    pub actor_connections: Box<[(String, String)]>,
+    pub init_connections: Box<[(String, String)]>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -48,8 +52,7 @@ pub struct Listen {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleConfig {
-    pub name: String,
-    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub module: String,
     pub params: HashMap<String, String>
 }
 
@@ -57,14 +60,26 @@ impl Default for Config {
     fn default() -> Self {
         let mut actors: HashMap::<String, ModuleConfig> = HashMap::new();
         let mut initiators: HashMap::<String, ModuleConfig> = HashMap::new();
+        let mut machines = HashMap::new();
 
         actors.insert("Actor".to_string(), ModuleConfig {
-            name: "Shelly".to_string(),
+            module: "Shelly".to_string(),
             params: HashMap::new(),
         });
         initiators.insert("Initiator".to_string(), ModuleConfig {
-            name: "TCP-Listen".to_string(),
+            module: "TCP-Listen".to_string(),
             params: HashMap::new(),
+        });
+
+        machines.insert("Testmachine".to_string(), MachineDescription {
+            name: "Testmachine".to_string(),
+            description: Some("A test machine".to_string()),
+            privs: PrivilegesBuf {
+                disclose: PermissionBuf::from_string("lab.test.read".to_string()),
+                read: PermissionBuf::from_string("lab.test.read".to_string()),
+                write: PermissionBuf::from_string("lab.test.write".to_string()),
+                manage: PermissionBuf::from_string("lab.test.admin".to_string()),
+            },
         });
 
         Config {
@@ -74,10 +89,16 @@ impl Default for Config {
                     port: Some(DEFAULT_PORT),
                 }
             ]),
-            machines: HashMap::new(),
+            machines: machines,
             actors: actors,
             initiators: initiators,
             mqtt_url: "tcp://localhost:1883".to_string(),
+            actor_connections: Box::new([
+                ("Testmachine".to_string(), "Actor".to_string()),
+            ]),
+            init_connections: Box::new([
+                ("Initiator".to_string(), "Testmachine".to_string()),
+            ]),
         }
     }
 }

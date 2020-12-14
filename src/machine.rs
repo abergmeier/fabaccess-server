@@ -224,7 +224,7 @@ pub struct MachineDescription {
 
     /// The permission required
     #[serde(flatten)]
-    privs: access::PrivilegesBuf,
+    pub privs: access::PrivilegesBuf,
 }
 
 impl MachineDescription {

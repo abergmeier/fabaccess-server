@@ -139,16 +139,26 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         let mqtt = AsyncClient::new(config.mqtt_url.clone())?;
         let tok = mqtt.connect(paho_mqtt::ConnectOptions::new());
 
-        smol::block_on(tok);
+        smol::block_on(tok)?;
 
         let machines = machine::load(&config)?;
         let (mut actor_map, actors) = actor::load(&log, &mqtt, &config)?;
-        let (mut init_map, initiators) = initiator::load()?;
+        let (mut init_map, initiators) = initiator::load(&log, &mqtt, &config)?;
 
-        let network = network::Network::new(machines, actor_map, init_map);
+        // TODO: restore connections between initiators, machines, actors
+        let mut network = network::Network::new(machines, actor_map, init_map);
 
+        for (a,b) in config.actor_connections.iter() {
+            if let Err(e) = network.connect_actor(a,b) {
+                error!(log, "{}", e);
+            }
+        }
 
-        // TODO HERE: restore connections between initiators, machines, actors
+        for (a,b) in config.init_connections.iter() {
+            if let Err(e) = network.connect_init(a,b) {
+                error!(log, "{}", e);
+            }
+        }
 
         let actor_tasks = actors.into_iter().map(|actor| ex.spawn(actor));
         let init_tasks = initiators.into_iter().map(|init| ex.spawn(init));
