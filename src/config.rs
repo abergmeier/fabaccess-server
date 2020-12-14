@@ -12,7 +12,9 @@ use crate::machine::MachineDescription;
 use crate::db::machine::MachineIdentifier;
 
 pub fn read(path: &Path) -> Result<Config> {
-    serde_dhall::from_file(path).parse().map_err(Into::into)
+    serde_dhall::from_file(path)
+        .parse()
+        .map_err(Into::into)
 }
 
 #[deprecated]
@@ -29,8 +31,13 @@ pub struct Config {
     /// Machine descriptions to load
     pub machines: HashMap<MachineIdentifier, MachineDescription>,
 
-    /// Modules to load and their configuration options
-    pub modules: HashMap<String, HashMap<String, String>>,
+    /// Actors to load and their configuration options
+    pub actors: HashMap<String, ModuleConfig>,
+
+    /// Initiators to load and their configuration options
+    pub initiators: HashMap<String, ModuleConfig>,
+
+    pub mqtt_url: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -39,13 +46,38 @@ pub struct Listen {
     pub port: Option<u16>,
 }
 
-impl Default for Settings {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleConfig {
+    pub name: String,
+    #[serde(skip_serializing_if = "HashMap::is_empty")]
+    pub params: HashMap<String, String>
+}
+
+impl Default for Config {
     fn default() -> Self {
-        let modules: HashMap::<String, HashMap<String, String>> = HashMap::new();
+        let mut actors: HashMap::<String, ModuleConfig> = HashMap::new();
+        let mut initiators: HashMap::<String, ModuleConfig> = HashMap::new();
+
+        actors.insert("Actor".to_string(), ModuleConfig {
+            name: "Shelly".to_string(),
+            params: HashMap::new(),
+        });
+        initiators.insert("Initiator".to_string(), ModuleConfig {
+            name: "TCP-Listen".to_string(),
+            params: HashMap::new(),
+        });
+
         Config {
-            listens: Box::new([]),
+            listens: Box::new([
+                Listen {
+                    address: "localhost".to_string(),
+                    port: Some(DEFAULT_PORT),
+                }
+            ]),
             machines: HashMap::new(),
-            modules: modules,
+            actors: actors,
+            initiators: initiators,
+            mqtt_url: "tcp://localhost:1883".to_string(),
         }
     }
 }

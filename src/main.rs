@@ -46,6 +46,8 @@ use error::Error;
 
 use slog::Logger;
 
+use paho_mqtt::AsyncClient;
+
 fn main() {
     use clap::{crate_version, crate_description, crate_name};
 
@@ -81,14 +83,14 @@ fn main() {
     // Check for the --print-default option first because we don't need to do anything else in that
     // case.
     if matches.is_present("print default") {
-        let config = config::Settings::default();
-        let encoded = toml::to_vec(&config).unwrap();
+        let config = config::Config::default();
+        let encoded = serde_dhall::serialize(&config).to_string().unwrap();
 
         // Direct writing to fd 1 is faster but also prevents any print-formatting that could
         // invalidate the generated TOML
         let stdout = io::stdout();
         let mut handle = stdout.lock();
-        handle.write_all(&encoded).unwrap();
+        handle.write_all(&encoded.as_bytes()).unwrap();
 
         // Early return to exit.
         return;
@@ -123,7 +125,7 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
     // If no `config` option is given use a preset default.
     let configpath = matches.value_of("config").unwrap_or("/etc/bffh/config.toml");
     let config = config::read(&PathBuf::from_str(configpath).unwrap())?;
-
+    debug!(log, "Loaded Config: {:?}", config);
 
     if matches.is_present("dump") {
         error!(log, "Dumping is currently not implemented");
@@ -134,8 +136,13 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
     } else {
         let ex = Executor::new();
 
+        let mqtt = AsyncClient::new(config.mqtt_url.clone())?;
+        let tok = mqtt.connect(paho_mqtt::ConnectOptions::new());
+
+        smol::block_on(tok);
+
         let machines = machine::load(&config)?;
-        let (mut actor_map, actors) = actor::load()?;
+        let (mut actor_map, actors) = actor::load(&log, &mqtt, &config)?;
         let (mut init_map, initiators) = initiator::load()?;
 
         let network = network::Network::new(machines, actor_map, init_map);
@@ -143,9 +150,6 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
 
         // TODO HERE: restore connections between initiators, machines, actors
 
-        // TODO HERE: Spawn all actors & inits
-
-        // Like so
         let actor_tasks = actors.into_iter().map(|actor| ex.spawn(actor));
         let init_tasks = initiators.into_iter().map(|init| ex.spawn(init));
 

@@ -39,6 +39,7 @@ impl fmt::Display for Error {
 /// Main signal network
 ///
 /// Network as per FRP, not the one with packages and frames
+// TODO De/Serialize established connection on startup/shutdown.
 pub struct Network {
     inits: InitMap,
 

@@ -8,6 +8,7 @@
 use slog::Logger;
 
 mod shelly;
+pub use shelly::Shelly;
 
 use futures::prelude::*;
 use futures::task::Spawn;

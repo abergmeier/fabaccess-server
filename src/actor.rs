@@ -11,10 +11,12 @@ use futures::channel::mpsc;
 use futures_signals::signal::{Signal, MutableSignalCloned, MutableSignal, Mutable};
 
 use crate::db::machine::MachineState;
-use crate::config::Settings;
+use crate::config::Config;
 use crate::error::Result;
-
 use crate::network::ActorMap;
+
+use paho_mqtt::AsyncClient;
+use slog::Logger;
 
 pub trait Actuator {
     fn apply(&mut self, state: MachineState) -> BoxFuture<'static, ()>;
@@ -104,12 +106,34 @@ impl Actuator for Dummy {
     }
 }
 
-pub fn load() -> Result<(ActorMap, Vec<Actor>)> {
-    let d = Box::new(Dummy);
-    let (tx, a) = Actor::wrap(d);
-
+pub fn load(log: &Logger, client: &AsyncClient, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
     let mut map = HashMap::new();
-    map.insert("Dummy".to_string(), tx);
 
-    Ok(( map, vec![a] ))
+    let actuators = config.actors.iter()
+        .map(|(k,v)| (k, load_single(log, client, k, &v.name, &v.params)))
+        .filter_map(|(k, n)| match n {
+            None => None,
+            Some(a) => Some((k, a))
+        });
+
+    let mut v = Vec::new();
+    for (name, actuator) in actuators {
+        let (tx, a) = Actor::wrap(actuator);
+        map.insert(name.clone(), tx);
+        v.push(a);
+    }
+
+
+    Ok(( map, v ))
+}
+
+fn load_single(log: &Logger, client: &AsyncClient, name: &String, module_name: &String, params: &HashMap<String, String>) -> Option<Box<dyn Actuator + Sync + Send>> {
+    use crate::modules::*;
+
+    match module_name.as_ref() {
+        "Shelly" => {
+            Some(Box::new(Shelly::new(log, name.clone(), client.clone())))
+        }
+        _ => None,
+    }
 }

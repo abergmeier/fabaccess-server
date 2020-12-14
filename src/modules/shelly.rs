@@ -23,7 +23,7 @@ use paho_mqtt as mqtt;
 /// This actuator will toggle the shellie with the given `name`.
 /// If you need to toggle shellies on multiple brokers you need multiple instanced of this
 /// actuator with different clients.
-struct Shelly {
+pub struct Shelly {
     log: Logger,
     name: String,
     client: mqtt::AsyncClient,
