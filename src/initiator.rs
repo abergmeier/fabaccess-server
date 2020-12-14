@@ -80,7 +80,7 @@ impl Future for Initiator {
                 },
                 Some(Poll::Ready((user, state))) => {
                     this.future.take();
-                    this.machine.as_mut().map(|machine| machine.request_state_change(user.as_ref(), state));
+                    this.machine.as_mut().map(|machine| machine.request_state_change(user.as_ref(), state).unwrap());
                 }
                 Some(Poll::Pending) => return Poll::Pending,
             }
@@ -118,7 +118,7 @@ fn load_single(
 {
     match module_name.as_ref() {
         "Dummy" => {
-            Some(Box::new(Dummy::new()))
+            Some(Box::new(Dummy::new(log)))
         },
         _ => {
             error!(log, "No initiator found with name \"{}\", configured as \"{}\"", 
@@ -129,12 +129,13 @@ fn load_single(
 }
 
 pub struct Dummy {
-    step: bool
+    log: Logger,
+    step: bool,
 }
 
 impl Dummy {
-    pub fn new() -> Self {
-        Self { step: false }
+    pub fn new(log: &Logger) -> Self {
+        Self { log: log.new(o!("module" => "Dummy Initiator")), step: false }
     }
 }
 
@@ -143,7 +144,9 @@ impl Sensor for Dummy {
         -> BoxFuture<'static, (Option<User>, MachineState)>
     {
         let step = self.step;
-        self.step = !self.step;
+        self.step = !step;
+
+        info!(self.log, "Kicking off new dummy initiator state change: {}", step);
 
         let f = async move {
             Timer::after(std::time::Duration::from_secs(1)).await;

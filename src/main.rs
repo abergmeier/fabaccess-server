@@ -160,8 +160,12 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
             }
         }
 
-        let actor_tasks = actors.into_iter().map(|actor| ex.spawn(actor));
-        let init_tasks = initiators.into_iter().map(|init| ex.spawn(init));
+        for actor in actors.into_iter() {
+            ex.spawn(actor).detach();
+        }
+        for init in initiators.into_iter() {
+            ex.spawn(init).detach();
+        }
 
         let (signal, shutdown) = async_channel::bounded::<()>(1);
         easy_parallel::Parallel::new()

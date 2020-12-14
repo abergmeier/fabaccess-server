@@ -62,6 +62,9 @@ impl Future for Actor {
         let mut this = &mut *self;
         let mut done = false; // Is the channel with new state-signals exhausted?
 
+        // FIXME: This is potentially invalid, and may lead to the situation that the signal is
+        // replaced *twice* but the second change will not be honoured since this implementation of
+        // events is *EDGE*-triggered!
         // Update the signal we're polling from, if there is an update that is.
         match Stream::poll_next(Pin::new(&mut this.rx), cx) {
             Poll::Ready(None) => done = true,
@@ -69,39 +72,58 @@ impl Future for Actor {
             Poll::Pending => { },
         }
 
-        // Poll the `apply` future.
-        match this.future.as_mut().map(|future| Future::poll(Pin::new(future), cx)) {
-            None => { }
-            Some(Poll::Ready(_)) => this.future = None,
-            Some(Poll::Pending) => return Poll::Pending,
-        }
+        // Work until there is no more work to do.
+        loop {
 
-        // Poll the signal and apply all changes that happen to the inner Actuator
-        match this.inner.as_mut().map(|inner| Signal::poll_change(Pin::new(inner), cx)) {
-            None => Poll::Pending,
-            Some(Poll::Pending) => Poll::Pending,
-            Some(Poll::Ready(None)) => {
-                this.inner = None;
+            // Poll the `apply` future. And ensure it's completed before the next one is started
+            match this.future.as_mut().map(|future| Future::poll(Pin::new(future), cx)) {
+                // Skip and poll for a new future to do
+                None => { }
 
-                if done {
-                    Poll::Ready(())
-                } else {
-                    Poll::Pending
+                // This apply future is done, get a new one
+                Some(Poll::Ready(_)) => this.future = None,
+
+                // This future would block so we return to continue work another time
+                Some(Poll::Pending) => return Poll::Pending,
+            }
+
+            // Poll the signal and apply any change that happen to the inner Actuator
+            match this.inner.as_mut().map(|inner| Signal::poll_change(Pin::new(inner), cx)) {
+                // No signal to poll
+                None => return Poll::Pending,
+                Some(Poll::Pending) => return Poll::Pending,
+                Some(Poll::Ready(None)) => {
+                    this.inner = None;
+
+                    if done {
+                        return Poll::Ready(());
+                    } else {
+                        return Poll::Pending;
+                    }
+                },
+                Some(Poll::Ready(Some(state))) => {
+                    // This future MUST be polled before we exit from the Actor::poll because if we
+                    // do not do that it will not register the dependency and thus NOT BE POLLED.
+                    this.future.replace(this.actuator.apply(state));
                 }
-            },
-            Some(Poll::Ready(Some(state))) => {
-                this.future.replace(this.actuator.apply(state));
-                Poll::Pending
             }
         }
     }
 }
 
-pub struct Dummy;
+pub struct Dummy {
+    log: Logger,
+}
+
+impl Dummy {
+    pub fn new(log: &Logger) -> Self {
+        Self { log: log.new(o!("module" => "Dummy Actor")) }
+    }
+}
 
 impl Actuator for Dummy {
     fn apply(&mut self, state: MachineState) -> BoxFuture<'static, ()> {
-        println!("New state for dummy actuator: {:?}", state);
+        info!(self.log, "New state for dummy actuator: {:?}", state);
         Box::pin(smol::future::ready(()))
     }
 }
@@ -146,7 +168,7 @@ fn load_single(
             Some(Box::new(Shelly::new(log, name.clone(), client.clone())))
         },
         "Dummy" => {
-            Some(Box::new(Dummy))
+            Some(Box::new(Dummy::new(log)))
         }
         _ => {
             error!(log, "No actor found with name \"{}\", configured as \"{}\".", module_name, name);

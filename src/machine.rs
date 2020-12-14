@@ -172,12 +172,8 @@ impl Inner {
             return Ok(tx);
     }
 
-    pub fn set_state(&mut self, state: Status) {
-        self.state.set(MachineState { state })
-    }
-
     pub fn get_signal(&self) -> impl Signal {
-        self.state.signal_cloned().dedupe_cloned()
+        self.state.signal_cloned()
     }
 
     pub fn reset_state(&mut self) {
@@ -199,6 +195,7 @@ impl Future for Inner {
             return Poll::Ready(self.state.get_cloned());
         }
 
+        // Check if the return token was sent/dropped
         if let Some(mut rx) = this.rx.take() {
             match Future::poll(Pin::new(&mut rx), cx) {
                 // Regardless if we were canceled or properly returned, reset.
