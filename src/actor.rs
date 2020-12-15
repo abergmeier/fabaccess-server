@@ -1,6 +1,6 @@
 use std::pin::Pin;
 use std::task::{Poll, Context};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::collections::HashMap;
 use std::future::Future;
 
@@ -141,7 +141,7 @@ pub fn load(log: &Logger, client: &AsyncClient, config: &Config) -> Result<(Acto
     let mut v = Vec::new();
     for (name, actuator) in actuators {
         let (tx, a) = Actor::wrap(actuator);
-        map.insert(name.clone(), tx);
+        map.insert(name.clone(), Mutex::new(tx));
         v.push(a);
     }
 

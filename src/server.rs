@@ -25,6 +25,7 @@ use std::str::FromStr;
 use std::sync::Arc;
 
 use crate::db::Databases;
+use crate::network::Network;
 
 /// Handle all API connections and run the RPC tasks spawned from that on the local thread.
 pub fn serve_api_connections(log: Arc<Logger>, config: Settings, db: Databases, nw: Network)
@@ -71,6 +72,8 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Settings, db: Databases, 
 
     let local_ex = LocalExecutor::new();
 
+    let network = Arc::new(nw);
+
     let inner_log = log.clone();
     let loop_log = log.clone();
 
@@ -79,7 +82,7 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Settings, db: Databases, 
         let listeners = listeners_s.await;
         let incoming = stream::select_all(listeners.iter().map(|l| l.incoming()));
 
-        let mut handler = connection::ConnectionHandler::new(inner_log.new(o!()), db);
+        let mut handler = connection::ConnectionHandler::new(inner_log.new(o!()), db, network.clone());
 
         // For each incoming connection start a new task to handle it
         let handle_sockets = incoming.map(|socket| {

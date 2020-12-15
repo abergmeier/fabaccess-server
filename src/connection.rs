@@ -18,6 +18,7 @@ use crate::db::Databases;
 use crate::db::access::{AccessControl, Permission};
 use crate::db::user::User;
 use crate::builtin;
+use crate::network::Network;
 
 #[derive(Debug, Clone)]
 /// Connection context
@@ -49,17 +50,18 @@ impl Session {
 pub struct ConnectionHandler {
     log: Logger,
     db: Databases,
+    network: Arc<Network>,
 }
 
 impl ConnectionHandler {
-    pub fn new(log: Logger, db: Databases) -> Self {
-        Self { log, db }
+    pub fn new(log: Logger, db: Databases, network: Arc<Network>) -> Self {
+        Self { log, db, network }
     }
 
     pub fn handle(&mut self, mut stream: TcpStream) -> impl Future<Output=Result<()>> {
         info!(self.log, "New connection from on {:?}", stream);
         let session = Arc::new(Session::new(self.log.new(o!()), self.db.access.clone()));
-        let boots = Bootstrap::new(session, self.db.clone());
+        let boots = Bootstrap::new(session, self.db.clone(), self.network.clone());
         let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
 
         let network = twoparty::VatNetwork::new(stream.clone(), stream,

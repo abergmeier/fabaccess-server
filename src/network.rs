@@ -1,6 +1,6 @@
 use std::fmt;
 
-use std::sync::Arc;
+use std::sync::{Arc, Mutex, MutexGuard, TryLockResult};
 use std::collections::HashMap;
 
 use smol::Executor;
@@ -16,7 +16,7 @@ use crate::db::machine::MachineState;
 use crate::error::Result;
 
 pub type MachineMap = HashMap<String, Machine>;
-pub type ActorMap = HashMap<String, mpsc::Sender<Option<ActorSignal>>>;
+pub type ActorMap = HashMap<String, Mutex<mpsc::Sender<Option<ActorSignal>>>>;
 pub type InitMap = HashMap<String, Mutable<Option<Machine>>>;
 
 #[derive(Debug, PartialEq, Eq)]
@@ -69,12 +69,17 @@ impl Network {
         Ok(())
     }
 
-    pub fn connect_actor(&mut self, machine_key: &String, actor_key: &String) -> Result<()> {
+    pub fn connect_actor(&mut self, machine_key: &String, actor_key: &String)
+        -> Result<()>
+    {
         let machine = self.machines.get(machine_key)
             .ok_or(Error::NoSuchMachine)?;
-        let actor = self.actors.get_mut(actor_key)
+        let actor = self.actors.get(actor_key)
             .ok_or(Error::NoSuchActor)?;
 
-        actor.try_send(Some(Box::new(machine.signal()))).map_err(|_| Error::NoSuchActor.into())
+        // FIXME Yeah this should not unwrap. Really, really shoudln't.
+        let mut guard = actor.try_lock().unwrap();
+
+        guard.try_send(Some(Box::new(machine.signal()))).map_err(|_| Error::NoSuchActor.into())
     }
 }

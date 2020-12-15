@@ -9,6 +9,8 @@ use crate::connection::Session;
 use crate::db::Databases;
 use crate::db::machine::uuid_from_api;
 
+use crate::network::Network;
+
 use super::machine::Machine;
 
 /// An implementation of the `Machines` API
@@ -18,12 +20,13 @@ pub struct Machines {
     session: Arc<Session>,
 
     db: Databases,
+    network: Arc<Network>,
 }
 
 impl Machines {
-    pub fn new(session: Arc<Session>, db: Databases) -> Self {
+    pub fn new(session: Arc<Session>, db: Databases, network: Arc<Network>) -> Self {
         info!(session.log, "Machines created");
-        Self { session, db }
+        Self { session, db, network }
     }
 }
 
