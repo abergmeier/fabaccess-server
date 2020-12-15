@@ -27,7 +27,9 @@ use std::sync::Arc;
 use crate::db::Databases;
 
 /// Handle all API connections and run the RPC tasks spawned from that on the local thread.
-pub fn serve_api_connections(log: Arc<Logger>, config: Settings, db: Databases) -> Result<(), Error> {
+pub fn serve_api_connections(log: Arc<Logger>, config: Settings, db: Databases, nw: Network)
+    -> Result<(), Error> 
+{
     let signal = Box::pin(async {
         let (tx, mut rx) = UnixStream::pair()?;
         // Initialize signal handler.
