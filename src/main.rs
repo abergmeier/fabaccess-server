@@ -132,8 +132,8 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         Ok(())
     } else if matches.is_present("load") {
         let db = db::Databases::new(&log, &config)?;
-
         let mut dir = PathBuf::from(matches.value_of_os("load").unwrap());
+
         dir.push("users.toml");
         let map = db::user::load_file(&dir)?;
         for (uid,user) in map.iter() {
@@ -141,6 +141,11 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         }
         debug!(log, "Loaded users: {:?}", map);
         dir.pop();
+
+        dir.push("roles.toml");
+        db.access.internal.load_roles(&dir)?;
+        dir.pop();
+
         Ok(())
     } else {
         let ex = Executor::new();

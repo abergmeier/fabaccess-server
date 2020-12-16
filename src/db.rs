@@ -49,10 +49,8 @@ impl Databases {
         let env = Arc::new(env);
         let mdb = machine::init(log.new(o!("system" => "machines")), &config, env.clone())?;
 
-        let mut ac = access::AccessControl::new();
-
         let permdb = access::init(log.new(o!("system" => "permissions")), &config, env.clone())?;
-        ac.add_source_unchecked("Internal".to_string(), Box::new(permdb));
+        let mut ac = access::AccessControl::new(permdb);
 
         let passdb = pass::PassDB::init(log.new(o!("system" => "passwords")), env.clone()).unwrap();
 

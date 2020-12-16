@@ -30,15 +30,17 @@ use crate::error::Result;
 pub mod internal;
 
 use crate::db::user::UserData;
-pub use internal::init;
+pub use internal::{init, Internal};
 
 pub struct AccessControl {
+    pub internal: Internal,
     sources: HashMap<String, Box<dyn RoleDB>>,
 }
 
 impl AccessControl {
-    pub fn new() -> Self {
+    pub fn new(internal: Internal) -> Self {
         Self {
+            internal: internal,
             sources: HashMap::new()
         }
     }
@@ -54,6 +56,9 @@ impl AccessControl {
             if v.check(user, perm.as_ref())? {
                 return Ok(true);
             }
+        }
+        if self.internal.check(user, perm.as_ref())? {
+            return Ok(true);
         }
 
         return Ok(false);
