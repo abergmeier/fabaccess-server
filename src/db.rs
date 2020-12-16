@@ -28,6 +28,7 @@ pub struct Databases {
     pub access: Arc<access::AccessControl>,
     pub machine: Arc<machine::internal::Internal>,
     pub passdb: Arc<pass::PassDB>,
+    pub userdb: Arc<user::Internal>,
 }
 
 const LMDB_MAX_DB: u32 = 16;
@@ -55,10 +56,13 @@ impl Databases {
 
         let passdb = pass::PassDB::init(log.new(o!("system" => "passwords")), env.clone()).unwrap();
 
+        let userdb = user::init(log.new(o!("system" => "users")), &config, env.clone())?;
+
         Ok(Self {
             access: Arc::new(ac),
             passdb: Arc::new(passdb),
-            machine: Arc::new(mdb)
+            machine: Arc::new(mdb),
+            userdb: Arc::new(userdb),
         })
     }
 }

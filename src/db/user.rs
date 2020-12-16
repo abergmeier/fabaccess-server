@@ -4,14 +4,19 @@
 use serde::{Serialize, Deserialize};
 use std::fmt;
 use std::fs;
+use std::sync::Arc;
 use std::iter::FromIterator;
 use std::path::Path;
 use crate::db::access::RoleIdentifier;
 use std::collections::HashMap;
 
+use slog::Logger;
+
 use crate::error::Result;
+use crate::config::Config;
 
 mod internal;
+pub use internal::Internal;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// An user
@@ -115,6 +120,15 @@ pub fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, User>> {
         , User::new(UserId::new(uid, None, None), user_data)
         )
     )))
+}
+
+pub fn init(log: Logger, config: &Config, env: Arc<lmdb::Environment>) -> Result<Internal> {
+    let mut flags = lmdb::DatabaseFlags::empty();
+    flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
+    let db = env.create_db(Some("users"), flags)?;
+    debug!(&log, "Opened user db successfully.");
+
+    Ok(Internal::new(log, env, db))
 }
 
 #[cfg(test_DISABLED)]
