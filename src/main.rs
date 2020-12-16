@@ -146,6 +146,10 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         db.access.internal.load_roles(&dir)?;
         dir.pop();
 
+        dir.push("pass.toml");
+        db.passdb.load_file(&dir);
+        dir.pop();
+
         Ok(())
     } else {
         let ex = Executor::new();
