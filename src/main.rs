@@ -168,15 +168,17 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         }
 
         let (signal, shutdown) = async_channel::bounded::<()>(1);
-        easy_parallel::Parallel::new()
+        let (_, r) = easy_parallel::Parallel::new()
             .each(0..4, |_| smol::block_on(ex.run(shutdown.recv())))
-            .run();
+            .finish(|| {
+                let db = db::Databases::new(&log, &config)?;
+                // TODO: Spawn api connections on their own (non-main) thread, use the main thread to
+                // handle signals (a cli if stdin is not closed?) and make it stop and clean up all threads
+                // when bffh should exit
+                server::serve_api_connections(log.clone(), config, db, network)
+                // Signal is dropped here, stopping all executor threads as well.
+            });
 
-        let db = db::Databases::new(&log, &config)?;
-        // TODO: Spawn api connections on their own (non-main) thread, use the main thread to
-        // handle signals (a cli if stdin is not closed?) and make it stop and clean up all threads
-        // when bffh should exit
-        server::serve_api_connections(log.clone(), config, db, network)
-        // Signal is dropped here, stopping all executor threads as well.
+        return r;
     }
 }
