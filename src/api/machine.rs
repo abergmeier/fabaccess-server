@@ -5,21 +5,21 @@ use capnp::Error;
 
 use crate::schema::api_capnp::State;
 use crate::schema::api_capnp::machine::*;
-use crate::db::machine::MachineIdentifier;
 use crate::connection::Session;
 use crate::db::Databases;
 use crate::db::machine::Status;
+use crate::machine::Machine as NwMachine;
 
 #[derive(Clone)]
 pub struct Machine {
     session: Arc<Session>,
-    id: MachineIdentifier,
+    machine: NwMachine,
     db: Databases,
 }
 
 impl Machine {
-    pub fn new(session: Arc<Session>, id: MachineIdentifier, db: Databases) -> Self {
-        Machine { session, id, db }
+    pub fn new(session: Arc<Session>, machine: NwMachine, db: Databases) -> Self {
+        Machine { session, machine, db }
     }
 
     pub fn fill(self: Arc<Self>, builder: &mut Builder) {

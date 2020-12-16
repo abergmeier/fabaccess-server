@@ -46,7 +46,7 @@ pub struct Network {
     // Store connections 
     //miconn: Vec<(String, String)>,
 
-    machines: MachineMap,
+    pub machines: MachineMap,
 
     // Store connections 
     //maconn: Vec<(String, String)>,

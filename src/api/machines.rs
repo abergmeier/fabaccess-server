@@ -36,6 +36,19 @@ impl machines::Server for Machines {
         mut results: machines::ListMachinesResults)
         -> Promise<(), Error>
     {
+        let v: Vec<(String, crate::machine::Machine)> = self.network.machines.iter()
+            .map(|(n, m)| (n.clone(), m.clone()))
+            .collect();
+
+        let mut res = results.get();
+        let mut machines = res.init_machines(v.len() as u32);
+
+        for (i, (name, machine)) in v.into_iter().enumerate() {
+            let machine = Arc::new(Machine::new(self.session.clone(), machine, self.db.clone()));
+            let mut builder = machines.reborrow().get(i as u32);
+            Machine::fill(machine, &mut builder);
+        }
+
         Promise::ok(())
     }
 
@@ -44,6 +57,14 @@ impl machines::Server for Machines {
         mut results: machines::GetMachineResults)
         -> Promise<(), Error>
     {
-        unimplemented!()
+        if let Ok(uid) = params.get().and_then(|x| x.get_uid()) {
+            if let Some(machine_inner) = self.network.machines.get(uid) {
+                let machine = Arc::new(Machine::new(self.session.clone(), machine_inner.clone(), self.db.clone()));
+                let mut builder = results.get().init_machine();
+                Machine::fill(machine, &mut builder);
+            }
+        }
+
+        Promise::ok(())
     }
 }
