@@ -27,20 +27,46 @@ use crate::config::Settings;
 use crate::api::Session;
 
 pub use crate::schema::auth_capnp;
+use crate::db::pass::PassDB;
 
-pub struct AppData;
+pub struct AppData {
+    passdb: Arc<PassDB>,
+}
 pub struct SessionData;
+
 
 struct CB;
 impl Callback<AppData, SessionData> for CB {
-    fn callback(sasl: SaslCtx<AppData, SessionData>, session: SaslSession<SessionData>, prop: Property) -> libc::c_int {
+    fn callback(mut sasl: SaslCtx<AppData, SessionData>, session: SaslSession<SessionData>, prop: Property) -> libc::c_int {
         let ret = match prop {
             Property::GSASL_VALIDATE_SIMPLE => {
-                let authid = session.get_property(Property::GSASL_AUTHID).unwrap().to_string_lossy();
-                let pass = session.get_property(Property::GSASL_PASSWORD).unwrap().to_string_lossy();
+                let authid = match session.get_property(Property::GSASL_AUTHID) {
+                    None => return ReturnCode::GSASL_NO_AUTHID as libc::c_int,
+                    Some(a) => {
+                        match a.to_str() {
+                            Ok(s) => s,
+                            Err(e) => return ReturnCode::GSASL_SASLPREP_ERROR as libc::c_int,
+                        }
+                    },
+                };
 
-                if authid == "test" && pass == "secret" {
-                    ReturnCode::GSASL_OK
+                let pass = session.get_property(Property::GSASL_PASSWORD);
+                if pass.is_none() {
+                    return ReturnCode::GSASL_NO_PASSWORD as libc::c_int;
+                }
+                let pass = pass.unwrap();
+
+
+                if let Some(sessiondata) = sasl.retrieve_mut() {
+                    if let Ok(Some(b)) = sessiondata.passdb.check(authid, pass.to_bytes()) {
+                        if b {
+                            ReturnCode::GSASL_OK
+                        } else {
+                            ReturnCode::GSASL_AUTHENTICATION_ERROR
+                        }
+                    } else {
+                        ReturnCode::GSASL_AUTHENTICATION_ERROR
+                    }
                 } else {
                     ReturnCode::GSASL_AUTHENTICATION_ERROR
                 }
@@ -60,10 +86,10 @@ pub struct Auth {
 }
 
 impl Auth {
-    pub fn new(session: Arc<Session>) -> Self {
+    pub fn new(passdb: Arc<PassDB>, session: Arc<Session>) -> Self {
         let mut ctx = SASL::new().unwrap();
 
-        let mut appdata = Box::new(AppData);
+        let mut appdata = Box::new(AppData { passdb });
 
         ctx.store(appdata);
 
@@ -172,58 +198,34 @@ impl auth_capnp::authentication::Server for Auth {
 // somewhere and pass it somewhere else and in between don't check if it's the right type and
 // accidentally pass the authzid where the authcid should have gone.
 
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-/// Authentication Identity
-///
-/// Under the hood a string because the form depends heavily on the method
-struct AuthCId(String);
-
-#[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
-/// Authorization Identity
-///
-/// This identity is internal to FabAccess and completely independent from the authentication
-/// method or source
-struct AuthZId {
-    /// Main User ID. Generally an user name or similar
-    uid: String,
-    /// Sub user ID. 
-    ///
-    /// Can change scopes for permissions, e.g. having a +admin account with more permissions than
-    /// the default account and +dashboard et.al. accounts that have restricted permissions for
-    /// their applications
-    subuid: String,
-    /// Realm this account originates.
-    ///
-    /// The Realm is usually described by a domain name but local policy may dictate an unrelated
-    /// mapping
-    realm: String,
-}
-
 // What is a man?! A miserable little pile of secrets!
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 /// Authentication/Authorization user object.
 ///
-/// This struct contains the user as is passed to the actual authentication/authorization
-/// subsystems
+/// This struct describes the user as can be gathered from API authentication exchanges.
+/// Specifically this is the value bffh gets after a successful authentication.
 ///
-pub struct User {
+pub struct AuthenticationData {
     /// Contains the Authentication ID used
     ///
-    /// The authentication ID is an identifier for the authentication exchange. This is different
-    /// than the ID of the user to be authenticated; for example when using x509 the authcid is
-    /// the dn of the certificate, when using GSSAPI the authcid is of form `<userid>@<REALM>`
-    authcid: AuthCId,
+    /// The authentication ID is an identifier for the authentication exchange. This is
+    /// conceptually different than the ID of the user to be authenticated; for example when using
+    /// x509 the authcid is the dn of the certificate, when using GSSAPI the authcid is of form
+    /// `<ID>@<REALM>`
+    authcid: String,
 
-    /// Contains the Authorization ID
+    /// Authorization ID
     ///
-    /// This is the identifier of the user to *authenticate as*. This in several cases is different
-    /// to the `authcid`: 
+    /// The authzid represents the identity that a client wants to act as. In our case this is
+    /// always an user id. If unset no preference is indicated and the server will authenticate the
+    /// client as whatever user — if any — they associate with the authcid. Setting the authzid is
+    /// useful in a number if situations:
     /// If somebody wants to authenticate as somebody else, su-style.
     /// If a person wants to authenticate as a higher-permissions account, e.g. foo may set authzid foo+admin
     /// to split normal user and "admin" accounts.
     /// If a method requires a specific authcid that is different from the identifier of the user
     /// to authenticate as, e.g. GSSAPI, x509 client certificates, API TOKEN authentication.
-    authzid: AuthZId,
+    authzid: String,
 
     /// Contains the authentication method used
     ///

@@ -9,21 +9,27 @@ use crate::connection::Session;
 
 use crate::db::Databases;
 
+use crate::builtin;
+
+use crate::network::Network;
+
 pub mod auth;
 mod machine;
 mod machines;
 
 use machines::Machines;
 
+// TODO Session restoration by making the Bootstrap cap a SturdyRef
 pub struct Bootstrap {
     session: Arc<Session>,
     db: Databases,
+    nw: Arc<Network>,
 }
 
 impl Bootstrap {
-    pub fn new(session: Arc<Session>, db: Databases) -> Self {
+    pub fn new(session: Arc<Session>, db: Databases, nw: Arc<Network>) -> Self {
         info!(session.log, "Created Bootstrap");
-        Self { session, db }
+        Self { session, db, nw }
     }
 }
 
@@ -33,12 +39,11 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         _: Params<auth_params::Owned>,
         mut res: Results<auth_results::Owned>
     ) -> Promise<(), capnp::Error> {
-        // Forbid mutltiple authentication for now
+        // TODO: Forbid mutltiple authentication for now
         // TODO: When should we allow multiple auth and how do me make sure that does not leak
         // priviledges (e.g. due to previously issues caps)?
-        if self.session.user.is_none() {
-            res.get().set_auth(capnp_rpc::new_client(auth::Auth::new(self.session.clone())))
-        }
+
+        res.get().set_auth(capnp_rpc::new_client(auth::Auth::new(self.db.passdb.clone(), self.session.clone())));
 
         Promise::ok(())
     }
@@ -55,7 +60,7 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         mut res: Results<machines_results::Owned>
     ) -> Promise<(), capnp::Error> {
         // TODO actual permission check and stuff
-        let c = capnp_rpc::new_client(Machines::new(self.session.clone(), self.db.clone()));
+        let c = capnp_rpc::new_client(Machines::new(self.session.clone(), self.db.clone(), self.nw.clone()));
         res.get().set_machines(c);
 
         Promise::ok(())

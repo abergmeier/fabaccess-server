@@ -1,37 +1,47 @@
+use std::default::Default;
 use std::str::FromStr;
 use std::path::{Path, PathBuf};
-use serde::{Serialize, Deserialize};
 use std::io::Read;
-use std::fs::File;
-
-use crate::error::Result;
-
-use std::default::Default;
-
+use std::fs;
 use std::collections::HashMap;
 
-use config::Config;
-pub use config::ConfigError;
-use glob::glob;
+use serde::{Serialize, Deserialize};
 
-pub fn read(path: &Path) -> Result<Settings> {
-    let mut settings = Config::default();
-    settings
-        .merge(config::File::from(path)).unwrap();
+use crate::error::Result;
+use crate::machine::MachineDescription;
+use crate::db::machine::MachineIdentifier;
+use crate::db::access::*;
 
-    Ok(settings.try_into()?)
+pub fn read(path: &Path) -> Result<Config> {
+    serde_dhall::from_file(path)
+        .parse()
+        .map_err(Into::into)
 }
 
+#[deprecated]
+pub type Settings = Config;
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Settings {
-    pub machines: PathBuf,
+pub struct Config {
+    /// A list of address/port pairs to listen on.
+    // TODO: This should really be a variant type; that is something that can figure out itself if
+    // it contains enough information to open a socket (i.e. it checks if it's a valid path (=>
+    // Unix socket) or IPv4/v6 address)
     pub listens: Box<[Listen]>,
-    pub shelly: Option<ShellyCfg>,
-}
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ShellyCfg {
-    pub mqtt_url: String
+    /// Machine descriptions to load
+    pub machines: HashMap<MachineIdentifier, MachineDescription>,
+
+    /// Actors to load and their configuration options
+    pub actors: HashMap<String, ModuleConfig>,
+
+    /// Initiators to load and their configuration options
+    pub initiators: HashMap<String, ModuleConfig>,
+
+    pub mqtt_url: String,
+
+    pub actor_connections: Box<[(String, String)]>,
+    pub init_connections: Box<[(String, String)]>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -40,21 +50,55 @@ pub struct Listen {
     pub port: Option<u16>,
 }
 
-impl Default for Settings {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ModuleConfig {
+    pub module: String,
+    pub params: HashMap<String, String>
+}
+
+impl Default for Config {
     fn default() -> Self {
-        Settings {
-            listens: Box::new([Listen {
-                    address: "127.0.0.1".to_string(),
-                    port: Some(DEFAULT_PORT)
-                },
+        let mut actors: HashMap::<String, ModuleConfig> = HashMap::new();
+        let mut initiators: HashMap::<String, ModuleConfig> = HashMap::new();
+        let mut machines = HashMap::new();
+
+        actors.insert("Actor".to_string(), ModuleConfig {
+            module: "Shelly".to_string(),
+            params: HashMap::new(),
+        });
+        initiators.insert("Initiator".to_string(), ModuleConfig {
+            module: "TCP-Listen".to_string(),
+            params: HashMap::new(),
+        });
+
+        machines.insert("Testmachine".to_string(), MachineDescription {
+            name: "Testmachine".to_string(),
+            description: Some("A test machine".to_string()),
+            privs: PrivilegesBuf {
+                disclose: PermissionBuf::from_string("lab.test.read".to_string()),
+                read: PermissionBuf::from_string("lab.test.read".to_string()),
+                write: PermissionBuf::from_string("lab.test.write".to_string()),
+                manage: PermissionBuf::from_string("lab.test.admin".to_string()),
+            },
+        });
+
+        Config {
+            listens: Box::new([
                 Listen {
-                    address: "::1".to_string(),
-                    port: Some(DEFAULT_PORT)
-                }]),
-            shelly: Some(ShellyCfg {
-                mqtt_url: "127.0.0.1:1883".to_string()
-            }),
-            machines: PathBuf::from("/etc/bffh/machines/")
+                    address: "localhost".to_string(),
+                    port: Some(DEFAULT_PORT),
+                }
+            ]),
+            machines: machines,
+            actors: actors,
+            initiators: initiators,
+            mqtt_url: "tcp://localhost:1883".to_string(),
+            actor_connections: Box::new([
+                ("Testmachine".to_string(), "Actor".to_string()),
+            ]),
+            init_connections: Box::new([
+                ("Initiator".to_string(), "Testmachine".to_string()),
+            ]),
         }
     }
 }

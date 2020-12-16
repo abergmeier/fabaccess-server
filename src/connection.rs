@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::future::Future;
+use futures::FutureExt;
 
 use slog::Logger;
 
@@ -13,63 +15,60 @@ use capnp_rpc::{twoparty, rpc_twoparty_capnp};
 use crate::schema::connection_capnp;
 
 use crate::db::Databases;
+use crate::db::access::{AccessControl, Permission};
+use crate::db::user::User;
+use crate::builtin;
+use crate::network::Network;
 
 #[derive(Debug, Clone)]
 /// Connection context
 // TODO this should track over several connections
 pub struct Session {
+    // Session-spezific log
     pub log: Logger,
-    pub user: Option<auth::User>,
+    user: Option<User>,
+    accessdb: Arc<AccessControl>,
 }
 
 impl Session {
-    pub fn new(log: Logger) -> Self {
+    pub fn new(log: Logger, accessdb: Arc<AccessControl>) -> Self {
         let user = None;
 
-        Session { log, user }
+        Session { log, user, accessdb }
     }
-}
 
-async fn handshake(log: &Logger, stream: &mut TcpStream) -> Result<()> {
-    if let Some(m) = capnp_futures::serialize::read_message(stream.clone(), Default::default()).await? {
-        let greeting = m.get_root::<connection_capnp::greeting::Reader>()?;
-        let major = greeting.get_major();
-        let minor = greeting.get_minor();
-
-        if major != 0 {
-            Err(Error::BadVersion((major, minor)))
+    /// Check if the current session has a certain permission
+    pub async fn check_permission<P: AsRef<Permission>>(&self, perm: &P) -> Result<bool> {
+        if let Some(user) = self.user.as_ref() {
+            self.accessdb.check(&user.data, perm).await
         } else {
-            let program = format!("{}-{}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
-
-            let mut answer = ::capnp::message::Builder::new_default();
-            let mut b = answer.init_root::<connection_capnp::greeting::Builder>();
-            b.set_program(&program);
-            b.set_host("localhost");
-            b.set_major(0);
-            b.set_minor(1);
-            capnp_futures::serialize::write_message(stream, answer).await?;
-            info!(log, "Handshake successful with peer {} running {}, API {}.{}", 
-                greeting.get_host()?, greeting.get_program()?, major, minor);
-            Ok(())
+            Ok(false)
         }
-    } else {
-        unimplemented!()
     }
 }
 
-pub async fn handle_connection(log: Logger, mut stream: TcpStream, db: Databases) -> Result<()> {
-    handshake(&log, &mut stream).await?;
+pub struct ConnectionHandler {
+    log: Logger,
+    db: Databases,
+    network: Arc<Network>,
+}
 
-    info!(log, "New connection from on {:?}", stream);
-    let session = Arc::new(Session::new(log));
-    let boots = Bootstrap::new(session, db);
-    let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
+impl ConnectionHandler {
+    pub fn new(log: Logger, db: Databases, network: Arc<Network>) -> Self {
+        Self { log, db, network }
+    }
 
-    let network = twoparty::VatNetwork::new(stream.clone(), stream,
-        rpc_twoparty_capnp::Side::Server, Default::default());
-    let rpc_system = capnp_rpc::RpcSystem::new(Box::new(network), 
-        Some(rpc.client));
+    pub fn handle(&mut self, mut stream: TcpStream) -> impl Future<Output=Result<()>> {
+        info!(self.log, "New connection from on {:?}", stream);
+        let session = Arc::new(Session::new(self.log.new(o!()), self.db.access.clone()));
+        let boots = Bootstrap::new(session, self.db.clone(), self.network.clone());
+        let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
 
-    rpc_system.await.unwrap();
-    Ok(())
+        let network = twoparty::VatNetwork::new(stream.clone(), stream,
+            rpc_twoparty_capnp::Side::Server, Default::default());
+        let rpc_system = capnp_rpc::RpcSystem::new(Box::new(network), Some(rpc.client));
+
+        // Convert the error type to one of our errors
+        rpc_system.map(|r| r.map_err(Into::into))
+    }
 }

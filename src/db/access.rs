@@ -29,16 +29,18 @@ use crate::error::Result;
 
 pub mod internal;
 
-use crate::db::user::User;
-pub use internal::init;
+use crate::db::user::UserData;
+pub use internal::{init, Internal};
 
 pub struct AccessControl {
+    pub internal: Internal,
     sources: HashMap<String, Box<dyn RoleDB>>,
 }
 
 impl AccessControl {
-    pub fn new() -> Self {
+    pub fn new(internal: Internal) -> Self {
         Self {
+            internal: internal,
             sources: HashMap::new()
         }
     }
@@ -49,9 +51,24 @@ impl AccessControl {
         self.sources.insert(name, source);
     }
 
-    pub async fn check<P: AsRef<Permission>>(&self, user: &User, perm: &P) -> Result<bool> {
+    pub async fn check<P: AsRef<Permission>>(&self, user: &UserData, perm: &P) -> Result<bool> {
         for v in self.sources.values() {
             if v.check(user, perm.as_ref())? {
+                return Ok(true);
+            }
+        }
+        if self.internal.check(user, perm.as_ref())? {
+            return Ok(true);
+        }
+
+        return Ok(false);
+    }
+
+    pub async fn check_roles<P: AsRef<Permission>>(&self, roles: &[RoleIdentifier], perm: &P) 
+        -> Result<bool> 
+    {
+        for v in self.sources.values() {
+            if v.check_roles(roles, perm.as_ref())? {
                 return Ok(true);
             }
         }
@@ -60,14 +77,26 @@ impl AccessControl {
     }
 }
 
+impl fmt::Debug for AccessControl {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut b = f.debug_struct("AccessControl");
+        for (name, roledb) in self.sources.iter() {
+           b.field(name, &roledb.get_type_name().to_string());
+        }
+        b.finish()
+    }
+}
+
 pub trait RoleDB {
+    fn get_type_name(&self) -> &'static str;
+
     fn get_role(&self, roleID: &RoleIdentifier) -> Result<Option<Role>>;
 
     /// Check if a given user has the given permission
     /// 
     /// Default implementation which adapter may overwrite with more efficient specialized
     /// implementations.
-    fn check(&self, user: &User, perm: &Permission) -> Result<bool> {
+    fn check(&self, user: &UserData, perm: &Permission) -> Result<bool> {
         self.check_roles(&user.roles, perm)
     }
 
@@ -130,8 +159,6 @@ pub trait RoleDB {
 /// assign to all users.
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct Role {
-    name: String,
-
     // If a role doesn't define parents, default to an empty Vec.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     /// A Role can have parents, inheriting all permissions
@@ -328,6 +355,10 @@ impl PermissionBuf {
         Self { inner }
     }
 
+    pub fn from_perm(perm: &Permission) -> Self {
+        Self { inner: perm.inner.to_string() }
+    }
+
     pub fn into_string(self) -> String {
         self.inner
     }
@@ -501,7 +532,7 @@ impl TryFrom<String> for PermRule {
     }
 }
 
-#[cfg(test)]
+#[cfg(test_DISABLED)]
 mod tests {
     use super::*;
 

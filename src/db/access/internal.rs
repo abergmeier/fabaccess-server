@@ -17,24 +17,23 @@ use crate::config::Settings;
 use crate::error::Result;
 
 use crate::db::access::{Permission, Role, RoleIdentifier, RoleDB};
-use crate::db::user::{UserIdentifier, User};
+use crate::db::user::{User, UserData};
 
 #[derive(Clone, Debug)]
 pub struct Internal {
     log: Logger,
     env: Arc<Environment>,
     roledb: lmdb::Database,
-    userdb: lmdb::Database,
 }
 
 impl Internal {
-    pub fn new(log: Logger, env: Arc<Environment>, roledb: lmdb::Database, userdb: lmdb::Database) -> Self {
-        Self { log, env, roledb, userdb }
+    pub fn new(log: Logger, env: Arc<Environment>, roledb: lmdb::Database) -> Self {
+        Self { log, env, roledb, }
     }
 
     /// Check if a given user has the given permission
     #[allow(unused)]
-    pub fn _check<T: Transaction, P: AsRef<Permission>>(&self, txn: &T, user: &User, perm: &P)
+    pub fn _check<T: Transaction, P: AsRef<Permission>>(&self, txn: &T, user: &UserData, perm: &P)
         -> Result<bool>
     {
         // Tally all roles. Makes dependent roles easier
@@ -117,40 +116,29 @@ impl Internal {
        unimplemented!()
    }
 
-   pub fn load_db(&mut self, txn: &mut RwTransaction, mut path: PathBuf) -> Result<()> {
-       path.push("roles");
-       if !path.is_dir() {
-           error!(self.log, "Given load directory is malformed, no 'roles' subdir, not loading roles!");
-       } else {
-           self.load_roles(txn, path.as_path())?;
-       }
-
-       Ok(())
+   pub fn load_roles<P: AsRef<Path>>(&self, path: P) -> Result<()> {
+       let mut txn = self.env.begin_rw_txn()?;
+       self.load_roles_txn(&mut txn, path.as_ref())
    }
+   fn load_roles_txn(&self, txn: &mut RwTransaction, path: &Path) -> Result<()> {
+       let roles = Role::load_file(path)?;
 
-   fn load_roles(&mut self, txn: &mut RwTransaction, path: &Path) -> Result<()> {
-       if path.is_file() {
-           let roles = Role::load_file(path)?;
-
-           for (k,v) in roles.iter() {
-               self.put_role(txn, k, v.clone())?;
-           }
-       } else {
-           for entry in std::fs::read_dir(path)? {
-               let roles = Role::load_file(entry?.path())?;
-
-               for (k,v) in roles.iter() {
-                   self.put_role(txn, k, v.clone())?;
-               }
-           }
+       for (k,v) in roles.iter() {
+           self.put_role(txn, k, v.clone())?;
        }
+
+       debug!(self.log, "Loaded roles: {:?}", roles);
 
        Ok(())
    }
 }
 
 impl RoleDB for Internal {
-    fn check(&self, user: &User, perm: &Permission) -> Result<bool> {
+    fn get_type_name(&self) -> &'static str {
+        "Internal"
+    }
+
+    fn check(&self, user: &UserData, perm: &Permission) -> Result<bool> {
         let txn = self.env.begin_ro_txn()?;
         self._check(&txn, user, &perm)
     }
@@ -178,9 +166,6 @@ pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>)
     debug!(&log, "Opened access database '{}' successfully.", "role");
     //let permdb = env.create_db(Some("perm"), flags)?;
     //debug!(&log, "Opened access database '{}' successfully.", "perm");
-    let userdb = env.create_db(Some("user"), flags)?;
-    debug!(&log, "Opened access database '{}' successfully.", "user");
-    info!(&log, "Opened all access databases");
 
-    Ok(Internal::new(log, env, roledb, userdb))
+    Ok(Internal::new(log, env, roledb))
 }

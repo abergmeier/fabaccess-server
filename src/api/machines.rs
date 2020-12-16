@@ -8,7 +8,8 @@ use crate::connection::Session;
 
 use crate::db::Databases;
 use crate::db::machine::uuid_from_api;
-use crate::db::machine::MachineDB;
+
+use crate::network::Network;
 
 use super::machine::Machine;
 
@@ -19,12 +20,13 @@ pub struct Machines {
     session: Arc<Session>,
 
     db: Databases,
+    network: Arc<Network>,
 }
 
 impl Machines {
-    pub fn new(session: Arc<Session>, db: Databases) -> Self {
+    pub fn new(session: Arc<Session>, db: Databases, network: Arc<Network>) -> Self {
         info!(session.log, "Machines created");
-        Self { session, db }
+        Self { session, db, network }
     }
 }
 
@@ -34,6 +36,19 @@ impl machines::Server for Machines {
         mut results: machines::ListMachinesResults)
         -> Promise<(), Error>
     {
+        let v: Vec<(String, crate::machine::Machine)> = self.network.machines.iter()
+            .map(|(n, m)| (n.clone(), m.clone()))
+            .collect();
+
+        let mut res = results.get();
+        let mut machines = res.init_machines(v.len() as u32);
+
+        for (i, (name, machine)) in v.into_iter().enumerate() {
+            let machine = Arc::new(Machine::new(self.session.clone(), machine, self.db.clone()));
+            let mut builder = machines.reborrow().get(i as u32);
+            Machine::fill(machine, &mut builder);
+        }
+
         Promise::ok(())
     }
 
@@ -42,26 +57,14 @@ impl machines::Server for Machines {
         mut results: machines::GetMachineResults)
         -> Promise<(), Error>
     {
-        match params.get() {
-            Ok(reader) => {
-                if let Ok(api_id) = reader.get_uuid() {
-                    let id = uuid_from_api(api_id);
-                    if self.db.machine.exists(id) {
-                        debug!(self.session.log, "Accessing machine {}", id);
-                        // TODO check disclose permission
-
-                        let mut builder = results.get().init_machine();
-
-                        let m = Machine::new(self.session.clone(), id, self.db.clone());
-
-                        Machine::fill(Arc::new(m), &mut builder);
-                    } else {
-                        debug!(self.session.log, "Client requested nonexisting machine {}", id);
-                    }
-                }
-                Promise::ok(())
+        if let Ok(uid) = params.get().and_then(|x| x.get_uid()) {
+            if let Some(machine_inner) = self.network.machines.get(uid) {
+                let machine = Arc::new(Machine::new(self.session.clone(), machine_inner.clone(), self.db.clone()));
+                let mut builder = results.get().init_machine();
+                Machine::fill(machine, &mut builder);
             }
-            Err(e) => Promise::err(e),
         }
+
+        Promise::ok(())
     }
 }
