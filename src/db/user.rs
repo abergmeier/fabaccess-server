@@ -3,8 +3,13 @@
 //! 2. "I have this here user, what are their roles (and other associated data)"
 use serde::{Serialize, Deserialize};
 use std::fmt;
+use std::fs;
+use std::iter::FromIterator;
+use std::path::Path;
 use crate::db::access::RoleIdentifier;
 use std::collections::HashMap;
+
+use crate::error::Result;
 
 mod internal;
 
@@ -80,8 +85,8 @@ pub struct UserData {
     pub priority: u64,
 
     /// Additional data storage
-    #[serde(flatten)]
-    kv: HashMap<Box<[u8]>, Box<[u8]>>,
+    #[serde(flatten, skip_serializing_if = "HashMap::is_empty")]
+    kv: HashMap<String, String>,
 }
 
 impl UserData {
@@ -99,6 +104,17 @@ fn is_zero(i: &u64) -> bool {
 }
 const fn default_priority() -> u64 {
     0
+}
+
+pub fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, User>> {
+    let f = fs::read(path)?;
+    let mut map: HashMap<String, UserData> = toml::from_slice(&f)?;
+
+    Ok(HashMap::from_iter(map.drain().map(|(uid, user_data)| 
+        ( uid.clone()
+        , User::new(UserId::new(uid, None, None), user_data)
+        )
+    )))
 }
 
 #[cfg(test_DISABLED)]

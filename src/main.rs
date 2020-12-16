@@ -122,18 +122,23 @@ fn main() {
 // Returning a `Result` from `main` allows us to use the `?` shorthand.
 // In the case of an Err it will be printed using `fmt::Debug`
 fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
-    // If no `config` option is given use a preset default.
-    let configpath = matches.value_of("config").unwrap_or("/etc/bffh/config.toml");
-    let config = config::read(&PathBuf::from_str(configpath).unwrap())?;
-    debug!(log, "Loaded Config: {:?}", config);
 
     if matches.is_present("dump") {
         error!(log, "Dumping is currently not implemented");
         Ok(())
     } else if matches.is_present("load") {
-        error!(log, "Loading is currently not implemented");
+        let mut dir = PathBuf::from(matches.value_of_os("load").unwrap());
+        dir.push("users.toml");
+        let map = db::user::load_file(&dir);
+        debug!(log, "Loaded users: {:?}", map);
+        dir.pop();
         Ok(())
     } else {
+        // If no `config` option is given use a preset default.
+        let configpath = matches.value_of("config").unwrap_or("/etc/bffh/config.toml");
+        let config = config::read(&PathBuf::from_str(configpath).unwrap())?;
+        debug!(log, "Loaded Config: {:?}", config);
+
         let ex = Executor::new();
 
         let mqtt = AsyncClient::new(config.mqtt_url.clone())?;
