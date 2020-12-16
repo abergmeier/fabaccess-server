@@ -1,9 +1,9 @@
 # API-Testsetup
 
-wirklich nur um das API zu testen. ATM implementiert: machine::read
+wirklich nur um das API zu testen. ATM implementiert: machines::* & machine::read, authenticate
 
 1. Ein mosquitto o.ä MQTT Server starten
-    * Bringt aber leider gerade nicht viel ^^'
-1. `cargo run -- -c examples/bffh.dhall`
+1. Datenbanken füllen: `cargo run -- -c examples/bffh.dhall --load=examples`
+1. Daemon starten: `cargo run -- -c examples/bffh.dhall`
 1. ???
 1. PROFIT!
