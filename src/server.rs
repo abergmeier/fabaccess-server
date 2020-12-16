@@ -54,6 +54,7 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Settings, db: Databases, 
         .map(|l| {
             let addr = l.address.clone();
             let port = l.port.unwrap_or(config::DEFAULT_PORT);
+            info!(&log, "Binding to {} port {}.", l.address.as_str(), &port);
             TcpListener::bind((l.address.as_str(), port))
                 // If the bind errors, include the address so we can log it
                 // Since this closure is lazy we need to have a cloned addr
@@ -123,6 +124,8 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Settings, db: Databases, 
             // Unless we are overloaded we just want to keep going.
             return LoopResult::Continue;
         });
+
+        info!(&log, "Started");
 
         // Check each signal as it arrives
         let handle_signals = signal.map(|r| { r.unwrap() }).into_stream();

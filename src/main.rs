@@ -175,8 +175,11 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
                 // TODO: Spawn api connections on their own (non-main) thread, use the main thread to
                 // handle signals (a cli if stdin is not closed?) and make it stop and clean up all threads
                 // when bffh should exit
-                server::serve_api_connections(log.clone(), config, db, network)
-                // Signal is dropped here, stopping all executor threads as well.
+                let r = server::serve_api_connections(log.clone(), config, db, network);
+
+                signal.try_send(());
+                std::mem::drop(signal);
+                return r;
             });
 
         return r;
