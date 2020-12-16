@@ -14,7 +14,7 @@ use serde::{Serialize, Deserialize};
 
 use futures_signals::signal::Signal;
 use futures_signals::signal::SignalExt;
-use futures_signals::signal::Mutable;
+use futures_signals::signal::{Mutable, ReadOnlyMutable};
 
 use uuid::Uuid;
 
@@ -170,6 +170,10 @@ impl Inner {
             // machine has been taken off their hands.
             self.rx.replace(rx);
             return Ok(tx);
+    }
+
+    pub fn read_state(&self) -> ReadOnlyMutable<MachineState> {
+        self.state.read_only()
     }
 
     pub fn get_signal(&self) -> impl Signal {

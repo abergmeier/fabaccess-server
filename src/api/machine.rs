@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::ops::Deref;
 
 use capnp::capability::Promise;
 use capnp::Error;
@@ -28,29 +29,32 @@ impl Machine {
         // TODO set all the others
     }
 
-    pub async fn fill_info(&self, builder: &mut m_info::Builder) {
+    pub async fn fill_info(&self, builder: &mut m_info::Builder<'_>) {
         let guard = self.machine.lock().await;
 
         builder.set_name(guard.desc.name.as_ref());
-        builder.set_description(guard.desc.description.as_ref());
 
-        match guard.state.read_only().lock_ref().status {
+        if let Some(desc) = guard.desc.description.as_ref() {
+            builder.set_description(desc);
+        }
+
+        match guard.read_state().lock_ref().deref().state {
             Status::Free => {
                 builder.set_state(State::Free);
             }
             Status::Disabled => {
                 builder.set_state(State::Disabled);
             }
-            Status::Blocked(who, prio) => {
+            Status::Blocked(_,_) => {
                 builder.set_state(State::Blocked);
             }
-            Status::InUse(who, prio) => {
+            Status::InUse(_,_) => {
                 builder.set_state(State::InUse);
             }
-            Status::ToCheck(who, prio) => {
+            Status::ToCheck(_,_) => {
                 builder.set_state(State::ToCheck);
             }
-            Status::Reserved(who, prio) => {
+            Status::Reserved(_,_) => {
                 builder.set_state(State::Reserved);
             }
         }
