@@ -28,8 +28,32 @@ impl Machine {
         // TODO set all the others
     }
 
-    pub fn fill_info(&self, builder: &mut m_info::Builder) {
-        unimplemented!()
+    pub async fn fill_info(&self, builder: &mut m_info::Builder) {
+        let guard = self.machine.lock().await;
+
+        builder.set_name(guard.desc.name.as_ref());
+        builder.set_description(guard.desc.description.as_ref());
+
+        match guard.state.read_only().lock_ref().status {
+            Status::Free => {
+                builder.set_state(State::Free);
+            }
+            Status::Disabled => {
+                builder.set_state(State::Disabled);
+            }
+            Status::Blocked(who, prio) => {
+                builder.set_state(State::Blocked);
+            }
+            Status::InUse(who, prio) => {
+                builder.set_state(State::InUse);
+            }
+            Status::ToCheck(who, prio) => {
+                builder.set_state(State::ToCheck);
+            }
+            Status::Reserved(who, prio) => {
+                builder.set_state(State::Reserved);
+            }
+        }
     }
 }
 
