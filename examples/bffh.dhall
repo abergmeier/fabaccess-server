@@ -1,10 +1,10 @@
 { actor_connections = [{ _1 = "Testmachine", _2 = "Actor" }]
 , actors = 
-  { Actor = { name = "Shelly", params = {=} }
+  { Actor = { module = "Shelly", params = {=} }
   }
 , init_connections = [{ _1 = "Initiator", _2 = "Testmachine" }]
 , initiators = 
-  { Initiator = { name = "TCP-Listen", params = {=} } 
+  { Initiator = { module = "Dummy", params = {=} } 
   }
 , listens = [{ address = "localhost", port = Some 59661 }]
 , machines = 
