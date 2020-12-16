@@ -123,7 +123,7 @@ fn main() {
 // In the case of an Err it will be printed using `fmt::Debug`
 fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
     // If no `config` option is given use a preset default.
-    let configpath = matches.value_of("config").unwrap_or("/etc/bffh/config.toml");
+    let configpath = matches.value_of("config").unwrap_or("/etc/diflouroborane.dhall");
     let config = config::read(&PathBuf::from_str(configpath).unwrap())?;
     debug!(log, "Loaded Config: {:?}", config);
 
