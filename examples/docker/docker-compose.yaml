@@ -6,7 +6,7 @@ services:
       - "59661:59661"
     volumes:
       # generate a sample config.toml by running "docker run registry.gitlab.com/fabinfra/fabaccess/bffh:dev-latest --print-default > examples/config.toml" from the project root. You may have to delete the ipv6 listen section.
-      - "$PWD/examples/docker:/etc/bffh"
+      - "$PWD/../:/etc/bffh"
     links:
       - mqtt
   mqtt:
