@@ -7,3 +7,5 @@ wirklich nur um das API zu testen. ATM implementiert: machines::* & machine::rea
 1. Daemon starten: `cargo run -- -c examples/bffh.dhall`
 1. ???
 1. PROFIT!
+
+A dockerized version of this example can be found in the docker subdirectory
