@@ -34,29 +34,16 @@ pub use internal::{init, Internal};
 
 pub struct AccessControl {
     pub internal: Internal,
-    sources: HashMap<String, Box<dyn RoleDB>>,
 }
 
 impl AccessControl {
     pub fn new(internal: Internal) -> Self {
         Self {
             internal: internal,
-            sources: HashMap::new()
         }
-    }
-
-    /// Adds an access control source. If a source with the same name already existed it is
-    /// replaced.
-    pub fn add_source_unchecked(&mut self, name: String, source: Box<dyn RoleDB>) {
-        self.sources.insert(name, source);
     }
 
     pub async fn check<P: AsRef<Permission>>(&self, user: &UserData, perm: &P) -> Result<bool> {
-        for v in self.sources.values() {
-            if v.check(user, perm.as_ref())? {
-                return Ok(true);
-            }
-        }
         if self.internal.check(user, perm.as_ref())? {
             return Ok(true);
         }
@@ -67,10 +54,8 @@ impl AccessControl {
     pub async fn check_roles<P: AsRef<Permission>>(&self, roles: &[RoleIdentifier], perm: &P) 
         -> Result<bool> 
     {
-        for v in self.sources.values() {
-            if v.check_roles(roles, perm.as_ref())? {
-                return Ok(true);
-            }
+        if self.internal.check_roles(roles, perm.as_ref())? {
+            return Ok(true);
         }
 
         return Ok(false);
@@ -80,9 +65,7 @@ impl AccessControl {
 impl fmt::Debug for AccessControl {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         let mut b = f.debug_struct("AccessControl");
-        for (name, roledb) in self.sources.iter() {
-           b.field(name, &roledb.get_type_name().to_string());
-        }
+        b.field("internal", &self.internal.get_type_name().to_string());
         b.finish()
     }
 }
