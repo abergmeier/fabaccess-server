@@ -8,7 +8,7 @@ use crate::schema::api_capnp::State;
 use crate::schema::api_capnp::machine::*;
 use crate::connection::Session;
 use crate::db::Databases;
-use crate::db::machine::Status;
+use crate::db::machine::{Status, MachineState};
 use crate::machine::Machine as NwMachine;
 
 #[derive(Clone)]
@@ -45,16 +45,16 @@ impl Machine {
             Status::Disabled => {
                 builder.set_state(State::Disabled);
             }
-            Status::Blocked(_,_) => {
+            Status::Blocked(_) => {
                 builder.set_state(State::Blocked);
             }
-            Status::InUse(_,_) => {
+            Status::InUse(_) => {
                 builder.set_state(State::InUse);
             }
-            Status::ToCheck(_,_) => {
+            Status::ToCheck(_) => {
                 builder.set_state(State::ToCheck);
             }
-            Status::Reserved(_,_) => {
+            Status::Reserved(_) => {
                 builder.set_state(State::Reserved);
             }
         }
@@ -80,7 +80,23 @@ struct Write(Arc<Machine>);
 impl write::Server for Write {
     fn use_(&mut self,
         _params: write::UseParams,
-        _results: write::UseResults)
+        results: write::UseResults)
+    -> Promise<(), Error>
+    {
+        let uid = self.0.session.user.as_ref().map(|u| u.id.clone());
+        let new_state = MachineState::used(uid.clone());
+        if let Ok(tok) = self.0.machine.request_state_change(self.0.session.user.as_ref(), new_state) {
+            info!(self.0.session.log, "yay");
+        } else {
+            info!(self.0.session.log, "nay");
+        }
+
+        Promise::ok(())
+    }
+
+    fn reserve(&mut self,
+        _params: write::ReserveParams,
+        _results: write::ReserveResults)
     -> Promise<(), Error>
     {
         unimplemented!()

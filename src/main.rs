@@ -195,8 +195,10 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
                 // when bffh should exit
                 let r = server::serve_api_connections(log.clone(), config, db, network);
 
+                // One of them would be enough really, but *shrug*
                 signal.try_send(());
                 std::mem::drop(signal);
+
                 return r;
             });
 

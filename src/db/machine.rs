@@ -43,15 +43,15 @@ pub enum Status {
     /// Not currently used by anybody
     Free,
     /// Used by somebody
-    InUse(UserId, Priority),
+    InUse(Option<UserId>),
     /// Was used by somebody and now needs to be checked for cleanliness
-    ToCheck(UserId, Priority),
+    ToCheck(UserId),
     /// Not used by anybody but also can not be used. E.g. down for maintenance
-    Blocked(UserId, Priority),
+    Blocked(UserId),
     /// Disabled for some other reason
     Disabled,
     /// Reserved
-    Reserved(UserId, Priority),
+    Reserved(UserId),
 }
 
 pub fn uuid_from_api(uuid: crate::schema::api_capnp::u_u_i_d::Reader) -> Uuid {
@@ -83,24 +83,8 @@ impl MachineState {
         Self { state: Status::Free }
     }
 
-    pub fn used(uid: UserId, priority: Priority) -> Self {
-        Self { state: Status::InUse(uid, priority) }
-    }
-
-    /// Check if the given priority is higher than one's own.
-    ///
-    /// If `self` does not have a priority then this function always returns `true`
-    pub fn is_higher_priority(&self, priority: u64) -> bool {
-        match self.state {
-            Status::Disabled | Status::Free => { true },
-            Status::Blocked(_, self_prio) |
-            Status::InUse(_, self_prio) |
-            Status::ToCheck(_, self_prio) |
-            Status::Reserved(_, self_prio) =>
-            {
-                priority > self_prio
-            }
-        }
+    pub fn used(uid: Option<UserId>) -> Self {
+        Self { state: Status::InUse(uid) }
     }
 }
 

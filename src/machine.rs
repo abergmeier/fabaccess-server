@@ -154,9 +154,8 @@ impl Inner {
                 return self.do_state_change(new_state);
             }
         } else {
-            if self.state.lock_ref().is_higher_priority(who.unwrap().data.priority) {
-                return self.do_state_change(new_state);
-            }
+            // TODO: Correctly check permissions here
+            return self.do_state_change(new_state);
         }
 
         return Err(Error::Denied);

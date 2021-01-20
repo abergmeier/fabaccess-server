@@ -26,8 +26,8 @@ use crate::network::Network;
 pub struct Session {
     // Session-spezific log
     pub log: Logger,
-    user: Option<User>,
-    accessdb: Arc<AccessControl>,
+    pub user: Option<User>,
+    pub accessdb: Arc<AccessControl>,
 }
 
 impl Session {

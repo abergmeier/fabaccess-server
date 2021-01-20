@@ -50,7 +50,7 @@ impl Actuator for Shelly {
         info!(self.log, "Machine Status changed: {:?}", state);
         let topic = format!("shellies/{}/relay/0/command", self.name);
         let pl = match state.state {
-            Status::InUse(_, _) => "on",
+            Status::InUse(_) => "on",
             _ => "off",
         };
         let msg = mqtt::Message::new(topic, pl, 0);

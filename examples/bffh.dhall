@@ -6,7 +6,10 @@
 , initiators = 
   { Initiator = { module = "Dummy", params = {=} } 
   }
-, listens = [{ address = "localhost", port = Some 59661 }]
+, listens = 
+  [ { address = "127.0.0.1", port = Some 59661 }
+  , { address = "::1", port = Some 59661 }
+  ]
 , machines = 
   { Testmachine = 
     { description = Some "A test machine"

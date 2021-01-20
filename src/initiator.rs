@@ -157,9 +157,8 @@ impl Sensor for Dummy {
                     UserId::new("test".to_string(), None, None),
                     UserData::new(vec![], 0),
                 );
-                let p = user.data.priority;
                 let id = user.id.clone();
-                return (Some(user), MachineState::used(id, p));
+                return (Some(user), MachineState::used(Some(id)));
             }
         };
 
