@@ -15,8 +15,8 @@ FROM debian:buster-slim
 RUN apt-get update && apt-get upgrade -yqq
 RUN apt-get install -yqq libgsasl7 && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/local/cargo/bin/diflouroborane /usr/local/bin/diflouroborane
-COPY --from=builder /usr/src/bffh/examples/bffh.dhall /etc/diflouroborane.dhall
+#COPY --from=builder /usr/src/bffh/examples/bffh.dhall /etc/diflouroborane.dhall
 # RUN diflouroborane --print-default > /etc/diflouroborane.toml
-VOLUME /etc/diflouroborane.dhall
+VOLUME /etc/bffh/
 EXPOSE 59661
-ENTRYPOINT ["diflouroborane"]
+ENTRYPOINT ["sh", "-c", "diflouroborane -c /etc/bffh/bffh.dhall --load=/etc/bffh; diflouroborane -c /etc/bffh/bffh.dhall"]
