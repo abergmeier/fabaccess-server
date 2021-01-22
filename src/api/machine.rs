@@ -4,6 +4,8 @@ use std::ops::Deref;
 use capnp::capability::Promise;
 use capnp::Error;
 
+use futures::FutureExt;
+
 use crate::schema::api_capnp::State;
 use crate::schema::api_capnp::machine::*;
 use crate::connection::Session;
@@ -85,13 +87,16 @@ impl write::Server for Write {
     {
         let uid = self.0.session.user.as_ref().map(|u| u.id.clone());
         let new_state = MachineState::used(uid.clone());
-        if let Ok(tok) = self.0.machine.request_state_change(self.0.session.user.as_ref(), new_state) {
-            info!(self.0.session.log, "yay");
-        } else {
-            info!(self.0.session.log, "nay");
-        }
+        let this = self.0.clone();
+        let f = this.machine.request_state_change(this.session.user.as_ref(), new_state)
+            .map(|res_token| match res_token {
+                Ok(tok) => {
+                    return Ok(());
+                },
+                Err(e) => Err(capnp::Error::failed("State change request returned an err".to_string())),
+        });
 
-        Promise::ok(())
+        Promise::from_future(f)
     }
 
     fn reserve(&mut self,

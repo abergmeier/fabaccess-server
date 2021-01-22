@@ -12,6 +12,8 @@ use std::fs;
 
 use serde::{Serialize, Deserialize};
 
+use futures::future::BoxFuture;
+
 use futures_signals::signal::Signal;
 use futures_signals::signal::SignalExt;
 use futures_signals::signal::{Mutable, ReadOnlyMutable};
@@ -22,7 +24,7 @@ use crate::error::{Result, Error};
 
 use crate::db::access;
 use crate::db::machine::{MachineIdentifier, Status, MachineState};
-use crate::db::user::User;
+use crate::db::user::{User, UserData};
 
 use crate::network::MachineMap;
 
@@ -49,39 +51,68 @@ impl Index {
 
 #[derive(Debug, Clone)]
 pub struct Machine {
-    inner: Arc<Mutex<Inner>>
+    inner: Arc<Mutex<Inner>>,
+    access: Arc<access::AccessControl>,
 }
 
 impl Machine {
-    pub fn new(inner: Inner) -> Self {
-        Self { inner: Arc::new(Mutex::new(inner)) }
+    pub fn new(inner: Inner, access: Arc<access::AccessControl>) -> Self {
+        Self { inner: Arc::new(Mutex::new(inner)), access: access }
     }
 
     pub fn construct
         ( id: MachineIdentifier
         , desc: MachineDescription
         , state: MachineState
+        , access: Arc<access::AccessControl>
         ) -> Machine
     {
-        Self::new(Inner::new(id, desc, state))
+        Self::new(Inner::new(id, desc, state), access)
     }
 
-    pub fn from_file<P: AsRef<Path>>(path: P) -> Result<Vec<Machine>> {
+    pub fn from_file<P: AsRef<Path>>(path: P, access: Arc<access::AccessControl>) 
+        -> Result<Vec<Machine>> 
+    {
         let mut map: HashMap<MachineIdentifier, MachineDescription> = MachineDescription::load_file(path)?;
         Ok(map.drain().map(|(id, desc)| {
-            Self::construct(id, desc, MachineState::new())
+            Self::construct(id, desc, MachineState::new(), access.clone())
         }).collect())
     }
 
+    /// Requests to use a machine. Returns a return token if successful.
+    ///
+    /// This will update the internal state of the machine, notifying connected actors, if any.
+    /// The return token is a channel that considers the machine 'returned' if anything is sent
+    /// along it or if the sending end gets dropped. Anybody who holds this token needs to check if
+    /// the receiving end was canceled which indicates that the machine has been taken off their
+    /// hands.
     pub fn request_state_change(&self, who: Option<&User>, new_state: MachineState) 
-        -> Result<ReturnToken> 
+        -> BoxFuture<'static, Result<ReturnToken>>
     {
-        let mut guard = self.inner.try_lock().unwrap();
-        guard.request_state_change(who, new_state)
+        let this = self.clone();
+        let udata: Option<UserData> = who.map(|u| u.data.clone());
+
+        let f = async move {
+            if let Some(udata) = udata {
+                let mut guard = this.inner.try_lock().unwrap();
+                if this.access.check(&udata, &guard.desc.privs.write).await? {
+                    return guard.do_state_change(new_state);
+                }
+            } else {
+                if new_state == MachineState::free() {
+                    let mut guard = this.inner.try_lock().unwrap();
+                    return guard.do_state_change(new_state);
+                }
+            }
+
+            return Err(Error::Denied);
+        };
+
+        Box::pin(f)
     }
 
     pub fn signal(&self) -> impl Signal<Item=MachineState> {
-        let mut guard = self.inner.try_lock().unwrap();
+        let guard = self.inner.try_lock().unwrap();
         guard.signal()
     }
 }
@@ -117,7 +148,11 @@ pub struct Inner {
 }
 
 impl Inner {
-    pub fn new(id: MachineIdentifier, desc: MachineDescription, state: MachineState) -> Inner {
+    pub fn new ( id: MachineIdentifier
+               , desc: MachineDescription
+               , state: MachineState
+               ) -> Inner 
+    {
         Inner {
             id: id,
             desc: desc,
@@ -139,29 +174,7 @@ impl Inner {
         Box::pin(self.state.signal_cloned().dedupe_cloned())
     }
 
-    /// Requests to use a machine. Returns a return token if successful.
-    ///
-    /// This will update the internal state of the machine, notifying connected actors, if any.
-    /// The return token is a channel that considers the machine 'returned' if anything is sent
-    /// along it or if the sending end gets dropped. Anybody who holds this token needs to check if
-    /// the receiving end was canceled which indicates that the machine has been taken off their
-    /// hands.
-    pub fn request_state_change(&mut self, who: Option<&User>, new_state: MachineState) 
-        -> Result<ReturnToken>
-    {
-        if who.is_none() {
-            if new_state.state == Status::Free {
-                return self.do_state_change(new_state);
-            }
-        } else {
-            // TODO: Correctly check permissions here
-            return self.do_state_change(new_state);
-        }
-
-        return Err(Error::Denied);
-    }
-
-    fn do_state_change(&mut self, new_state: MachineState) -> Result<ReturnToken> {
+    pub fn do_state_change(&mut self, new_state: MachineState) -> Result<ReturnToken> {
             let (tx, rx) = futures::channel::oneshot::channel();
             let old_state = self.state.replace(new_state);
             self.reset.replace(old_state);
@@ -234,13 +247,15 @@ impl MachineDescription {
     }
 }
 
-pub fn load(config: &crate::config::Settings) -> Result<MachineMap> {
+pub fn load(config: &crate::config::Settings, access: Arc<access::AccessControl>) 
+    -> Result<MachineMap> 
+{
     let mut map = config.machines.clone();
 
     let it = map.drain()
         .map(|(k,v)| {
             // TODO: Read state from the state db
-            (v.name.clone(), Machine::construct(k, v, MachineState::new()))
+            (v.name.clone(), Machine::construct(k, v, MachineState::new(), access.clone()))
         });
     Ok(HashMap::from_iter(it))
 }

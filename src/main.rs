@@ -153,13 +153,14 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         Ok(())
     } else {
         let ex = Executor::new();
+        let db = db::Databases::new(&log, &config)?;
 
         let mqtt = AsyncClient::new(config.mqtt_url.clone())?;
         let tok = mqtt.connect(paho_mqtt::ConnectOptions::new());
 
         smol::block_on(tok)?;
 
-        let machines = machine::load(&config)?;
+        let machines = machine::load(&config, db.access.clone())?;
         let (mut actor_map, actors) = actor::load(&log, &mqtt, &config)?;
         let (mut init_map, initiators) = initiator::load(&log, &mqtt, &config)?;
 
@@ -189,7 +190,6 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         let (_, r) = easy_parallel::Parallel::new()
             .each(0..4, |_| smol::block_on(ex.run(shutdown.recv())))
             .finish(|| {
-                let db = db::Databases::new(&log, &config)?;
                 // TODO: Spawn api connections on their own (non-main) thread, use the main thread to
                 // handle signals (a cli if stdin is not closed?) and make it stop and clean up all threads
                 // when bffh should exit

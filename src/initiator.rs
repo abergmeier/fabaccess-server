@@ -34,6 +34,8 @@ pub struct Initiator {
     signal: MutableSignalCloned<Option<Machine>>,
     machine: Option<Machine>,
     future: Option<BoxFuture<'static, (Option<User>, MachineState)>>,
+    // TODO: Prepare the init for async state change requests.
+    state_change_fut: Option<BoxFuture<'static, Result<ReturnToken>>>,
     token: Option<ReturnToken>,
     sensor: BoxSensor,
 }
@@ -44,6 +46,7 @@ impl Initiator {
             signal: signal,
             machine: None,
             future: None,
+            state_change_fut: None,
             token: None,
             sensor: sensor,
         }
@@ -73,14 +76,43 @@ impl Future for Initiator {
 
         // Do as much work as we can:
         loop {
+            // Always poll the state change future first
+            if let Some(ref mut f) = this.state_change_fut {
+                print!("Polling state change fut ...");
+                match Future::poll(Pin::new(f), cx) {
+                    // If there is a state change future and it would block we return early
+                    Poll::Pending => {
+                        println!(" blocked");
+                        return Poll::Pending;
+                    },
+                    Poll::Ready(Ok(tok)) => {
+                        println!(" returned ok");
+                        // Explicity drop the future
+                        let _ = this.state_change_fut.take();
+
+                        // Store the given return token for future use
+                        this.token.replace(tok);
+                    }
+                    Poll::Ready(Err(e)) => {
+                        println!(" returned err: {:?}", e);
+                        // Explicity drop the future
+                        let _ = this.state_change_fut.take();
+                    }
+                }
+            }
+
             // If there is a future, poll it
             match this.future.as_mut().map(|future| Future::poll(Pin::new(future), cx)) {
                 None => {
                     this.future = Some(this.sensor.run_sensor());
                 },
                 Some(Poll::Ready((user, state))) => {
+                    println!("New sensor fut");
                     this.future.take();
-                    this.machine.as_mut().map(|machine| machine.request_state_change(user.as_ref(), state).unwrap());
+                    let f = this.machine.as_mut().map(|machine| {
+                        machine.request_state_change(user.as_ref(), state)
+                    });
+                    this.state_change_fut = f;
                 }
                 Some(Poll::Pending) => return Poll::Pending,
             }
