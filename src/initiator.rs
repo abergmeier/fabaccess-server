@@ -31,6 +31,7 @@ pub trait Sensor {
 type BoxSensor = Box<dyn Sensor + Send>;
 
 pub struct Initiator {
+    log: Logger,
     signal: MutableSignalCloned<Option<Machine>>,
     machine: Option<Machine>,
     future: Option<BoxFuture<'static, (Option<User>, MachineState)>>,
@@ -41,8 +42,9 @@ pub struct Initiator {
 }
 
 impl Initiator {
-    pub fn new(sensor: BoxSensor, signal: MutableSignalCloned<Option<Machine>>) -> Self {
+    pub fn new(log: Logger, sensor: BoxSensor, signal: MutableSignalCloned<Option<Machine>>) -> Self {
         Self {
+            log: log,
             signal: signal,
             machine: None,
             future: None,
@@ -52,11 +54,11 @@ impl Initiator {
         }
     }
 
-    pub fn wrap(sensor: BoxSensor) -> (Mutable<Option<Machine>>, Self) {
+    pub fn wrap(log: Logger, sensor: BoxSensor) -> (Mutable<Option<Machine>>, Self) {
         let m = Mutable::new(None);
         let s = m.signal_cloned();
 
-        (m, Self::new(sensor, s))
+        (m, Self::new(log, sensor, s))
     }
 }
 
@@ -71,22 +73,30 @@ impl Future for Initiator {
             Poll::Pending => { }
             Poll::Ready(None) => return Poll::Ready(()),
             // Keep in mind this is actually an Option<Machine>
-            Poll::Ready(Some(machine)) => this.machine = machine,
+            Poll::Ready(Some(machine)) => {
+
+                match machine.as_ref().map(|m| m.try_lock()) {
+                    None => info!(this.log, "Deinstalled machine"),
+                    Some(None) => info!(this.log, "Installed new machine with locked mutex!"),
+                    Some(Some(g)) => info!(this.log, "Installed new machine {}", g.id),
+                }
+
+                this.machine = machine;
+            },
         }
 
         // Do as much work as we can:
         loop {
             // Always poll the state change future first
             if let Some(ref mut f) = this.state_change_fut {
-                print!("Polling state change fut ...");
                 match Future::poll(Pin::new(f), cx) {
                     // If there is a state change future and it would block we return early
                     Poll::Pending => {
-                        println!(" blocked");
+                        debug!(this.log, "State change blocked");
                         return Poll::Pending;
                     },
                     Poll::Ready(Ok(tok)) => {
-                        println!(" returned ok");
+                        debug!(this.log, "State change returned ok");
                         // Explicity drop the future
                         let _ = this.state_change_fut.take();
 
@@ -94,7 +104,7 @@ impl Future for Initiator {
                         this.token.replace(tok);
                     }
                     Poll::Ready(Err(e)) => {
-                        println!(" returned err: {:?}", e);
+                        info!(this.log, "State change returned err: {}", e);
                         // Explicity drop the future
                         let _ = this.state_change_fut.take();
                     }
@@ -107,7 +117,7 @@ impl Future for Initiator {
                     this.future = Some(this.sensor.run_sensor());
                 },
                 Some(Poll::Ready((user, state))) => {
-                    println!("New sensor fut");
+                    debug!(this.log, "Sensor returned a new state");
                     this.future.take();
                     let f = this.machine.as_mut().map(|machine| {
                         machine.request_state_change(user.as_ref(), state)
@@ -132,7 +142,7 @@ pub fn load(log: &Logger, client: &AsyncClient, config: &Config) -> Result<(Init
 
     let mut v = Vec::new();
     for (name, initiator) in initiators {
-        let (m, i) = Initiator::wrap(initiator);
+        let (m, i) = Initiator::wrap(log.new(o!("name" => name.clone())), initiator);
         map.insert(name.clone(), m);
         v.push(i);
     }
@@ -187,7 +197,7 @@ impl Sensor for Dummy {
             } else {
                 let user = User::new(
                     UserId::new("test".to_string(), None, None),
-                    UserData::new(vec![], 0),
+                    UserData::new(vec![crate::db::access::RoleIdentifier::local_from_str("lmdb".to_string(), "testrole".to_string())], 0),
                 );
                 let id = user.id.clone();
                 return (Some(user), MachineState::used(Some(id)));

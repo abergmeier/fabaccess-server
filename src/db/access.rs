@@ -60,6 +60,10 @@ impl AccessControl {
 
         return Ok(false);
     }
+
+    pub fn dump_roles(&self) -> Result<Vec<(RoleIdentifier, Role)>> {
+        self.internal.dump_roles()
+    }
 }
 
 impl fmt::Debug for AccessControl {
@@ -90,13 +94,13 @@ pub trait RoleDB {
     /// implementations.
     fn check_roles(&self, roles: &[RoleIdentifier], perm: &Permission) -> Result<bool> {
         // Tally all roles. Makes dependent roles easier
-        let mut roleset = HashSet::new();
+        let mut roleset = HashMap::new();
         for roleID in roles {
             self.tally_role(&mut roleset, roleID)?;
         }
 
         // Iter all unique role->permissions we've found and early return on match. 
-        for role in roleset.iter() {
+        for (_roleid, role) in roleset.iter() {
             for perm_rule in role.permissions.iter() {
                 if perm_rule.match_perm(&perm) {
                     return Ok(true);
@@ -111,16 +115,16 @@ pub trait RoleDB {
     ///
     /// A Default implementation exists which adapter may overwrite with more efficient
     /// implementations.
-    fn tally_role(&self, roles: &mut HashSet<Role>, roleID: &RoleIdentifier) -> Result<()> {
+    fn tally_role(&self, roles: &mut HashMap<RoleIdentifier, Role>, roleID: &RoleIdentifier) -> Result<()> {
         if let Some(role) = self.get_role(roleID)? {
             // Only check and tally parents of a role at the role itself if it's the first time we
             // see it
-            if !roles.contains(&role) {
+            if !roles.contains_key(&roleID) {
                 for parent in role.parents.iter() {
                     self.tally_role(roles, parent)?;
                 }
 
-                roles.insert(role);
+                roles.insert(roleID.clone(), role);
             }
         }
 
@@ -371,7 +375,7 @@ impl fmt::Display for PermissionBuf {
 }
 
 #[repr(transparent)]
-#[derive(PartialEq, Eq, Hash)]
+#[derive(PartialEq, Eq, Hash, Debug)]
 /// A borrowed permission string
 /// 
 /// Permissions have total equality and partial ordering.

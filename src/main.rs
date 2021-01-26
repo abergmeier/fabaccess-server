@@ -128,7 +128,9 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
     debug!(log, "Loaded Config: {:?}", config);
 
     if matches.is_present("dump") {
-        error!(log, "Dumping is currently not implemented");
+        let db = db::Databases::new(&log, &config)?;
+        let v = db.access.dump_roles();
+        info!(log, "Roles {:?}", v);
         Ok(())
     } else if matches.is_present("load") {
         let db = db::Databases::new(&log, &config)?;
