@@ -82,7 +82,7 @@ struct Write(Arc<Machine>);
 impl write::Server for Write {
     fn use_(&mut self,
         _params: write::UseParams,
-        results: write::UseResults)
+        _results: write::UseResults)
     -> Promise<(), Error>
     {
         let uid = self.0.session.user.as_ref().map(|u| u.id.clone());
@@ -90,10 +90,11 @@ impl write::Server for Write {
         let this = self.0.clone();
         let f = this.machine.request_state_change(this.session.user.as_ref(), new_state)
             .map(|res_token| match res_token {
-                Ok(tok) => {
+                // TODO: Do something with the token we get returned
+                Ok(_tok) => {
                     return Ok(());
                 },
-                Err(e) => Err(capnp::Error::failed("State change request returned an err".to_string())),
+                Err(_) => Err(capnp::Error::failed("State change request returned an err".to_string())),
         });
 
         Promise::from_future(f)

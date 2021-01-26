@@ -55,7 +55,7 @@ impl Internal {
     pub fn iter<T: Transaction>(&self, txn: &T) -> Result<impl Iterator<Item=MachineState>> {
        let mut cursor = txn.open_ro_cursor(self.db)?;
        Ok(cursor.iter_start().map(|buf| {
-           let (kbuf, vbuf) = buf.unwrap();
+           let (_kbuf, vbuf) = buf.unwrap();
            flexbuffers::from_slice(vbuf).unwrap()
        }))
     }

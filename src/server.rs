@@ -91,9 +91,6 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
                             inner_log.new(o!())
                         };
 
-                    // Clone a log for potential error handling
-                    let elog = log.clone();
-
                     // We handle the error using map_err
                     let f = handler.handle(socket)
                         .map_err(move |e| {

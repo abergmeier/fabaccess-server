@@ -389,7 +389,7 @@ impl PartialOrd for Permission {
     fn partial_cmp(&self, other: &Permission) -> Option<Ordering> {
         let mut i = self.iter();
         let mut j = other.iter();
-        let (mut l, mut r) = (None, None);
+        let (mut l, mut r);
         while {
             l = i.next();
             r = j.next();

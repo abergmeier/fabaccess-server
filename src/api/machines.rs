@@ -42,7 +42,7 @@ impl machines::Server for Machines {
         let res = results.get();
         let mut machines = res.init_machines(v.len() as u32);
 
-        for (i, (name, machine)) in v.into_iter().enumerate() {
+        for (i, (_name, machine)) in v.into_iter().enumerate() {
             let machine = Arc::new(Machine::new(self.session.clone(), machine, self.db.clone()));
             let mut builder = machines.reborrow().get(i as u32);
             Machine::fill(machine, &mut builder);

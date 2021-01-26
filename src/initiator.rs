@@ -149,10 +149,10 @@ pub fn load(log: &Logger, client: &AsyncClient, config: &Config) -> Result<(Init
 
 fn load_single(
     log: &Logger,
-    client: &AsyncClient,
+    _client: &AsyncClient,
     name: &String,
     module_name: &String,
-    params: &HashMap<String, String>
+    _params: &HashMap<String, String>
     ) -> Option<BoxSensor>
 {
     match module_name.as_ref() {

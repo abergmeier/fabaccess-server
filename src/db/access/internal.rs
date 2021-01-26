@@ -163,7 +163,7 @@ impl RoleDB for Internal {
 
 
 /// Initialize the access db by loading all the lmdb databases
-pub fn init(log: Logger, config: &Config, env: Arc<lmdb::Environment>) 
+pub fn init(log: Logger, _config: &Config, env: Arc<lmdb::Environment>) 
     -> std::result::Result<Internal, crate::error::Error> 
 {
     let mut flags = lmdb::DatabaseFlags::empty();

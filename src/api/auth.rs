@@ -40,7 +40,7 @@ impl Callback<AppData, SessionData> for CB {
                     Some(a) => {
                         match a.to_str() {
                             Ok(s) => s,
-                            Err(e) => return ReturnCode::GSASL_SASLPREP_ERROR as libc::c_int,
+                            Err(_) => return ReturnCode::GSASL_SASLPREP_ERROR as libc::c_int,
                         }
                     },
                 };

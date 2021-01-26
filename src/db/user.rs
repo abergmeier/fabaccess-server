@@ -122,7 +122,7 @@ pub fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, User>> {
     )))
 }
 
-pub fn init(log: Logger, config: &Config, env: Arc<lmdb::Environment>) -> Result<Internal> {
+pub fn init(log: Logger, _config: &Config, env: Arc<lmdb::Environment>) -> Result<Internal> {
     let mut flags = lmdb::DatabaseFlags::empty();
     flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
     let db = env.create_db(Some("users"), flags)?;
