@@ -5,8 +5,6 @@
 
 use std::sync::Arc;
 
-use slog::Logger;
-
 use rsasl::{
     SASL,
     Property,
@@ -20,9 +18,6 @@ use rsasl::{
 use serde::{Serialize, Deserialize};
 
 use capnp::capability::{Params, Results, Promise};
-
-use crate::error::Result;
-use crate::config::Settings;
 
 use crate::api::Session;
 

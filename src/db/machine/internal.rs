@@ -1,21 +1,10 @@
 use std::sync::Arc;
-use std::fs;
-use std::io::Write;
-use std::str::FromStr;
-use std::path::PathBuf;
 
 use slog::Logger;
-use uuid::Uuid;
 
 use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 
-use futures::{Future, Stream, StreamExt};
-use futures::stream;
-use futures::future::Ready;
-use futures::stream::Iter;
-
 use super::{MachineIdentifier, MachineState};
-use crate::machine::MachineDescription;
 use crate::error::Result;
 
 #[derive(Clone, Debug)]

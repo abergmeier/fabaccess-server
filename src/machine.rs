@@ -1,4 +1,4 @@
-use std::ops::{Deref, DerefMut};
+use std::ops::Deref;
 use std::iter::FromIterator;
 use std::sync::Arc;
 use futures_util::lock::Mutex;
@@ -18,12 +18,10 @@ use futures_signals::signal::Signal;
 use futures_signals::signal::SignalExt;
 use futures_signals::signal::{Mutable, ReadOnlyMutable};
 
-use uuid::Uuid;
-
 use crate::error::{Result, Error};
 
 use crate::db::access;
-use crate::db::machine::{MachineIdentifier, Status, MachineState};
+use crate::db::machine::{MachineIdentifier, MachineState};
 use crate::db::user::{User, UserData};
 
 use crate::network::MachineMap;

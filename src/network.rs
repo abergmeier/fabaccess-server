@@ -1,17 +1,13 @@
 use std::fmt;
 
-use std::sync::{Arc, Mutex, MutexGuard, TryLockResult};
+use std::sync::Mutex;
 use std::collections::HashMap;
 
-use smol::Executor;
-
 use futures::channel::mpsc;
-use futures_signals::signal::{Signal, MutableSignalCloned, Mutable};
+use futures_signals::signal::Mutable;
 
 use crate::machine::Machine;
-use crate::actor::{Actor, ActorSignal};
-use crate::initiator::Initiator;
-use crate::db::machine::MachineState;
+use crate::actor::ActorSignal;
 
 use crate::error::Result;
 

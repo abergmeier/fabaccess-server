@@ -1,15 +1,11 @@
 use std::sync::Arc;
 
-use slog::Logger;
-
 use capnp::capability::{Params, Results, Promise};
 
 use crate::schema::connection_capnp;
 use crate::connection::Session;
 
 use crate::db::Databases;
-
-use crate::builtin;
 
 use crate::network::Network;
 

@@ -1,23 +1,18 @@
 use std::collections::HashMap;
 
-use std::convert::TryInto;
-
-use std::path::{Path, PathBuf};
-use std::fs;
-use std::io::Write;
+use std::path::Path;
 use std::sync::Arc;
 
 use flexbuffers;
-use serde::{Serialize, Deserialize};
 
 use slog::Logger;
-use lmdb::{Environment, Transaction, RwTransaction, Cursor, Iter};
+use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 
 use crate::config::Settings;
 use crate::error::Result;
 
 use crate::db::access::{Permission, Role, RoleIdentifier, RoleDB};
-use crate::db::user::{User, UserData};
+use crate::db::user::UserData;
 
 #[derive(Clone, Debug)]
 pub struct Internal {
@@ -39,9 +34,9 @@ impl Internal {
         debug!(self.log, "Checking user {:?} for permission {:?}", user, perm.as_ref());
         // Tally all roles. Makes dependent roles easier
         let mut roles = HashMap::new();
-        for roleID in user.roles.iter() {
-            debug!(self.log, "Tallying role {} for its parents", roleID);
-            self._tally_role(txn, &mut roles, roleID)?;
+        for role_id in user.roles.iter() {
+            debug!(self.log, "Tallying role {} for its parents", role_id);
+            self._tally_role(txn, &mut roles, role_id)?;
         }
 
         // Iter all unique role->permissions we've found and early return on match. 
@@ -62,26 +57,26 @@ impl Internal {
         return Ok(false);
     }
 
-    fn _tally_role<T: Transaction>(&self, txn: &T, roles: &mut HashMap<RoleIdentifier, Role>, roleID: &RoleIdentifier) -> Result<()> {
-        if let Some(role) = self._get_role(txn, roleID)? {
+    fn _tally_role<T: Transaction>(&self, txn: &T, roles: &mut HashMap<RoleIdentifier, Role>, role_id: &RoleIdentifier) -> Result<()> {
+        if let Some(role) = self._get_role(txn, role_id)? {
             // Only check and tally parents of a role at the role itself if it's the first time we
             // see it
-            if !roles.contains_key(&roleID) {
+            if !roles.contains_key(&role_id) {
                 for parent in role.parents.iter() {
                     self._tally_role(txn, roles, parent)?;
                 }
 
-                roles.insert(roleID.clone(), role);
+                roles.insert(role_id.clone(), role);
             }
         } else {
-            info!(self.log, "Did not find role {} while trying to tally", roleID);
+            info!(self.log, "Did not find role {} while trying to tally", role_id);
         }
 
         Ok(())
     }
 
-    pub fn _get_role<'txn, T: Transaction>(&self, txn: &'txn T, roleID: &RoleIdentifier) -> Result<Option<Role>> {
-        let string = format!("{}", roleID);
+    pub fn _get_role<'txn, T: Transaction>(&self, txn: &'txn T, role_id: &RoleIdentifier) -> Result<Option<Role>> {
+        let string = format!("{}", role_id);
         match txn.get(self.roledb, &string.as_bytes()) {
             Ok(bytes) => {
                 Ok(Some(flexbuffers::from_slice(bytes)?))
@@ -91,9 +86,9 @@ impl Internal {
         }
     }
 
-    fn put_role(&self, txn: &mut RwTransaction, roleID: &RoleIdentifier, role: Role) -> Result<()> {
+    fn put_role(&self, txn: &mut RwTransaction, role_id: &RoleIdentifier, role: Role) -> Result<()> {
         let bytes = flexbuffers::to_vec(role)?;
-        let string = format!("{}", roleID);
+        let string = format!("{}", role_id);
         txn.put(self.roledb, &string.as_bytes(), &bytes, lmdb::WriteFlags::empty())?;
 
         Ok(())
@@ -154,14 +149,14 @@ impl RoleDB for Internal {
         self._check(&txn, user, &perm)
     }
 
-    fn get_role(&self, roleID: &RoleIdentifier) -> Result<Option<Role>> {
+    fn get_role(&self, role_id: &RoleIdentifier) -> Result<Option<Role>> {
         let txn = self.env.begin_ro_txn()?;
-        self._get_role(&txn, roleID)
+        self._get_role(&txn, role_id)
     }
 
-    fn tally_role(&self, roles: &mut HashMap<RoleIdentifier, Role>, roleID: &RoleIdentifier) -> Result<()> {
+    fn tally_role(&self, roles: &mut HashMap<RoleIdentifier, Role>, role_id: &RoleIdentifier) -> Result<()> {
         let txn = self.env.begin_ro_txn()?;
-        self._tally_role(&txn, roles, roleID)
+        self._tally_role(&txn, roles, role_id)
     }
 }
 

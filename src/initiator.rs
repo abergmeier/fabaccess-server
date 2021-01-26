@@ -3,16 +3,13 @@ use std::task::{Poll, Context};
 use std::future::Future;
 use std::collections::HashMap;
 
-use smol::{Task, Timer};
+use smol::Timer;
 
 use slog::Logger;
 
 use paho_mqtt::AsyncClient;
 
-use futures::FutureExt;
 use futures::future::BoxFuture;
-
-use genawaiter::{sync::{Gen, GenBoxed, Co}, GeneratorState};
 
 use futures_signals::signal::{Signal, Mutable, MutableSignalCloned};
 use crate::machine::{Machine, ReturnToken};

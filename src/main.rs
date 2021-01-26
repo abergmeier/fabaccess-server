@@ -24,21 +24,12 @@ mod initiator;
 
 use clap::{App, Arg};
 
-use futures::prelude::*;
-use futures::executor::{LocalPool, ThreadPool};
-use futures::compat::Stream01CompatExt;
-use futures::join;
-use futures::task::LocalSpawn;
-
 use std::io;
 use std::io::Write;
 use std::path::PathBuf;
 use std::str::FromStr;
 
 use std::sync::Arc;
-
-use lmdb::Transaction;
-use smol::net::TcpListener;
 
 use smol::Executor;
 

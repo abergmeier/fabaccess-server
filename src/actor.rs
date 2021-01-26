@@ -1,14 +1,12 @@
 use std::pin::Pin;
 use std::task::{Poll, Context};
-use std::sync::{Arc, Mutex};
+use std::sync::Mutex;
 use std::collections::HashMap;
 use std::future::Future;
 
-use smol::Executor;
-
-use futures::{future::BoxFuture, Stream, StreamExt};
+use futures::{future::BoxFuture, Stream};
 use futures::channel::mpsc;
-use futures_signals::signal::{Signal, MutableSignalCloned, MutableSignal, Mutable};
+use futures_signals::signal::Signal;
 
 use crate::db::machine::MachineState;
 use crate::config::Config;

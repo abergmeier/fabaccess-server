@@ -2,29 +2,15 @@
 //!
 
 use std::fmt;
-use std::collections::HashSet;
 use std::collections::HashMap;
 use std::cmp::Ordering;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::fs;
-use std::io::Write;
-use std::sync::Arc;
 use std::iter::FromIterator;
 use std::convert::{TryFrom, Into};
 
-use flexbuffers;
-use serde::{
-    Serialize,
-    Serializer,
+use serde::{Serialize, Deserialize};
 
-    Deserialize,
-    Deserializer,
-};
-
-use slog::Logger;
-use lmdb::{Environment, Transaction, RwTransaction, Cursor};
-
-use crate::config::Settings;
 use crate::error::Result;
 
 pub mod internal;
@@ -77,7 +63,7 @@ impl fmt::Debug for AccessControl {
 pub trait RoleDB {
     fn get_type_name(&self) -> &'static str;
 
-    fn get_role(&self, roleID: &RoleIdentifier) -> Result<Option<Role>>;
+    fn get_role(&self, role_id: &RoleIdentifier) -> Result<Option<Role>>;
 
     /// Check if a given user has the given permission
     /// 
@@ -95,8 +81,8 @@ pub trait RoleDB {
     fn check_roles(&self, roles: &[RoleIdentifier], perm: &Permission) -> Result<bool> {
         // Tally all roles. Makes dependent roles easier
         let mut roleset = HashMap::new();
-        for roleID in roles {
-            self.tally_role(&mut roleset, roleID)?;
+        for role_id in roles {
+            self.tally_role(&mut roleset, role_id)?;
         }
 
         // Iter all unique role->permissions we've found and early return on match. 
@@ -115,16 +101,16 @@ pub trait RoleDB {
     ///
     /// A Default implementation exists which adapter may overwrite with more efficient
     /// implementations.
-    fn tally_role(&self, roles: &mut HashMap<RoleIdentifier, Role>, roleID: &RoleIdentifier) -> Result<()> {
-        if let Some(role) = self.get_role(roleID)? {
+    fn tally_role(&self, roles: &mut HashMap<RoleIdentifier, Role>, role_id: &RoleIdentifier) -> Result<()> {
+        if let Some(role) = self.get_role(role_id)? {
             // Only check and tally parents of a role at the role itself if it's the first time we
             // see it
-            if !roles.contains_key(&roleID) {
+            if !roles.contains_key(&role_id) {
                 for parent in role.parents.iter() {
                     self.tally_role(roles, parent)?;
                 }
 
-                roles.insert(roleID.clone(), role);
+                roles.insert(role_id.clone(), role);
             }
         }
 

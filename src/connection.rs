@@ -6,8 +6,7 @@ use slog::Logger;
 
 use smol::net::TcpStream;
 
-use crate::error::{Error, Result};
-use crate::api::auth;
+use crate::error::Result;
 use crate::api::Bootstrap;
 
 use capnp_rpc::{twoparty, rpc_twoparty_capnp};
@@ -17,7 +16,6 @@ use crate::schema::connection_capnp;
 use crate::db::Databases;
 use crate::db::access::{AccessControl, Permission};
 use crate::db::user::User;
-use crate::builtin;
 use crate::network::Network;
 
 #[derive(Debug, Clone)]

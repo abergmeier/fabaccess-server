@@ -4,8 +4,7 @@ use std::fs;
 use std::collections::HashMap;
 
 use argon2;
-use lmdb::{Environment, Transaction, RwTransaction, Cursor};
-use rand::prelude::*;
+use lmdb::{Environment, Transaction, RwTransaction};
 use slog::Logger;
 
 use crate::error::Result;

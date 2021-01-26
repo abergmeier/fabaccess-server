@@ -1,12 +1,5 @@
-use std::collections::HashMap;
 use lazy_static::lazy_static;
-use crate::db::access::{
-    Permission,
-    PermissionBuf,
-    PermRule,
-    RoleIdentifier,
-    Role,
-};
+use crate::db::access::Permission;
 
 lazy_static! {
     static ref AUTH_PERM: &'static Permission = Permission::new("bffh.auth");

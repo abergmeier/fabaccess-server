@@ -1,7 +1,6 @@
 use slog::{Drain, Logger};
 use slog_async;
 use slog_term::{TermDecorator, FullFormat};
-use crate::config::Settings;
 
 pub fn init() -> Logger {
     let decorator = TermDecorator::new().build();

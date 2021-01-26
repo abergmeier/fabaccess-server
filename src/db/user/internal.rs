@@ -1,7 +1,7 @@
 use std::sync::Arc;
 
 use slog::Logger;
-use lmdb::{Environment, Transaction, RwTransaction, Cursor};
+use lmdb::{Environment, Cursor, Transaction, RwTransaction};
 
 use crate::error::Result;
 

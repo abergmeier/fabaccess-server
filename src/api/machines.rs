@@ -7,7 +7,6 @@ use crate::schema::api_capnp::machines;
 use crate::connection::Session;
 
 use crate::db::Databases;
-use crate::db::machine::uuid_from_api;
 
 use crate::network::Network;
 

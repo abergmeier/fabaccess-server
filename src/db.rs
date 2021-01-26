@@ -5,7 +5,7 @@ use std::str::FromStr;
 use slog::Logger;
 
 use crate::error::Result;
-use crate::config::Settings;
+use crate::config::Config;
 
 /// (Hashed) password database
 pub mod pass;
@@ -34,7 +34,7 @@ pub struct Databases {
 const LMDB_MAX_DB: u32 = 16;
 
 impl Databases {
-    pub fn new(log: &Logger, config: &Settings) -> Result<Self> {
+    pub fn new(log: &Logger, config: &Config) -> Result<Self> {
 
         // Initialize the LMDB environment. This blocks until the mmap() finishes
         info!(log, "LMDB env");
