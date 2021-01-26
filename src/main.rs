@@ -4,7 +4,6 @@ extern crate slog;
 #[macro_use]
 extern crate capnp_rpc;
 
-#[macro_use]
 extern crate async_trait;
 
 mod modules;
