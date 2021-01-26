@@ -15,9 +15,6 @@ pub fn read(path: &Path) -> Result<Config> {
         .map_err(Into::into)
 }
 
-#[deprecated]
-pub type Settings = Config;
-
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// A list of address/port pairs to listen on.

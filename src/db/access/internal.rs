@@ -8,7 +8,7 @@ use flexbuffers;
 use slog::Logger;
 use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 
-use crate::config::Settings;
+use crate::config::Config;
 use crate::error::Result;
 
 use crate::db::access::{Permission, Role, RoleIdentifier, RoleDB};
@@ -163,7 +163,7 @@ impl RoleDB for Internal {
 
 
 /// Initialize the access db by loading all the lmdb databases
-pub fn init(log: Logger, config: &Settings, env: Arc<lmdb::Environment>) 
+pub fn init(log: Logger, config: &Config, env: Arc<lmdb::Environment>) 
     -> std::result::Result<Internal, crate::error::Error> 
 {
     let mut flags = lmdb::DatabaseFlags::empty();

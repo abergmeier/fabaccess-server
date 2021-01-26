@@ -1,7 +1,7 @@
 use slog::Logger;
 
 use crate::config;
-use crate::config::Settings;
+use crate::config::Config;
 use crate::error::Error;
 use crate::connection;
 
@@ -19,7 +19,7 @@ use crate::db::Databases;
 use crate::network::Network;
 
 /// Handle all API connections and run the RPC tasks spawned from that on the local thread.
-pub fn serve_api_connections(log: Arc<Logger>, config: Settings, db: Databases, nw: Network)
+pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw: Network)
     -> Result<(), Error> 
 {
     let signal = Box::pin(async {

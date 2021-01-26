@@ -245,7 +245,7 @@ impl MachineDescription {
     }
 }
 
-pub fn load(config: &crate::config::Settings, access: Arc<access::AccessControl>) 
+pub fn load(config: &crate::config::Config, access: Arc<access::AccessControl>) 
     -> Result<MachineMap> 
 {
     let mut map = config.machines.clone();
