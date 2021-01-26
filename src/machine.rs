@@ -203,7 +203,7 @@ impl Future for Inner {
     type Output = MachineState;
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let mut this = &mut *self;
+        let this = &mut *self;
         // TODO Return this on exit
         if false {
             return Poll::Ready(self.state.get_cloned());

@@ -56,7 +56,7 @@ impl ConnectionHandler {
         Self { log, db, network }
     }
 
-    pub fn handle(&mut self, mut stream: TcpStream) -> impl Future<Output=Result<()>> {
+    pub fn handle(&mut self, stream: TcpStream) -> impl Future<Output=Result<()>> {
         info!(self.log, "New connection from on {:?}", stream);
         let session = Arc::new(Session::new(self.log.new(o!()), self.db.access.clone()));
         let boots = Bootstrap::new(session, self.db.clone(), self.network.clone());

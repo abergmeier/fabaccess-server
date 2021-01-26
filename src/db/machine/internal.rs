@@ -24,7 +24,7 @@ impl Internal {
     {
         match txn.get(self.db, &id.as_bytes()) {
             Ok(bytes) => {
-                let mut machine: MachineState = flexbuffers::from_slice(bytes)?;
+                let machine: MachineState = flexbuffers::from_slice(bytes)?;
                 Ok(Some(machine))
             },
             Err(lmdb::Error::NotFound) => { Ok(None) },

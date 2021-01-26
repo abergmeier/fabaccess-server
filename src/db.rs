@@ -50,7 +50,7 @@ impl Databases {
         let mdb = machine::init(log.new(o!("system" => "machines")), &config, env.clone())?;
 
         let permdb = access::init(log.new(o!("system" => "permissions")), &config, env.clone())?;
-        let mut ac = access::AccessControl::new(permdb);
+        let ac = access::AccessControl::new(permdb);
 
         let passdb = pass::PassDB::init(log.new(o!("system" => "passwords")), env.clone()).unwrap();
 

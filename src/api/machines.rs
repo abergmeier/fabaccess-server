@@ -39,7 +39,7 @@ impl machines::Server for Machines {
             .map(|(n, m)| (n.clone(), m.clone()))
             .collect();
 
-        let mut res = results.get();
+        let res = results.get();
         let mut machines = res.init_machines(v.len() as u32);
 
         for (i, (name, machine)) in v.into_iter().enumerate() {

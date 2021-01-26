@@ -153,8 +153,8 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         smol::block_on(tok)?;
 
         let machines = machine::load(&config, db.access.clone())?;
-        let (mut actor_map, actors) = actor::load(&log, &mqtt, &config)?;
-        let (mut init_map, initiators) = initiator::load(&log, &mqtt, &config)?;
+        let (actor_map, actors) = actor::load(&log, &mqtt, &config)?;
+        let (init_map, initiators) = initiator::load(&log, &mqtt, &config)?;
 
         // TODO: restore connections between initiators, machines, actors
         let mut network = network::Network::new(machines, actor_map, init_map);

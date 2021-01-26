@@ -84,7 +84,7 @@ impl Auth {
     pub fn new(passdb: Arc<PassDB>, session: Arc<Session>) -> Self {
         let mut ctx = SASL::new().unwrap();
 
-        let mut appdata = Box::new(AppData { passdb });
+        let appdata = Box::new(AppData { passdb });
 
         ctx.store(appdata);
 
