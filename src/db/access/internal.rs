@@ -77,6 +77,7 @@ impl Internal {
 
     pub fn _get_role<'txn, T: Transaction>(&self, txn: &'txn T, role_id: &RoleIdentifier) -> Result<Option<Role>> {
         let string = format!("{}", role_id);
+        debug!(self.log, "Reading role '{}'", &string);
         match txn.get(self.roledb, &string.as_bytes()) {
             Ok(bytes) => {
                 Ok(Some(flexbuffers::from_slice(bytes)?))
@@ -108,8 +109,10 @@ impl Internal {
                 Ok( (k,v) ) => {
                     let role_id_str = unsafe { std::str::from_utf8_unchecked(k) };
                     let role_id = role_id_str.parse::<RoleIdentifier>().unwrap();
-                    let role = flexbuffers::from_slice(v)?;
-                    vec.push((role_id, role));
+                    match flexbuffers::from_slice(v) {
+                        Ok(role) => vec.push((role_id, role)),
+                        Err(e) => error!(self.log, "Bad format for roleid {}: {}", role_id, e),
+                    }
                 },
                 Err(e) => return Err(e.into()),
             }

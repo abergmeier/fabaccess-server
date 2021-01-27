@@ -50,6 +50,10 @@ impl AccessControl {
     pub fn dump_roles(&self) -> Result<Vec<(RoleIdentifier, Role)>> {
         self.internal.dump_roles()
     }
+
+    pub fn get_role(&self, role_id: &RoleIdentifier) -> Result<Option<Role>> {
+        self.internal.get_role(role_id)
+    }
 }
 
 impl fmt::Debug for AccessControl {
@@ -162,37 +166,24 @@ type SourceID = String;
 fn split_once(s: &str, split: char) -> Option<(&str, &str)> {
     s
         .find(split)
-        .map(|idx| s.split_at(idx))
+        .map(|idx| (&s[..idx], &s[(idx+1)..]))
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
 #[serde(try_from = "String")]
+#[serde(into = "String")]
 /// Universal (relative) id of a role
-pub enum RoleIdentifier {
-    /// The role comes from this instance
-    Local {
-        /// Locally unique name for the role. No other role at this instance no matter the source
-        /// may have the same name
-        name: String,
-        /// Role Source, i.e. the database the role comes from
-        source: SourceID,
-    },
-    /// The role comes from a federated instance
-    Remote {
-        /// Name of the role. This role is unique in that instance so the tuple (name, location)
-        /// refers to a unique role
-        name: String,
-        /// The federated instance this role comes from
-        location: String,
-    }
+pub struct RoleIdentifier {
+    /// Locally unique name for the role. No other role at this instance no matter the source
+    /// may have the same name
+    name: String,
+    /// Role Source, i.e. the database the role comes from
+    source: SourceID,
 }
 
 impl fmt::Display for RoleIdentifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            RoleIdentifier::Local {name, source} => write!(f, "{}/{}@local", name, source),
-            RoleIdentifier::Remote {name, location} => write!(f, "{}@{}", name, location),
-        }
+        write!(f, "{}/{}", self.name, self.source)
     }
 }
 
@@ -200,10 +191,8 @@ impl std::str::FromStr for RoleIdentifier {
     type Err = RoleFromStrError;
 
     fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        if let Some((name, location)) = split_once(s, '@') {
-            Ok(RoleIdentifier::Remote { name: name.to_string(), location: location.to_string() })
-        } else if let Some((name, source)) = split_once(s, '%') {
-            Ok(RoleIdentifier::Local { name: name.to_string(), source: source.to_string() })
+        if let Some((name, source)) = split_once(s, '/') {
+            Ok(RoleIdentifier { name: name.to_string(), source: source.to_string() })
         } else {
             Err(RoleFromStrError::Invalid)
         }
@@ -214,21 +203,18 @@ impl TryFrom<String> for RoleIdentifier {
     type Error = RoleFromStrError;
 
     fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
-        if let Some((name, location)) = split_once(&s, '@') {
-            let location = &location[1..];
-            Ok(RoleIdentifier::Remote { name: name.to_string(), location: location.to_string() })
-        } else if let Some((name, source)) = split_once(&s, '%') {
-            let source = &source[1..];
-            Ok(RoleIdentifier::Local { name: name.to_string(), source: source.to_string() })
-        } else {
-            Err(RoleFromStrError::Invalid)
-        }
+        <RoleIdentifier as std::str::FromStr>::from_str(&s)
+    }
+}
+impl Into<String> for RoleIdentifier {
+    fn into(self) -> String {
+        format!("{}", self)
     }
 }
 
 impl RoleIdentifier {
     pub fn local_from_str(source: String, name: String) -> Self {
-        RoleIdentifier::Local { name, source }
+        RoleIdentifier { name, source }
     }
 }
 
@@ -505,7 +491,7 @@ impl TryFrom<String> for PermRule {
     }
 }
 
-#[cfg(test_DISABLED)]
+#[cfg(test)]
 mod tests {
     use super::*;
 
@@ -533,22 +519,45 @@ mod tests {
     }
 
     #[test]
+    fn format_and_read_compatible() {
+        use std::convert::TryInto;
+
+        let testdata = vec![
+            ("testrole", "testsource"),
+            ("", "norole"),
+            ("nosource", "")
+        ].into_iter().map(|(n,s)| (n.to_string(), s.to_string()));
+
+        for (name, source) in testdata {
+            let role = RoleIdentifier { name, source };
+
+            let fmt_string = format!("{}", &role);
+
+            println!("{:?} is formatted: {}", &role, &fmt_string);
+
+            let parsed: RoleIdentifier = fmt_string.try_into().unwrap();
+
+            println!("Which parses into {:?}", &parsed);
+
+            assert_eq!(role, parsed);
+        }
+    }
+
+    #[test]
     fn load_examples_roles_test() {
         let mut roles = Role::load_file("examples/roles.toml")
             .expect("Couldn't load the example role defs. Does `examples/roles.toml` exist?");
 
         let expected = vec![
-            (RoleIdentifier::Local { name: "testrole".to_string(), source: "lmdb".to_string() },
+            (RoleIdentifier { name: "testrole".to_string(), source: "lmdb".to_string() },
             Role {
-                name: "Testrole".to_string(),
                 parents: vec![],
                 permissions: vec![
                     PermRule::Subtree(PermissionBuf::from_string("lab.test".to_string()))
                 ],
             }),
-            (RoleIdentifier::Local { name: "somerole".to_string(), source: "lmdb".to_string() },
+            (RoleIdentifier { name: "somerole".to_string(), source: "lmdb".to_string() },
             Role {
-                name: "Somerole".to_string(),
                 parents: vec![
                     RoleIdentifier::local_from_str("lmdb".to_string(), "testparent".to_string()),
                 ],
@@ -556,9 +565,8 @@ mod tests {
                     PermRule::Base(PermissionBuf::from_string("lab.some.admin".to_string()))
                 ],
             }),
-            (RoleIdentifier::Local { name: "testparent".to_string(), source: "lmdb".to_string() },
+            (RoleIdentifier { name: "testparent".to_string(), source: "lmdb".to_string() },
             Role {
-                name: "Testparent".to_string(),
                 parents: vec![],
                 permissions: vec![
                     PermRule::Base(PermissionBuf::from_string("lab.some.write".to_string())),
