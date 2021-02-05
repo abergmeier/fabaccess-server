@@ -1,0 +1,26 @@
+version: "3.8"
+services:
+  bffh-a:
+    image: registry.gitlab.com/fabinfra/fabaccess/bffh:dev-latest 
+    command: ["sh", "-c", "diflouroborane -c /etc/bffh/bffh.dhall --load=/etc/bffh; diflouroborane -c /etc/bffh/bffh.dhall"]
+    volumes:
+      # generate a sample config.toml by running "docker run registry.gitlab.com/fabinfra/fabaccess/bffh:dev-latest --print-default > examples/config.toml" from the project root. You may have to delete the ipv6 listen section.
+      - "./config_a:/etc/bffh"
+    links:
+      - mqtt-a
+  mqtt-a:
+    image: eclipse-mosquitto
+  bffh-b:
+    image: registry.gitlab.com/fabinfra/fabaccess/bffh:dev-latest 
+    command: ["sh", "-c", "diflouroborane -c /etc/bffh/bffh.dhall --load=/etc/bffh; diflouroborane -c /etc/bffh/bffh.dhall"]
+    volumes:
+      # generate a sample config.toml by running "docker run registry.gitlab.com/fabinfra/fabaccess/bffh:dev-latest --print-default > examples/config.toml" from the project root. You may have to delete the ipv6 listen section.
+      - "./config_b:/etc/bffh"
+    links:
+      - mqtt-b
+  mqtt-b:
+    image: eclipse-mosquitto
+
+  test-manager:
+      image: debian
+      tty: true
