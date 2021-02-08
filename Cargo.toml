@@ -34,7 +34,7 @@ serde = { version = "1.0", features = ["derive"] }
 toml = "0.5"
 flexbuffers = "0.1"
 
-serde_dhall = { version =  "0.9", default-features = false }
+serde_dhall = { version =  "0.10", default-features = false }
 
 uuid = { version = "0.8", features = ["serde", "v4"] }
 
