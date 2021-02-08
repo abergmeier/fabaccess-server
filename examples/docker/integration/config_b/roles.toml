@@ -1,0 +1,20 @@
+[testrole]
+name = "Testrole"
+permissions = [
+    "lab.test.*"
+]
+
+[somerole]
+name = "Somerole"
+parents = ["testparent%lmdb"]
+permissions = [
+    "lab.some.admin"
+]
+
+[testparent]
+name = "Testparent"
+permissions = [
+    "lab.some.write",
+    "lab.some.read",
+    "lab.some.disclose",
+]
