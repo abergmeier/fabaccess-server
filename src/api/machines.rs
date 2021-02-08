@@ -10,7 +10,7 @@ use crate::db::Databases;
 
 use crate::network::Network;
 
-use super::machine::Machine;
+use super::machine::*;
 
 /// An implementation of the `Machines` API
 pub struct Machines {
@@ -39,14 +39,13 @@ impl machines::Server for Machines {
             .map(|(n, m)| (n.clone(), m.clone()))
             .collect();
 
-        let res = results.get();
-        let mut machines = res.init_machines(v.len() as u32);
+        let mut machines = results.get().init_machines(v.len() as u32);
 
         for (i, (name, machine)) in v.into_iter().enumerate() {
-            debug!(self.session.log, "Adding machine {}: {:?}", name, machine);
+            trace!(self.session.log, "Adding machine #{} {}: {:?}", i, name, machine);
             let machine = Arc::new(Machine::new(self.session.clone(), machine, self.db.clone()));
             let mut builder = machines.reborrow().get(i as u32);
-            Machine::fill(machine, &mut builder);
+            machine.fill(&mut builder);
         }
 
         Promise::ok(())

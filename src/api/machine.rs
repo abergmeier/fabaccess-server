@@ -26,9 +26,10 @@ impl Machine {
     }
 
     pub fn fill(self: Arc<Self>, builder: &mut Builder) {
-        // TODO check permissions
         builder.set_read(capnp_rpc::new_client(Read(self.clone())));
-        // TODO set all the others
+        builder.set_write(capnp_rpc::new_client(Write(self.clone())));
+        builder.set_manage(capnp_rpc::new_client(Manage(self.clone())));
+        builder.set_admin(capnp_rpc::new_client(Admin(self.clone())));
     }
 
     pub async fn fill_info(&self, builder: &mut m_info::Builder<'_>) {
@@ -63,7 +64,14 @@ impl Machine {
     }
 }
 
-struct Read(Arc<Machine>);
+#[derive(Clone)]
+pub struct Read(Arc<Machine>);
+
+impl Read {
+    pub fn new(inner: Arc<Machine>) -> Self {
+        Self(inner)
+    }
+}
 
 impl read::Server for Read {
     fn info(&mut self,
@@ -71,9 +79,16 @@ impl read::Server for Read {
         mut results: read::InfoResults) 
     -> Promise<(), Error>
     {
-        let mut b = results.get().init_minfo();
-        self.0.fill_info(&mut b);
-        Promise::ok(())
+        let this = self.clone();
+        let f = async move {
+            let mut b = results.get().init_minfo();
+
+            this.0.fill_info(&mut b).await;
+
+            Ok(())
+        };
+
+        Promise::from_future(f)
     }
 }
 
