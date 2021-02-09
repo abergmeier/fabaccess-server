@@ -11,7 +11,7 @@ use crate::schema::api_capnp::machine::*;
 use crate::connection::Session;
 use crate::db::Databases;
 use crate::db::machine::{Status, MachineState};
-use crate::machine::Machine as NwMachine;
+use crate::machine::{Machine as NwMachine, ReturnToken};
 
 #[derive(Clone)]
 pub struct Machine {
@@ -97,20 +97,29 @@ struct Write(Arc<Machine>);
 impl write::Server for Write {
     fn use_(&mut self,
         _params: write::UseParams,
-        _results: write::UseResults)
+        mut results: write::UseResults)
     -> Promise<(), Error>
     {
         let uid = self.0.session.user.try_lock().unwrap().as_ref().map(|u| u.id.clone());
         let new_state = MachineState::used(uid.clone());
         let this = self.0.clone();
-        let f = this.machine.request_state_change(this.session.user.try_lock().unwrap().as_ref(), new_state)
-            .map(|res_token| match res_token {
+        let f = async move {
+            let res_token = this.machine.request_state_change(
+                this.session.user.try_lock().unwrap().as_ref(), 
+                new_state
+            ).await;
+
+            match res_token {
                 // TODO: Do something with the token we get returned
-                Ok(_tok) => {
+                Ok(tok) => {
+                    let gb = GiveBack(Some(tok));
+                    results.get().set_ret(capnp_rpc::new_client(gb));
+
                     return Ok(());
                 },
                 Err(e) => Err(capnp::Error::failed(format!("State change request returned {}", e))),
-        });
+            }
+        };
 
         Promise::from_future(f)
     }
@@ -121,6 +130,23 @@ impl write::Server for Write {
     -> Promise<(), Error>
     {
         unimplemented!()
+    }
+}
+
+struct GiveBack(Option<ReturnToken>);
+
+impl write::give_back::Server for GiveBack {
+    fn ret(&mut self,
+        _params: write::give_back::RetParams,
+        _results: write::give_back::RetResults)
+    -> Promise<(), Error>
+    {
+        if let Some(chan) = self.0.take() {
+            chan.send(())
+                .expect("Other end of GiveBack token was dropped?!");
+        }
+
+        Promise::ok(())
     }
 }
 
