@@ -10,4 +10,4 @@ services:
     links:
       - mqtt
   mqtt:
-    image: eclipse-mosquitto
+    image: eclipse-mosquitto:1.6.13
