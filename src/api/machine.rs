@@ -109,7 +109,7 @@ impl write::Server for Write {
                 Ok(_tok) => {
                     return Ok(());
                 },
-                Err(_) => Err(capnp::Error::failed("State change request returned an err".to_string())),
+                Err(e) => Err(capnp::Error::failed(format!("State change request returned {}", e))),
         });
 
         Promise::from_future(f)
