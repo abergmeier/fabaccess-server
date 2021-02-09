@@ -22,19 +22,28 @@ use capnp::capability::{Params, Results, Promise};
 use crate::api::Session;
 
 pub use crate::schema::auth_capnp;
+use crate::db::Databases;
 use crate::db::pass::PassDB;
+use crate::db::user::{Internal as UserDB};
 
 pub struct AppData {
     passdb: Arc<PassDB>,
+    userdb: Arc<UserDB>,
 }
-pub struct SessionData;
+pub struct SessionData {
+    session: Arc<Session>,
+}
 
 
 struct CB;
 impl Callback<AppData, SessionData> for CB {
-    fn callback(mut sasl: SaslCtx<AppData, SessionData>, session: SaslSession<SessionData>, prop: Property) -> libc::c_int {
+    fn callback(mut sasl: SaslCtx<AppData, SessionData>, mut session: SaslSession<SessionData>, prop: Property) -> libc::c_int {
         let ret = match prop {
             Property::GSASL_VALIDATE_SIMPLE => {
+                // FIXME: get_property and retrive_mut can't be used interleaved but that's
+                // technically safe.
+                let cap_session = session.retrieve_mut().map(|sd| sd.session.clone());
+
                 let authid = match session.get_property(Property::GSASL_AUTHID) {
                     None => return ReturnCode::GSASL_NO_AUTHID as libc::c_int,
                     Some(a) => {
@@ -52,9 +61,15 @@ impl Callback<AppData, SessionData> for CB {
                 let pass = pass.unwrap();
 
 
-                if let Some(sessiondata) = sasl.retrieve_mut() {
-                    if let Ok(Some(b)) = sessiondata.passdb.check(authid, pass.to_bytes()) {
+                if let Some(appdata) = sasl.retrieve_mut() {
+                    if let Ok(Some(b)) = appdata.passdb.check(authid, pass.to_bytes()) {
                         if b {
+                            if let Some(s) = cap_session {
+                                if let Ok(Some(user)) = appdata.userdb.get_user(authid) {
+                                    s.user.try_lock().unwrap().replace(user);
+                                }
+                            }
+
                             ReturnCode::GSASL_OK
                         } else {
                             ReturnCode::GSASL_AUTHENTICATION_ERROR
@@ -81,10 +96,10 @@ pub struct Auth {
 }
 
 impl Auth {
-    pub fn new(passdb: Arc<PassDB>, session: Arc<Session>) -> Self {
+    pub fn new(dbs: Databases, session: Arc<Session>) -> Self {
         let mut ctx = SASL::new().unwrap();
 
-        let appdata = Box::new(AppData { passdb });
+        let appdata = Box::new(AppData { passdb: dbs.passdb.clone(), userdb: dbs.userdb.clone() });
 
         ctx.store(appdata);
 
@@ -140,6 +155,8 @@ impl auth_capnp::authentication::Server for Auth {
                     description: format!("SASL error: {}", e),
                 }),
         };
+
+        session.store(Box::new(SessionData { session: self.session.clone() }));
 
         // If the client has provided initial data go use that
         use auth_capnp::request::initial_response::Which;

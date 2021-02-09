@@ -4,6 +4,7 @@ use futures::FutureExt;
 
 use slog::Logger;
 
+use smol::lock::Mutex;
 use smol::net::TcpStream;
 
 use crate::error::Result;
@@ -18,26 +19,26 @@ use crate::db::access::{AccessControl, Permission};
 use crate::db::user::User;
 use crate::network::Network;
 
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 /// Connection context
 // TODO this should track over several connections
 pub struct Session {
     // Session-spezific log
     pub log: Logger,
-    pub user: Option<User>,
+    pub user: Mutex<Option<User>>,
     pub accessdb: Arc<AccessControl>,
 }
 
 impl Session {
     pub fn new(log: Logger, accessdb: Arc<AccessControl>) -> Self {
-        let user = None;
+        let user = Mutex::new(None);
 
         Session { log, user, accessdb }
     }
 
     /// Check if the current session has a certain permission
     pub async fn check_permission<P: AsRef<Permission>>(&self, perm: &P) -> Result<bool> {
-        if let Some(user) = self.user.as_ref() {
+        if let Some(user) = self.user.lock().await.as_ref() {
             self.accessdb.check(&user.data, perm).await
         } else {
             Ok(false)

@@ -100,10 +100,10 @@ impl write::Server for Write {
         _results: write::UseResults)
     -> Promise<(), Error>
     {
-        let uid = self.0.session.user.as_ref().map(|u| u.id.clone());
+        let uid = self.0.session.user.try_lock().unwrap().as_ref().map(|u| u.id.clone());
         let new_state = MachineState::used(uid.clone());
         let this = self.0.clone();
-        let f = this.machine.request_state_change(this.session.user.as_ref(), new_state)
+        let f = this.machine.request_state_change(this.session.user.try_lock().unwrap().as_ref(), new_state)
             .map(|res_token| match res_token {
                 // TODO: Do something with the token we get returned
                 Ok(_tok) => {
