@@ -141,9 +141,10 @@ impl write::give_back::Server for GiveBack {
         _results: write::give_back::RetResults)
     -> Promise<(), Error>
     {
+        println!("I'm doing my part!");
         if let Some(chan) = self.0.take() {
-            chan.send(())
-                .expect("Other end of GiveBack token was dropped?!");
+            // Err here just means machine was taken from us
+            let _ = chan.send(());
         }
 
         Promise::ok(())
