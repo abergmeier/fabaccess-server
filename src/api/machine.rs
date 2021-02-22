@@ -141,12 +141,12 @@ impl write::give_back::Server for GiveBack {
         _results: write::give_back::RetResults)
     -> Promise<(), Error>
     {
-        if let Some(chan) = self.0.take() {
-            chan.send(())
-                .expect("Other end of GiveBack token was dropped?!");
+        if let Some(rt) = self.0.take() {
+            // Err here just means machine was taken from us
+            Promise::from_future(rt.map(|()| Ok(())))
+        } else {
+            Promise::ok(())
         }
-
-        Promise::ok(())
     }
 }
 
