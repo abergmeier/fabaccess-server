@@ -96,13 +96,14 @@ impl Machine {
             if let Some(udata) = udata {
                 let mut guard = this.inner.try_lock().unwrap();
                 if this.access.check(&udata, &guard.desc.privs.write).await? {
-                    return guard.do_state_change(new_state);
+                    guard.do_state_change(new_state);
+                    return Ok(ReturnToken::new(this.inner.clone()))
                 }
             } else {
                 if new_state == MachineState::free() {
                     let mut guard = this.inner.try_lock().unwrap();
                     guard.do_state_change(new_state);
-                    return Ok(ReturnToken(self.inner.clone()));
+                    return Ok(ReturnToken::new(this.inner.clone()));
                 }
             }
 
@@ -196,22 +197,34 @@ impl Inner {
 
 //pub type ReturnToken = futures::channel::oneshot::Sender<()>;
 pub struct ReturnToken {
-    inner: Arc<Mutex<Inner>>,
+    f: Option<BoxFuture<'static, ()>>,
 }
 
 impl ReturnToken {
     pub fn new(inner: Arc<Mutex<Inner>>) -> Self {
-        Self { inner }
+        let f = async move {
+            let mut guard = inner.lock().await;
+            guard.reset_state();
+        };
+
+        Self { f: Some(Box::pin(f)) }
     }
 }
 
 impl Future for ReturnToken {
-    type Output = ();
+    type Output = (); // FIXME: This should probably be a Result<(), Error>
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
         let mut this = &mut *self;
 
-        this.0
+        match this.f.as_mut().map(|f| Future::poll(Pin::new(f), cx)) {
+            None => Poll::Ready(()), // TODO: Is it saner to return Pending here? This can only happen after the future completed
+            Some(Poll::Pending) => Poll::Pending,
+            Some(Poll::Ready(())) => {
+                let _ = this.f.take(); // Remove the future to not poll after completion
+                Poll::Ready(())
+            }
+        }
     }
 }
 

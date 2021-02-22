@@ -141,13 +141,12 @@ impl write::give_back::Server for GiveBack {
         _results: write::give_back::RetResults)
     -> Promise<(), Error>
     {
-        println!("I'm doing my part!");
-        if let Some(chan) = self.0.take() {
+        if let Some(rt) = self.0.take() {
             // Err here just means machine was taken from us
-            let _ = chan.send(());
+            Promise::from_future(rt.map(|()| Ok(())))
+        } else {
+            Promise::ok(())
         }
-
-        Promise::ok(())
     }
 }
 
