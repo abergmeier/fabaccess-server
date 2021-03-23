@@ -23,7 +23,7 @@ use futures_signals::signal::{Mutable, ReadOnlyMutable};
 use crate::error::{Result, Error};
 
 use crate::db::access;
-use crate::db::machine::{MachineIdentifier, MachineState};
+use crate::db::machine::{MachineIdentifier, MachineState, Status};
 use crate::db::user::{User, UserData};
 
 use crate::network::MachineMap;
@@ -111,6 +111,15 @@ impl Machine {
         };
 
         Box::pin(f)
+    }
+
+    pub fn create_token(&self)  -> ReturnToken {
+        ReturnToken::new(self.inner.clone())
+    }
+
+    pub async fn get_status(&self) -> Status {
+        let guard = self.inner.lock().await;
+        guard.state.get_cloned().state
     }
 
     pub fn signal(&self) -> impl Signal<Item=MachineState> {

@@ -131,6 +131,37 @@ impl write::Server for Write {
     {
         unimplemented!()
     }
+
+    fn get_give_back(&mut self,
+        _params: write::GetGiveBackParams,
+        mut results: write::GetGiveBackResults)
+    -> Promise<(), Error>
+    {
+        let this = self.0.clone();
+
+        let f = async move {
+            let status = this.machine.get_status().await;
+            let sess = this.session.clone();
+
+            match status {
+                Status::InUse(Some(uid)) => {
+                    let user = sess.user.lock().await;
+                    if let Some(u) = user.as_ref() {
+                        if u.id == uid {
+                            let token = this.machine.create_token();
+                            let gb = GiveBack(Some(token));
+                            results.get().set_ret(capnp_rpc::new_client(gb));
+                        }
+                    }
+                },
+                // Machine not in use
+                _ => {
+                }
+            }
+        };
+
+        Promise::from_future(f.map(|_| Ok(())))
+    }
 }
 
 struct GiveBack(Option<ReturnToken>);
