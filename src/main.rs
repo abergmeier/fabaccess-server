@@ -40,6 +40,7 @@ use error::Error;
 use slog::Logger;
 
 use paho_mqtt::AsyncClient;
+use crate::config::Config;
 
 fn main() {
     use clap::{crate_version, crate_description, crate_name};
@@ -58,6 +59,11 @@ fn main() {
         .arg(Arg::with_name("print default")
             .help("Print a default config to stdout instead of running")
             .long("print-default")
+        )
+        .arg(Arg::with_name("check config")
+            .help("Check config for validity")
+            .long("check")
+            .requires("config")
         )
         .arg(Arg::with_name("dump")
             .help("Dump all databases into the given directory")
@@ -87,6 +93,24 @@ fn main() {
 
         // Early return to exit.
         return;
+    } else if matches.is_present("check config") {
+        let configpath = matches.value_of("config").unwrap_or("/etc/diflouroborane.dhall");
+        match config::read(&PathBuf::from_str(configpath).unwrap()) {
+            Ok(cfg) => {
+                let encoded = serde_dhall::serialize(&cfg).to_string().unwrap();
+
+                // Direct writing to fd 1 is faster but also prevents any print-formatting that could
+                // invalidate the generated TOML
+                let stdout = io::stdout();
+                let mut handle = stdout.lock();
+                handle.write_all(&encoded.as_bytes()).unwrap();
+                std::process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("{}", e);
+                std::process::exit(-1);
+            }
+        }
     }
 
     let retval;
