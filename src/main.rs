@@ -63,7 +63,6 @@ fn main() {
         .arg(Arg::with_name("check config")
             .help("Check config for validity")
             .long("check")
-            .requires("config")
         )
         .arg(Arg::with_name("dump")
             .help("Dump all databases into the given directory")
@@ -97,13 +96,8 @@ fn main() {
         let configpath = matches.value_of("config").unwrap_or("/etc/diflouroborane.dhall");
         match config::read(&PathBuf::from_str(configpath).unwrap()) {
             Ok(cfg) => {
-                let encoded = serde_dhall::serialize(&cfg).to_string().unwrap();
-
-                // Direct writing to fd 1 is faster but also prevents any print-formatting that could
-                // invalidate the generated TOML
-                let stdout = io::stdout();
-                let mut handle = stdout.lock();
-                handle.write_all(&encoded.as_bytes()).unwrap();
+                //TODO: print a normalized version of the supplied config
+                println!("config is valid");
                 std::process::exit(0);
             }
             Err(e) => {
