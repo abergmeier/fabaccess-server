@@ -67,6 +67,8 @@ genawaiter = "0.99"
 
 [build-dependencies]
 capnpc = "0.14"
+# Used in build.rs to iterate over all files in schema/
+walkdir = "2"
 
 [dev-dependencies]
 futures-test = "0.3"
