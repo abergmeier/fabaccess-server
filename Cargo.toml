@@ -43,7 +43,7 @@ uuid = { version = "0.8.2", features = ["serde", "v4"] }
 clap = "2.33.3"
 
 # TODO update this if bindgen breaks (again)
-rsasl = "1.0.1"
+rsasl = "1.4.0"
 #rsasl = { path = "../../rsasl" }
 
 # rumqtt needs tokio which I'm trying to get away from

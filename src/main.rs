@@ -23,6 +23,7 @@ mod server;
 mod network;
 mod actor;
 mod initiator;
+mod space;
 
 use clap::{App, Arg};
 

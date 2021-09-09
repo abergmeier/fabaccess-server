@@ -7,11 +7,11 @@ use std::sync::Arc;
 
 use rsasl::{
     SASL,
+    RSASL,
     Property,
     Session as SaslSession,
     ReturnCode,
     Callback,
-    SaslCtx,
     Step,
 };
 
@@ -21,7 +21,7 @@ use capnp::capability::{Params, Results, Promise};
 
 use crate::api::Session;
 
-pub use crate::schema::auth_capnp;
+pub use crate::schema::authenticationsystem_capnp as auth_system;
 use crate::db::Databases;
 use crate::db::pass::PassDB;
 use crate::db::user::{Internal as UserDB};
@@ -34,31 +34,29 @@ pub struct SessionData {
     session: Arc<Session>,
 }
 
-
 struct CB;
 impl Callback<AppData, SessionData> for CB {
-    fn callback(mut sasl: SaslCtx<AppData, SessionData>, mut session: SaslSession<SessionData>, prop: Property) -> libc::c_int {
+    fn callback(sasl: &mut SASL<AppData, SessionData>,
+                session: &mut SaslSession<SessionData>,
+                prop: Property
+        ) -> Result<(), ReturnCode>
+    {
         let ret = match prop {
             Property::GSASL_VALIDATE_SIMPLE => {
-                // FIXME: get_property and retrive_mut can't be used interleaved but that's
+                // FIXME: get_property and retrieve_mut can't be used interleaved but that's
                 // technically safe.
                 let cap_session = session.retrieve_mut().map(|sd| sd.session.clone());
 
-                let authid = match session.get_property(Property::GSASL_AUTHID) {
-                    None => return ReturnCode::GSASL_NO_AUTHID as libc::c_int,
-                    Some(a) => {
-                        match a.to_str() {
-                            Ok(s) => s,
-                            Err(_) => return ReturnCode::GSASL_SASLPREP_ERROR as libc::c_int,
-                        }
-                    },
-                };
+                let authid: &str = session
+                    .get_property(Property::GSASL_AUTHID)
+                    .ok_or(ReturnCode::GSASL_NO_AUTHID)
+                    .and_then(|a| match a.to_str() {
+                        Ok(s) => Ok(s),
+                        Err(_) => Err(ReturnCode::GSASL_SASLPREP_ERROR),
+                    })?;
 
-                let pass = session.get_property(Property::GSASL_PASSWORD);
-                if pass.is_none() {
-                    return ReturnCode::GSASL_NO_PASSWORD as libc::c_int;
-                }
-                let pass = pass.unwrap();
+                let pass = session.get_property(Property::GSASL_PASSWORD)
+                    .ok_or(ReturnCode::GSASL_NO_PASSWORD)?;
 
 
                 if let Some(appdata) = sasl.retrieve_mut() {
@@ -70,7 +68,8 @@ impl Callback<AppData, SessionData> for CB {
                                 }
                             }
 
-                            ReturnCode::GSASL_OK
+                            // Early return, implicitly returns GSASL_OK
+                            return Ok(());
                         } else {
                             ReturnCode::GSASL_AUTHENTICATION_ERROR
                         }
@@ -86,12 +85,12 @@ impl Callback<AppData, SessionData> for CB {
                 ReturnCode::GSASL_NO_CALLBACK 
             }
         };
-        ret as libc::c_int
+        Err(ret)
     }
 }
 
 pub struct Auth {
-    pub ctx: SASL<AppData, SessionData>,
+    pub ctx: RSASL<AppData, SessionData>,
     session: Arc<Session>,
 }
 
@@ -111,11 +110,11 @@ impl Auth {
     }
 }
 
-use auth_capnp::authentication::*;
-impl auth_capnp::authentication::Server for Auth {
+use crate::schema::authenticationsystem_capnp::*;
+impl authentication_system::Server for Auth {
     fn mechanisms(&mut self, 
-        _: Params<mechanisms_params::Owned>,
-        mut res: Results<mechanisms_results::Owned>
+        _: authentication_system::MechanismsParams,
+        mut res: authentication_system::MechanismsResults
     ) -> Promise<(), capnp::Error> {
         let mechs = match self.ctx.server_mech_list() {
             Ok(m) => m,
@@ -139,8 +138,8 @@ impl auth_capnp::authentication::Server for Auth {
 
     // TODO: return Outcome instead of exceptions
     fn start(&mut self,
-        params: Params<start_params::Owned>,
-        mut res: Results<start_results::Owned>
+        params: authentication_system::StartParams,
+        mut res: authentication_system::StartResults
     ) -> Promise<(), capnp::Error> {
         let req = pry!(pry!(params.get()).get_request());
 
@@ -159,7 +158,7 @@ impl auth_capnp::authentication::Server for Auth {
         session.store(Box::new(SessionData { session: self.session.clone() }));
 
         // If the client has provided initial data go use that
-        use auth_capnp::request::initial_response::Which;
+        use request::initial_response::Which;
         let step_res = match req.get_initial_response().which() {
             Err(capnp::NotInSchema(_)) => 
                 return Promise::err(capnp::Error {
@@ -180,7 +179,7 @@ impl auth_capnp::authentication::Server for Auth {
         // TODO: Set the session user. Needs a lookup though <.>
         match step_res {
             Ok(Step::Done(b)) => {
-                use auth_capnp::response::Result;
+                use response::Result;
 
                 let mut outcome = pry!(res.get().get_response()).init_outcome();
                 outcome.reborrow().set_result(Result::Successful);

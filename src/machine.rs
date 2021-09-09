@@ -27,6 +27,29 @@ use crate::db::machine::{MachineIdentifier, MachineState, Status};
 use crate::db::user::{User, UserData};
 
 use crate::network::MachineMap;
+use crate::space;
+
+// Registry of all machines configured.
+// TODO: 
+// - Serialize machines into config
+// - Deserialize machines from config
+// - Index machines on deserialization to we can look them up efficiently
+// - Maybe store that index too
+// - Iterate over all or a subset of machines efficiently
+pub struct Machines {
+    machines: Vec<Machine>
+}
+
+impl Machines {
+    /// Load machines from the config, looking up and linking the database entries as necessary
+    pub fn load() -> Self {
+        unimplemented!()
+    }
+
+    pub fn lookup(id: String) -> Option<Machine> {
+        unimplemented!()
+    }
+}
 
 #[derive(Debug, Clone)]
 pub struct Index {
@@ -49,15 +72,27 @@ impl Index {
     }
 }
 
+// Access data of one machine efficiently, using getters/setters for data stored in LMDB backed
+// memory
 #[derive(Debug, Clone)]
 pub struct Machine {
+    pub id: uuid::Uuid,
+    pub name: String,
+    pub description: String,
+
     inner: Arc<Mutex<Inner>>,
     access: Arc<access::AccessControl>,
 }
 
 impl Machine {
     pub fn new(inner: Inner, access: Arc<access::AccessControl>) -> Self {
-        Self { inner: Arc::new(Mutex::new(inner)), access: access }
+        Self { 
+            id: uuid::Uuid::default(),
+            name: "".to_string(),
+            description: "".to_string(),
+            inner: Arc::new(Mutex::new(inner)),
+            access: access,
+        }
     }
 
     pub fn construct

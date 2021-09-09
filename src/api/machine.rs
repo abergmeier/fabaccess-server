@@ -6,8 +6,7 @@ use capnp::Error;
 
 use futures::FutureExt;
 
-use crate::schema::api_capnp::State;
-use crate::schema::api_capnp::machine::*;
+use crate::schema::machine_capnp::machine::*;
 use crate::connection::Session;
 use crate::db::Databases;
 use crate::db::machine::{Status, MachineState};
@@ -26,41 +25,8 @@ impl Machine {
     }
 
     pub fn fill(self: Arc<Self>, builder: &mut Builder) {
-        builder.set_read(capnp_rpc::new_client(Read(self.clone())));
-        builder.set_write(capnp_rpc::new_client(Write(self.clone())));
         builder.set_manage(capnp_rpc::new_client(Manage(self.clone())));
         builder.set_admin(capnp_rpc::new_client(Admin(self.clone())));
-    }
-
-    pub async fn fill_info(&self, builder: &mut m_info::Builder<'_>) {
-        let guard = self.machine.lock().await;
-
-        builder.set_name(guard.desc.name.as_ref());
-
-        if let Some(desc) = guard.desc.description.as_ref() {
-            builder.set_description(desc);
-        }
-
-        match guard.read_state().lock_ref().deref().state {
-            Status::Free => {
-                builder.set_state(State::Free);
-            }
-            Status::Disabled => {
-                builder.set_state(State::Disabled);
-            }
-            Status::Blocked(_) => {
-                builder.set_state(State::Blocked);
-            }
-            Status::InUse(_) => {
-                builder.set_state(State::InUse);
-            }
-            Status::ToCheck(_) => {
-                builder.set_state(State::ToCheck);
-            }
-            Status::Reserved(_) => {
-                builder.set_state(State::Reserved);
-            }
-        }
     }
 }
 
@@ -73,31 +39,15 @@ impl Read {
     }
 }
 
-impl read::Server for Read {
-    fn info(&mut self,
-        _params: read::InfoParams,
-        mut results: read::InfoResults) 
-    -> Promise<(), Error>
-    {
-        let this = self.clone();
-        let f = async move {
-            let mut b = results.get().init_minfo();
-
-            this.0.fill_info(&mut b).await;
-
-            Ok(())
-        };
-
-        Promise::from_future(f)
-    }
+impl info::Server for Read {
 }
 
 struct Write(Arc<Machine>);
 
-impl write::Server for Write {
+impl use_::Server for Write {
     fn use_(&mut self,
-        _params: write::UseParams,
-        mut results: write::UseResults)
+        _params: use_::UseParams,
+        mut results: use_::UseResults)
     -> Promise<(), Error>
     {
         let uid = self.0.session.user.try_lock().unwrap().as_ref().map(|u| u.id.clone());
@@ -112,9 +62,6 @@ impl write::Server for Write {
             match res_token {
                 // TODO: Do something with the token we get returned
                 Ok(tok) => {
-                    let gb = GiveBack(Some(tok));
-                    results.get().set_ret(capnp_rpc::new_client(gb));
-
                     return Ok(());
                 },
                 Err(e) => Err(capnp::Error::failed(format!("State change request returned {}", e))),
@@ -125,16 +72,19 @@ impl write::Server for Write {
     }
 
     fn reserve(&mut self,
-        _params: write::ReserveParams,
-        _results: write::ReserveResults)
+        _params: use_::ReserveParams,
+        _results: use_::ReserveResults)
     -> Promise<(), Error>
     {
         unimplemented!()
     }
 
-    fn get_give_back(&mut self,
-        _params: write::GetGiveBackParams,
-        mut results: write::GetGiveBackResults)
+}
+
+impl in_use::Server for Write {
+    fn give_back(&mut self,
+        _params: in_use::GiveBackParams,
+        mut results: in_use::GiveBackResults)
     -> Promise<(), Error>
     {
         let this = self.0.clone();
@@ -148,9 +98,6 @@ impl write::Server for Write {
                     let user = sess.user.lock().await;
                     if let Some(u) = user.as_ref() {
                         if u.id == uid {
-                            let token = this.machine.create_token();
-                            let gb = GiveBack(Some(token));
-                            results.get().set_ret(capnp_rpc::new_client(gb));
                         }
                     }
                 },
@@ -164,33 +111,9 @@ impl write::Server for Write {
     }
 }
 
-struct GiveBack(Option<ReturnToken>);
-
-impl write::give_back::Server for GiveBack {
-    fn ret(&mut self,
-        _params: write::give_back::RetParams,
-        _results: write::give_back::RetResults)
-    -> Promise<(), Error>
-    {
-        if let Some(rt) = self.0.take() {
-            // Err here just means machine was taken from us
-            Promise::from_future(rt.map(|()| Ok(())))
-        } else {
-            Promise::ok(())
-        }
-    }
-}
-
 struct Manage(Arc<Machine>);
 
 impl manage::Server for Manage {
-    fn ok(&mut self,
-        _params: manage::OkParams,
-        _results: manage::OkResults)
-    -> Promise<(), Error>
-    {
-        unimplemented!()
-    }
 }
 
 struct Admin(Arc<Machine>);

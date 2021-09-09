@@ -1538,9 +1538,9 @@ checksum = "f497285884f3fcff424ffc933e56d7cbca511def0c9831a7f9b5f6153e3cc89b"
 
 [[package]]
 name = "rsasl"
-version = "1.0.1"
+version = "1.4.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8461935926602b09123ddb976f0fa4d54df63b23adff4da0a0e71b96d635fcb0"
+checksum = "165e25c96193ef9f5eeb7e68e868c5543b30d6a68bef5470be45ae2416466817"
 dependencies = [
  "discard",
  "gsasl-sys",

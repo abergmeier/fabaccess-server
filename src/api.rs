@@ -31,33 +31,33 @@ impl Bootstrap {
 
 use connection_capnp::bootstrap::*;
 impl connection_capnp::bootstrap::Server for Bootstrap {
-    fn auth(&mut self, 
-        _: Params<auth_params::Owned>,
-        mut res: Results<auth_results::Owned>
+    fn authentication_system(&mut self, 
+        _: AuthenticationSystemParams,
+        mut res: AuthenticationSystemResults
     ) -> Promise<(), capnp::Error> {
         // TODO: Forbid mutltiple authentication for now
         // TODO: When should we allow multiple auth and how do me make sure that does not leak
         // priviledges (e.g. due to previously issues caps)?
 
-        res.get().set_auth(capnp_rpc::new_client(auth::Auth::new(self.db.clone(), self.session.clone())));
+        res.get().set_authentication_system(capnp_rpc::new_client(auth::Auth::new(self.db.clone(), self.session.clone())));
 
         Promise::ok(())
     }
 
-    fn permissions(&mut self,
-        _: Params<permissions_params::Owned>,
-        _: Results<permissions_results::Owned>
+    fn permission_system(&mut self,
+        _: PermissionSystemParams,
+        _: PermissionSystemResults
     ) -> Promise<(), capnp::Error> {
         Promise::ok(())
     }
 
-    fn machines(&mut self,
-        _: Params<machines_params::Owned>,
-        mut res: Results<machines_results::Owned>
+    fn machine_system(&mut self,
+        _: MachineSystemParams,
+        mut res: MachineSystemResults
     ) -> Promise<(), capnp::Error> {
         // TODO actual permission check and stuff
         let c = capnp_rpc::new_client(Machines::new(self.session.clone(), self.db.clone(), self.nw.clone()));
-        res.get().set_machines(c);
+        res.get().set_machine_system(c);
 
         Promise::ok(())
     }

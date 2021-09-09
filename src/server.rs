@@ -15,6 +15,9 @@ use std::io;
 
 use std::sync::Arc;
 
+use std::os::unix::io::AsRawFd;
+use signal_hook::low_level::pipe as sigpipe;
+
 use crate::db::Databases;
 use crate::network::Network;
 
@@ -27,7 +30,7 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
         // Initialize signal handler.
         // We currently only care about Ctrl-C so SIGINT it is.
         // TODO: Make this do SIGHUP and a few others too. (By cloning the tx end of the pipe)
-        signal_hook::pipe::register(signal_hook::SIGINT, tx)?;
+        sigpipe::register(signal_hook::consts::SIGINT, tx.as_raw_fd())?;
         // When a signal is received this future can complete and read a byte from the underlying
         // socket — the actual data is discarded but the act of being able to receive data tells us
         // that we received a SIGINT.
