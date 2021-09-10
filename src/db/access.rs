@@ -549,6 +549,11 @@ mod tests {
             .expect("Couldn't load the example role defs. Does `examples/roles.toml` exist?");
 
         let expected = vec![
+            (RoleIdentifier { name: "anotherrole".to_string(), source: "lmdb".to_string() },
+            Role {
+                parents: vec![],
+                permissions: vec![],
+            }),
             (RoleIdentifier { name: "testrole".to_string(), source: "lmdb".to_string() },
             Role {
                 parents: vec![],
