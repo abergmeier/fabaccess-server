@@ -35,6 +35,7 @@ capnp-futures = "0.14.1"
 serde = { version = "1.0.130", features = ["derive"] }
 toml = "0.5.8"
 flexbuffers = "2.0.0"
+bincode = "2.0.0-dev"
 
 serde_dhall = { version = "0.10.1", default-features = false }
 
@@ -72,3 +73,7 @@ walkdir = "2.3.2"
 
 [dev-dependencies]
 futures-test = "0.3.16"
+tempfile = "3.2"
+
+[patch.crates-io]
+bincode = { git = "https://github.com/dequbed/bincode.git", branch = "feature/in_place_buffer" }
