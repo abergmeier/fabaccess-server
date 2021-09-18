@@ -6,6 +6,7 @@ use crate::schema::connection_capnp;
 use crate::connection::Session;
 
 use crate::db::Databases;
+use crate::db::user::UserId;
 
 use crate::network::Network;
 
@@ -55,11 +56,27 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         _: MachineSystemParams,
         mut res: MachineSystemResults
     ) -> Promise<(), capnp::Error> {
-        // TODO actual permission check and stuff
-        let c = capnp_rpc::new_client(Machines::new(self.session.clone(), self.db.clone(), self.nw.clone()));
-        res.get().set_machine_system(c);
+        let session = self.session.clone();
+        let accessdb = self.db.access.clone();
+        let nw = self.nw.clone();
+        let f = async move {
+            // Ensure the lock is dropped as soon as possible
+            if let Some(user) = { session.user.lock().await.clone() } {
+                let perms = accessdb.collect_permrules(&user.data)
+                    .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e)))?;
 
-        Promise::ok(())
+                // TODO actual permission check and stuff
+                //      Right now we only check that the user has authenticated at all.
+                let c = capnp_rpc::new_client(Machines::new(user.id, perms, nw));
+                res.get().set_machine_system(c);
+            }
+
+            // Promise is Ok either way, just the machine system may not be set, indicating as
+            // usual a lack of permission.
+            Ok(())
+        };
+
+        Promise::from_future(f)
     }
 }
 

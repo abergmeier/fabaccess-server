@@ -77,21 +77,19 @@ impl Index {
 #[derive(Debug, Clone)]
 pub struct Machine {
     pub id: uuid::Uuid,
-    pub name: String,
-    pub description: String,
+    pub desc: MachineDescription,
 
     inner: Arc<Mutex<Inner>>,
     access: Arc<access::AccessControl>,
 }
 
 impl Machine {
-    pub fn new(inner: Inner, access: Arc<access::AccessControl>) -> Self {
+    pub fn new(inner: Inner, desc: MachineDescription, access: Arc<access::AccessControl>) -> Self {
         Self { 
             id: uuid::Uuid::default(),
-            name: "".to_string(),
-            description: "".to_string(),
             inner: Arc::new(Mutex::new(inner)),
-            access: access,
+            access,
+            desc,
         }
     }
 
@@ -102,7 +100,7 @@ impl Machine {
         , access: Arc<access::AccessControl>
         ) -> Machine
     {
-        Self::new(Inner::new(id, desc, state), access)
+        Self::new(Inner::new(id, state), desc, access)
     }
 
     pub fn from_file<P: AsRef<Path>>(path: P, access: Arc<access::AccessControl>) 
@@ -129,20 +127,34 @@ impl Machine {
 
         let f = async move {
             if let Some(udata) = udata {
-                let mut guard = this.inner.try_lock().unwrap();
-                if this.access.check(&udata, &guard.desc.privs.write).await? {
+                if this.access.check(&udata, &this.desc.privs.write).await? {
+                    let mut guard = this.inner.lock().await;
                     guard.do_state_change(new_state);
                     return Ok(ReturnToken::new(this.inner.clone()))
                 }
             } else {
                 if new_state == MachineState::free() {
-                    let mut guard = this.inner.try_lock().unwrap();
+                    let mut guard = this.inner.lock().await;
                     guard.do_state_change(new_state);
                     return Ok(ReturnToken::new(this.inner.clone()));
                 }
             }
 
             return Err(Error::Denied);
+        };
+
+        Box::pin(f)
+    }
+
+    pub fn do_state_change(&self, new_state: MachineState) 
+        -> BoxFuture<'static, Result<ReturnToken>>
+    {
+        let this = self.clone();
+
+        let f = async move {
+            let mut guard = this.inner.lock().await;
+            guard.do_state_change(new_state);
+            return Ok(ReturnToken::new(this.inner.clone()))
         };
 
         Box::pin(f)
@@ -160,6 +172,10 @@ impl Machine {
     pub fn signal(&self) -> impl Signal<Item=MachineState> {
         let guard = self.inner.try_lock().unwrap();
         guard.signal()
+    }
+
+    pub fn get_inner(&self) -> Arc<Mutex<Inner>> {
+        self.inner.clone()
     }
 }
 
@@ -182,9 +198,6 @@ pub struct Inner {
     /// Globally unique machine readable identifier
     pub id: MachineIdentifier,
 
-    /// Descriptor of the machine
-    pub desc: MachineDescription,
-
     /// The state of the machine as bffh thinks the machine *should* be in.
     ///
     /// This is a Signal generator. Subscribers to this signal will be notified of changes. In the
@@ -195,13 +208,11 @@ pub struct Inner {
 
 impl Inner {
     pub fn new ( id: MachineIdentifier
-               , desc: MachineDescription
                , state: MachineState
                ) -> Inner 
     {
         Inner {
-            id: id,
-            desc: desc,
+            id,
             state: Mutable::new(state),
             reset: None,
         }

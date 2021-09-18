@@ -22,10 +22,15 @@ pub struct AccessControl {
     pub internal: Internal,
 }
 
+pub const ADMINPERM: &'static str = "bffh.admin";
+pub fn admin_perm() -> &'static Permission {
+    Permission::new(ADMINPERM)
+}
+
 impl AccessControl {
     pub fn new(internal: Internal) -> Self {
         Self {
-            internal: internal,
+            internal,
         }
     }
 
@@ -45,6 +50,10 @@ impl AccessControl {
         }
 
         return Ok(false);
+    }
+
+    pub fn collect_permrules(&self, user: &UserData) -> Result<Vec<PermRule>> {
+        self.internal.collect_permrules(user)
     }
 
     pub fn dump_roles(&self) -> Result<Vec<(RoleIdentifier, Role)>> {
@@ -119,6 +128,22 @@ pub trait RoleDB {
         }
 
         Ok(())
+    }
+
+    fn collect_permrules(&self, user: &UserData) -> Result<Vec<PermRule>> {
+        let mut roleset = HashMap::new();
+        for role_id in user.roles.iter() {
+            self.tally_role(&mut roleset, role_id)?;
+        }
+
+        let mut output = Vec::new();
+
+        // Iter all unique role->permissions we've found and early return on match. 
+        for (_roleid, role) in roleset.iter() {
+            output.extend(role.permissions.iter().cloned())
+        }
+
+        return Ok(output);
     }
 }
 
@@ -310,7 +335,7 @@ impl PermissionBuf {
         self.inner.push_str(perm.as_str())
     }
 
-    pub fn from_string(inner: String) -> Self {
+    pub const fn from_string(inner: String) -> Self {
         Self { inner }
     }
 
@@ -429,7 +454,7 @@ pub enum PermRule {
 
 impl PermRule {
     // Does this rule match that permission
-    fn match_perm<P: AsRef<Permission>>(&self, perm: &P) -> bool {
+    pub fn match_perm<P: AsRef<Permission>>(&self, perm: &P) -> bool {
         match self {
             PermRule::Base(ref base) => base.as_permission() == perm.as_ref(),
             PermRule::Children(ref parent) => parent.as_permission() > perm.as_ref() ,

@@ -64,6 +64,7 @@ impl Callback<AppData, SessionData> for CB {
                         if b {
                             if let Some(s) = cap_session {
                                 if let Ok(Some(user)) = appdata.userdb.get_user(authid) {
+                                    // FIXME: This should set the userid outside the callback
                                     s.user.try_lock().unwrap().replace(user);
                                 }
                             }
@@ -116,7 +117,7 @@ impl authentication_system::Server for Auth {
         _: authentication_system::MechanismsParams,
         mut res: authentication_system::MechanismsResults
     ) -> Promise<(), capnp::Error> {
-        let mechs = match self.ctx.server_mech_list() {
+        /*let mechs = match self.ctx.server_mech_list() {
             Ok(m) => m,
             Err(e) => {
                 return Promise::err(capnp::Error {
@@ -131,7 +132,10 @@ impl authentication_system::Server for Auth {
         let mut res_mechs = res.get().init_mechs(mechvec.len() as u32);
         for (i, m) in mechvec.into_iter().enumerate() {
             res_mechs.set(i as u32, m);
-        }
+        }*/
+        // For now, only PLAIN
+        let mut res_mechs = res.get().init_mechs(1);
+        res_mechs.set(0, "PLAIN");
 
         Promise::ok(())
     }
@@ -146,6 +150,13 @@ impl authentication_system::Server for Auth {
         // Extract the MECHANISM the client wants to use and start a session.
         // Or fail at that and thrown an exception TODO: return Outcome
         let mech = pry!(req.get_mechanism());
+        if pry!(req.get_mechanism()) != "PLAIN" {
+                return Promise::err(capnp::Error {
+                    kind: capnp::ErrorKind::Failed,
+                    description: format!("Invalid SASL mech"),
+                })
+        }
+
         let mut session = match self.ctx.server_start(mech) {
             Ok(s) => s,
             Err(e) => 

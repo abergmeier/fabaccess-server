@@ -3,35 +3,39 @@ use std::sync::Arc;
 use capnp::capability::Promise;
 use capnp::Error;
 
+use crate::db::machine::Status;
+use crate::api::machine::*;
+use crate::schema::machine_capnp::machine::MachineState;
 use crate::schema::machinesystem_capnp::machine_system;
 use crate::schema::machinesystem_capnp::machine_system::info as machines;
-use crate::connection::Session;
-
-use crate::db::Databases;
-
 use crate::network::Network;
-
-use super::machine::*;
+use crate::db::user::UserId;
+use crate::db::access::{PermRule, admin_perm};
 
 /// An implementation of the `Machines` API
+#[derive(Clone)]
 pub struct Machines {
-    /// A reference to the connection — as long as at least one API endpoint is
-    /// still alive the session has to be as well.
-    session: Arc<Session>,
-
-    db: Databases,
+    user: UserId,
+    permissions: Vec<PermRule>,
     network: Arc<Network>,
 }
 
 impl Machines {
-    pub fn new(session: Arc<Session>, db: Databases, network: Arc<Network>) -> Self {
-        info!(session.log, "Machines created");
-        Self { session, db, network }
+    pub fn new(user: UserId, permissions: Vec<PermRule>, network: Arc<Network>) -> Self {
+        Self { user, permissions, network }
     }
 }
 
 impl machine_system::Server for Machines {
-
+    // This function shouldn't exist. See fabaccess-api issue #16
+    fn info(&mut self,
+        _:machine_system::InfoParams,
+        mut results: machine_system::InfoResults
+        ) -> capnp::capability::Promise<(), capnp::Error>
+    {
+        results.get().set_info(capnp_rpc::new_client(self.clone()));
+        Promise::ok(())
+    }
 }
 
 impl machines::Server for Machines {
@@ -41,18 +45,61 @@ impl machines::Server for Machines {
         -> Promise<(), Error>
     {
         let v: Vec<(String, crate::machine::Machine)> = self.network.machines.iter()
-            .map(|(n, m)| (n.clone(), m.clone()))
+            .filter(|(_name, machine)| {
+                let required_disclose = &machine.desc.privs.disclose;
+                for perm_rule in self.permissions.iter() {
+                    if perm_rule.match_perm(required_disclose) {
+                        return true;
+                    }
+                }
+
+                false
+            })
+            .map(|(n,m)| (n.clone(), m.clone()))
             .collect();
 
-        /*let mut machines = results.get().init_machines(v.len() as u32);
+        let permissions = self.permissions.clone();
 
-        for (i, (name, machine)) in v.into_iter().enumerate() {
-            trace!(self.session.log, "Adding machine #{} {}: {:?}", i, name, machine);
-            let machine = Arc::new(Machine::new(self.session.clone(), machine, self.db.clone()));
-            let mut builder = machines.reborrow().get(i as u32);
-            machine.fill(&mut builder);
-        }*/
+        let f = async move {
+            let mut machines = results.get().init_machine_list(v.len() as u32);
+            for (i, (name, machine)) in v.into_iter().enumerate() {
+                let perms = Perms::get_for(&machine.desc.privs, permissions.iter());
 
-        Promise::ok(())
+                let mut builder = machines.reborrow().get(i as u32);
+                builder.set_name(&name);
+                if let Some(ref desc) = machine.desc.description {
+                    builder.set_description(desc);
+                }
+
+                let s = match machine.get_status().await {
+                    Status::Free => MachineState::Free,
+                    Status::Disabled => MachineState::Disabled,
+                    Status::Blocked(_) => MachineState::Blocked,
+                    Status::InUse(_) => MachineState::InUse,
+                    Status::Reserved(_) => MachineState::Reserved,
+                    Status::ToCheck(_) => MachineState::ToCheck,
+                };
+                builder.set_state(s);
+
+                if perms.write {
+                    builder.set_use(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
+                    builder.set_inuse(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
+                }
+                if perms.manage {
+                    builder.set_transfer(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
+                    builder.set_check(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
+                    builder.set_manage(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
+                }
+                if permissions.iter().any(|r| r.match_perm(&admin_perm())) {
+                    builder.set_admin(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
+                }
+
+                builder.set_info(capnp_rpc::new_client(Machine::new(perms, machine)));
+            }
+
+            Ok(())
+        };
+
+        Promise::from_future(f)
     }
 }
