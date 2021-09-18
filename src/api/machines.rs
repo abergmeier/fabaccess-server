@@ -59,6 +59,7 @@ impl machines::Server for Machines {
             .collect();
 
         let permissions = self.permissions.clone();
+        let user = self.user.clone();
 
         let f = async move {
             let mut machines = results.get().init_machine_list(v.len() as u32);
@@ -81,20 +82,21 @@ impl machines::Server for Machines {
                 };
                 builder.set_state(s);
 
+                let machineapi = Machine::new(user.clone(), perms, machine.clone());
                 if perms.write {
-                    builder.set_use(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
-                    builder.set_inuse(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
+                    builder.set_use(capnp_rpc::new_client(machineapi.clone()));
+                    builder.set_inuse(capnp_rpc::new_client(machineapi.clone()));
                 }
                 if perms.manage {
-                    builder.set_transfer(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
-                    builder.set_check(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
-                    builder.set_manage(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
+                    builder.set_transfer(capnp_rpc::new_client(machineapi.clone()));
+                    builder.set_check(capnp_rpc::new_client(machineapi.clone()));
+                    builder.set_manage(capnp_rpc::new_client(machineapi.clone()));
                 }
                 if permissions.iter().any(|r| r.match_perm(&admin_perm())) {
-                    builder.set_admin(capnp_rpc::new_client(Machine::new(perms, machine.clone())));
+                    builder.set_admin(capnp_rpc::new_client(machineapi.clone()));
                 }
 
-                builder.set_info(capnp_rpc::new_client(Machine::new(perms, machine)));
+                builder.set_info(capnp_rpc::new_client(machineapi));
             }
 
             Ok(())

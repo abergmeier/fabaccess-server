@@ -44,12 +44,32 @@ impl MachineState {
         Self { state: Status::Free }
     }
 
+    pub fn from(state: Status) -> Self {
+        Self { state }
+    }
+
     pub fn free() -> Self {
         Self { state: Status::Free }
     }
 
     pub fn used(uid: Option<UserId>) -> Self {
         Self { state: Status::InUse(uid) }
+    }
+
+    pub fn blocked(uid: UserId) -> Self {
+        Self { state: Status::Blocked(uid) }
+    }
+
+    pub fn disabled() -> Self {
+        Self { state: Status::Disabled }
+    }
+
+    pub fn reserved(uid: UserId) -> Self {
+        Self { state: Status::Reserved(uid) }
+    }
+
+    pub fn check(uid: UserId) -> Self {
+        Self { state: Status::ToCheck(uid) }
     }
 }
 
