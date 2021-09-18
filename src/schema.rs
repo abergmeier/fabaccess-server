@@ -9,18 +9,8 @@ pub mod connection_capnp {
 }
 
 #[allow(dead_code)]
-pub mod federationsystem_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/federationsystem_capnp.rs"));
-}
-
-#[allow(dead_code)]
 pub mod general_capnp {
     include!(concat!(env!("OUT_DIR"), "/schema/general_capnp.rs"));
-}
-
-#[allow(dead_code)]
-pub mod interactionsystem_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/interactionsystem_capnp.rs"));
 }
 
 #[allow(dead_code)]
