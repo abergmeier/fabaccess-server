@@ -104,4 +104,59 @@ impl machines::Server for Machines {
 
         Promise::from_future(f)
     }
+
+    fn get_machine(&mut self,
+        params: machines::GetMachineParams,
+        mut results: machines::GetMachineResults
+        ) -> Promise<(), capnp::Error> {
+
+        let name = {
+            let params = pry!(params.get());
+            pry!(params.get_name()).to_string()
+        };
+
+        let network = self.network.clone();
+        let user = self.user.clone();
+        let permissions = self.permissions.clone();
+
+        let f = async move {
+            if let Some(machine) = network.machines.get(&name) {
+                let mut builder = results.get().init_machine();
+                let perms = Perms::get_for(&machine.desc.privs, permissions.iter());
+                builder.set_name(&name);
+                if let Some(ref desc) = machine.desc.description {
+                    builder.set_description(desc);
+                }
+
+                let machineapi = Machine::new(user.clone(), perms, machine.clone());
+                if perms.write {
+                    builder.set_use(capnp_rpc::new_client(machineapi.clone()));
+                    builder.set_inuse(capnp_rpc::new_client(machineapi.clone()));
+                }
+                if perms.manage {
+                    builder.set_transfer(capnp_rpc::new_client(machineapi.clone()));
+                    builder.set_check(capnp_rpc::new_client(machineapi.clone()));
+                    builder.set_manage(capnp_rpc::new_client(machineapi.clone()));
+                }
+                if permissions.iter().any(|r| r.match_perm(&admin_perm())) {
+                    builder.set_admin(capnp_rpc::new_client(machineapi.clone()));
+                }
+
+                builder.set_info(capnp_rpc::new_client(machineapi));
+
+                let s = match machine.get_status().await {
+                    Status::Free => MachineState::Free,
+                    Status::Disabled => MachineState::Disabled,
+                    Status::Blocked(_) => MachineState::Blocked,
+                    Status::InUse(_) => MachineState::InUse,
+                    Status::Reserved(_) => MachineState::Reserved,
+                    Status::ToCheck(_) => MachineState::ToCheck,
+                };
+                builder.set_state(s);
+            };
+
+            Ok(())
+        };
+        Promise::from_future(f)
+    }
 }
