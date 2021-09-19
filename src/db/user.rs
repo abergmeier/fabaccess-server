@@ -40,18 +40,18 @@ impl User {
 /// method or source
 pub struct UserId {
     /// Main User ID. Generally an user name or similar. Locally unique
-    uid: String,
+    pub uid: String,
     /// Sub user ID. 
     ///
     /// Can change scopes for permissions, e.g. having a +admin account with more permissions than
     /// the default account and +dashboard et.al. accounts that have restricted permissions for
     /// their applications
-    subuid: Option<String>,
+    pub subuid: Option<String>,
     /// Realm this account originates.
     ///
     /// The Realm is usually described by a domain name but local policy may dictate an unrelated
     /// mapping
-    realm: Option<String>,
+    pub realm: Option<String>,
 }
 
 impl UserId {

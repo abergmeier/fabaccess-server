@@ -15,6 +15,7 @@ mod machine;
 mod machines;
 use machines::Machines;
 
+mod user;
 mod users;
 use users::Users;
 

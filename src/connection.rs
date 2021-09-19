@@ -35,15 +35,6 @@ impl Session {
 
         Session { log, user, accessdb }
     }
-
-    /// Check if the current session has a certain permission
-    pub async fn check_permission<P: AsRef<Permission>>(&self, perm: &P) -> Result<bool> {
-        if let Some(user) = self.user.lock().await.as_ref() {
-            self.accessdb.check(&user.data, perm).await
-        } else {
-            Ok(false)
-        }
-    }
 }
 
 pub struct ConnectionHandler {

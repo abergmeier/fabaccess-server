@@ -123,24 +123,34 @@ impl Machine {
         -> BoxFuture<'static, Result<ReturnToken>>
     {
         let this = self.clone();
-        let udata: Option<UserData> = who.map(|u| u.data.clone());
+        let perms: Vec<access::PermRule> = who
+            .map(|u| self.access.collect_permrules(&u.data))
+            .and_then(|result| result.ok())
+            .unwrap_or(vec![]);
+        let write: bool = perms.iter().any(|rule| rule.match_perm(&self.desc.privs.write));
+        let manage: bool = perms.iter().any(|rule| rule.match_perm(&self.desc.privs.manage));
 
         let f = async move {
-            if let Some(udata) = udata {
-                if this.access.check(&udata, &this.desc.privs.write).await? {
-                    let mut guard = this.inner.lock().await;
-                    guard.do_state_change(new_state);
-                    return Ok(ReturnToken::new(this.inner.clone()))
-                }
-            } else {
-                if new_state == MachineState::free() {
+            match &new_state.state {
+                Status::Free => {
                     let mut guard = this.inner.lock().await;
                     guard.do_state_change(new_state);
                     return Ok(ReturnToken::new(this.inner.clone()));
+                },
+                Status::InUse(_) | Status::ToCheck(_) if manage || write => {
+                    let mut guard = this.inner.lock().await;
+                    guard.do_state_change(new_state);
+                    return Ok(ReturnToken::new(this.inner.clone()))
+                },
+                Status::Blocked(_) | Status::Disabled | Status::Reserved(_) if manage => {
+                    let mut guard = this.inner.lock().await;
+                    guard.do_state_change(new_state);
+                    return Ok(ReturnToken::new(this.inner.clone()))
+                },
+                _ => {
+                    return Err(Error::Denied);
                 }
             }
-
-            return Err(Error::Denied);
         };
 
         Box::pin(f)

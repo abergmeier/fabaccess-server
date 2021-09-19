@@ -38,6 +38,14 @@ pub struct Config {
     pub init_connections: Box<[(String, String)]>,
 
     pub db_path: PathBuf,
+
+    pub roles: HashMap<String, RoleConfig>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RoleConfig {
+    parents: Vec<String>,
+    permissions: Vec<PermRule>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -97,6 +105,7 @@ impl Default for Config {
             ]),
 
             db_path: PathBuf::from("/run/bffh/database"),
+            roles: HashMap::new(),
         }
     }
 }

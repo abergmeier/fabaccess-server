@@ -19,8 +19,9 @@ impl user_system::Server for Users {
     fn info(
         &mut self,
         _: user_system::InfoParams,
-        _: user_system::InfoResults,
+        mut results: user_system::InfoResults,
     ) -> Promise<(), capnp::Error> {
+        results.get().set_info(capnp_rpc::new_client(self.clone()));
         Promise::ok(())
     }
 
@@ -31,13 +32,23 @@ impl user_system::Server for Users {
     ) -> Promise<(), capnp::Error> {
         let perm: &Permission = Permission::new("bffh.users.manage");
         if self.perms.iter().any(|rule| rule.match_perm(perm)) {
-            results.get().set_manage(capnp_rpc::new_client(self.clone()));
+            results
+                .get()
+                .set_manage(capnp_rpc::new_client(self.clone()));
         }
 
         Promise::ok(())
     }
 }
 
-impl info::Server for Users {}
+impl info::Server for Users {
+    fn get_user_self(
+        &mut self,
+        _: info::GetUserSelfParams,
+        mut results: info::GetUserSelfResults,
+    ) -> Promise<(), capnp::Error> {
+        Promise::ok(())
+    }
+}
 
 impl manage::Server for Users {}

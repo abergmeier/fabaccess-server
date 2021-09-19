@@ -34,34 +34,12 @@ impl AccessControl {
         }
     }
 
-    pub async fn check<P: AsRef<Permission>>(&self, user: &UserData, perm: &P) -> Result<bool> {
-        if self.internal.check(user, perm.as_ref())? {
-            return Ok(true);
-        }
-
-        return Ok(false);
-    }
-
-    pub async fn check_roles<P: AsRef<Permission>>(&self, roles: &[RoleIdentifier], perm: &P) 
-        -> Result<bool> 
-    {
-        if self.internal.check_roles(roles, perm.as_ref())? {
-            return Ok(true);
-        }
-
-        return Ok(false);
-    }
-
     pub fn collect_permrules(&self, user: &UserData) -> Result<Vec<PermRule>> {
         self.internal.collect_permrules(user)
     }
 
     pub fn dump_roles(&self) -> Result<Vec<(RoleIdentifier, Role)>> {
         self.internal.dump_roles()
-    }
-
-    pub fn get_role(&self, role_id: &RoleIdentifier) -> Result<Option<Role>> {
-        self.internal.get_role(role_id)
     }
 }
 
