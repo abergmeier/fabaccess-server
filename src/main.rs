@@ -141,8 +141,10 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
 
     if matches.is_present("dump") {
         let db = db::Databases::new(&log, &config)?;
-        let v = db.access.dump_roles();
-        info!(log, "Roles {:?}", v);
+        let v = db.access.dump_roles().unwrap();
+        for (id, role) in v.iter() {
+            info!(log, "Role {}:\n{}", id, role);
+        }
         Ok(())
     } else if matches.is_present("load") {
         let db = db::Databases::new(&log, &config)?;

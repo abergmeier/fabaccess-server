@@ -186,6 +186,31 @@ impl Role {
     }
 }
 
+impl fmt::Display for Role {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "parents:")?;
+        if self.parents.is_empty() {
+            writeln!(f, " []")?;
+        } else {
+            writeln!(f, "")?;
+            for p in self.parents.iter() {
+                writeln!(f, "  - {}", p)?;
+            }
+        }
+        write!(f, "permissions:")?;
+        if self.permissions.is_empty() {
+            writeln!(f, " []")?;
+        } else {
+            writeln!(f, "")?;
+            for p in self.permissions.iter() {
+                writeln!(f, "  - {}", p)?;
+            }
+        }
+
+        Ok(())
+    }
+}
+
 type SourceID = String;
 
 fn split_once(s: &str, split: char) -> Option<(&str, &str)> {
@@ -454,7 +479,7 @@ pub enum PermRule {
 
 impl PermRule {
     // Does this rule match that permission
-    pub fn match_perm<P: AsRef<Permission>>(&self, perm: &P) -> bool {
+    pub fn match_perm<P: AsRef<Permission> + ?Sized>(&self, perm: &P) -> bool {
         match self {
             PermRule::Base(ref base) => base.as_permission() == perm.as_ref(),
             PermRule::Children(ref parent) => parent.as_permission() > perm.as_ref() ,

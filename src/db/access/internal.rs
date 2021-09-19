@@ -69,16 +69,15 @@ impl Internal {
                 roles.insert(role_id.clone(), role);
             }
         } else {
-            info!(self.log, "Did not find role {} while trying to tally", role_id);
+            warn!(self.log, "Did not find role {} while trying to tally", role_id);
         }
 
         Ok(())
     }
 
     pub fn _get_role<'txn, T: Transaction>(&self, txn: &'txn T, role_id: &RoleIdentifier) -> Result<Option<Role>> {
-        let string = format!("{}", role_id);
-        debug!(self.log, "Reading role '{}'", &string);
-        match txn.get(self.roledb, &string.as_bytes()) {
+        debug!(self.log, "Reading role '{}'", role_id.name);
+        match txn.get(self.roledb, &role_id.name.as_bytes()) {
             Ok(bytes) => {
                 Ok(Some(flexbuffers::from_slice(bytes)?))
             },
@@ -89,8 +88,7 @@ impl Internal {
 
     fn put_role(&self, txn: &mut RwTransaction, role_id: &RoleIdentifier, role: Role) -> Result<()> {
         let bytes = flexbuffers::to_vec(role)?;
-        let string = format!("{}", role_id);
-        txn.put(self.roledb, &string.as_bytes(), &bytes, lmdb::WriteFlags::empty())?;
+        txn.put(self.roledb, &role_id.name.as_bytes(), &bytes, lmdb::WriteFlags::empty())?;
 
         Ok(())
     }
@@ -107,8 +105,8 @@ impl Internal {
         for r in cursor.iter_start() {
             match r {
                 Ok( (k,v) ) => {
-                    let role_id_str = unsafe { std::str::from_utf8_unchecked(k) };
-                    let role_id = role_id_str.parse::<RoleIdentifier>().unwrap();
+                    let role_name_str = unsafe { std::str::from_utf8_unchecked(k) };
+                    let role_id = RoleIdentifier::local_from_str(role_name_str.to_string(), "lmdb".to_string());
                     match flexbuffers::from_slice(v) {
                         Ok(role) => vec.push((role_id, role)),
                         Err(e) => error!(self.log, "Bad format for roleid {}: {}", role_id, e),
@@ -126,7 +124,7 @@ impl Internal {
         self.load_roles_txn(&mut txn, path.as_ref())?;
 
         // In case the above didn't error, commit.
-        txn.commit();
+        txn.commit()?;
         Ok(())
     }
     fn load_roles_txn(&self, txn: &mut RwTransaction, path: &Path) -> Result<()> {

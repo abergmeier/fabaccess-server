@@ -1,5 +1,5 @@
 use std::default::Default;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 
 use serde::{Serialize, Deserialize};
@@ -36,6 +36,8 @@ pub struct Config {
 
     pub actor_connections: Box<[(String, String)]>,
     pub init_connections: Box<[(String, String)]>,
+
+    pub db_path: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -83,9 +85,9 @@ impl Default for Config {
                     port: Some(DEFAULT_PORT),
                 }
             ]),
-            machines: machines,
-            actors: actors,
-            initiators: initiators,
+            machines,
+            actors,
+            initiators,
             mqtt_url: "tcp://localhost:1883".to_string(),
             actor_connections: Box::new([
                 ("Testmachine".to_string(), "Actor".to_string()),
@@ -93,6 +95,8 @@ impl Default for Config {
             init_connections: Box::new([
                 ("Initiator".to_string(), "Testmachine".to_string()),
             ]),
+
+            db_path: PathBuf::from("/run/bffh/database"),
         }
     }
 }

@@ -13,8 +13,10 @@ use crate::network::Network;
 pub mod auth;
 mod machine;
 mod machines;
-
 use machines::Machines;
+
+mod users;
+use users::Users;
 
 // TODO Session restoration by making the Bootstrap cap a SturdyRef
 pub struct Bootstrap {
@@ -45,13 +47,6 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         Promise::ok(())
     }
 
-    fn permission_system(&mut self,
-        _: PermissionSystemParams,
-        _: PermissionSystemResults
-    ) -> Promise<(), capnp::Error> {
-        Promise::ok(())
-    }
-
     fn machine_system(&mut self,
         _: MachineSystemParams,
         mut res: MachineSystemResults
@@ -64,6 +59,11 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
             if let Some(user) = { session.user.lock().await.clone() } {
                 let perms = accessdb.collect_permrules(&user.data)
                     .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e)))?;
+
+                debug!(session.log, "Giving MachineSystem cap to user {} with perms:", user.id);
+                for r in perms.iter() {
+                    debug!(session.log, "   {}", r);
+                }
 
                 // TODO actual permission check and stuff
                 //      Right now we only check that the user has authenticated at all.
@@ -78,5 +78,31 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
 
         Promise::from_future(f)
     }
-}
 
+    fn user_system(
+        &mut self,
+        _: UserSystemParams,
+        mut results: UserSystemResults
+    ) -> Promise<(), capnp::Error> {
+        let session = self.session.clone();
+        let accessdb = self.db.access.clone();
+        let f = async move {
+            // Ensure the lock is dropped as soon as possible
+            if let Some(user) = { session.user.lock().await.clone() } {
+                let perms = accessdb.collect_permrules(&user.data)
+                    .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e)))?;
+
+                // TODO actual permission check and stuff
+                //      Right now we only check that the user has authenticated at all.
+                let c = capnp_rpc::new_client(Users::new(perms));
+                results.get().set_user_system(c);
+            }
+
+            // Promise is Ok either way, just the machine system may not be set, indicating as
+            // usual a lack of permission.
+            Ok(())
+        };
+
+        Promise::from_future(f)
+    }
+}
