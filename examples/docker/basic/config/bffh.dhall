@@ -1,5 +1,5 @@
-{ actor_connections = [] : List { _1 : Text, _2 : Text }
--- { actor_connections = [{ _1 = "Testmachine", _2 = "Actor" }]
+-- { actor_connections = [] : List { _1 : Text, _2 : Text }
+{ actor_connections = [{ _1 = "Testmachine", _2 = "Actor" }]
 , actors = 
   { Actor = { module = "Shelly", params = {=} }
   }
@@ -38,4 +38,5 @@
     }
   }
 , mqtt_url = "tcp://mqtt:1883" 
+, db_path = "/tmp/bffh"
 }
