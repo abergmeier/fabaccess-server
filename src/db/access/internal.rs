@@ -106,7 +106,7 @@ impl Internal {
             match r {
                 Ok( (k,v) ) => {
                     let role_name_str = unsafe { std::str::from_utf8_unchecked(k) };
-                    let role_id = RoleIdentifier::local_from_str(role_name_str.to_string(), "lmdb".to_string());
+                    let role_id = RoleIdentifier::local_from_str("lmdb".to_string(), role_name_str.to_string());
                     match flexbuffers::from_slice(v) {
                         Ok(role) => vec.push((role_id, role)),
                         Err(e) => error!(self.log, "Bad format for roleid {}: {}", role_id, e),
