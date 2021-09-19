@@ -98,7 +98,7 @@ build:docker-releases:
 
 build:docker-development:
   image:
-    name: gcr.io/kaniko-project/executor:v1.6.0-debug
+    name: gcr.io/kaniko-project/executor:v1.5.1-debug
     entrypoint: [""]
   before_script:
     - ''
