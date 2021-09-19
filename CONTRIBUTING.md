@@ -5,7 +5,7 @@ Thank you for your interest in helping out the FabAccess system!
 You found a bug, an exploit or a feature that doesn't work like it's documented? Please tell us
 about it, see [Issues](#issues)
 
-You have a feature request? Great, check out the paragraph on [Feature Requests](#feature_requests)
+You have a feature request? Great, check out the paragraph on [Feature Requests](#feature-requests)
 
 ## Issues
 
@@ -39,6 +39,20 @@ $ git tag -v keys/dequbed/xmpp+omemo
 ```
 
 ## Feature Requests
+
+We also like new feature requests of course! 
+But before you open an issue in this repo for a feature request, please first check a few things:
+1. Is it a feature that needs to be implemented in more than just the backend server? For example,
+   is it something also having a GUI-component or something that you want to be able to do via the
+   API? If so it's better suited over at the
+   [Lastenheft](https://gitlab.com/fabinfra/fabaccess_lastenheft) because that's where the required
+   coordination for that will end up happening
+2. Who else needs that feature? Is this something super specific to your environment/application or
+   something that others will want too? If it's something that's relevant for more people please
+   also tell us that in the feature request.
+3. Can you already get partway or all the way there using what's there already? If so please also
+   tell us what you're currently doing and what doesn't work or why you dislike your current
+   solution.
 
 ## Contributing Code
 
