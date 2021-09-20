@@ -4,6 +4,11 @@
 //! Authentication using SASL
 
 use std::sync::Arc;
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::ops::Deref;
+
+use slog::Logger;
 
 use rsasl::{
     SASL,
@@ -24,14 +29,15 @@ use crate::api::Session;
 pub use crate::schema::authenticationsystem_capnp as auth_system;
 use crate::db::Databases;
 use crate::db::pass::PassDB;
-use crate::db::user::{Internal as UserDB};
+use crate::db::user::{Internal as UserDB, UserId, User};
+use crate::db::access::AccessControl as AccessDB;
 
 pub struct AppData {
     passdb: Arc<PassDB>,
     userdb: Arc<UserDB>,
 }
 pub struct SessionData {
-    session: Arc<Session>,
+    authz: Option<User>,
 }
 
 struct CB;
@@ -45,7 +51,6 @@ impl Callback<AppData, SessionData> for CB {
             Property::GSASL_VALIDATE_SIMPLE => {
                 // FIXME: get_property and retrieve_mut can't be used interleaved but that's
                 // technically safe.
-                let cap_session = session.retrieve_mut().map(|sd| sd.session.clone());
 
                 let authid: &str = session
                     .get_property(Property::GSASL_AUTHID)
@@ -60,26 +65,13 @@ impl Callback<AppData, SessionData> for CB {
 
 
                 if let Some(appdata) = sasl.retrieve_mut() {
-                    if let Ok(Some(b)) = appdata.passdb.check(authid, pass.to_bytes()) {
-                        if b {
-                            if let Some(s) = cap_session {
-                                if let Ok(Some(user)) = appdata.userdb.get_user(authid) {
-                                    // FIXME: This should set the userid outside the callback
-                                    s.user.try_lock().unwrap().replace(user);
-                                }
-                            }
-
-                            // Early return, implicitly returns GSASL_OK
-                            return Ok(());
-                        } else {
-                            ReturnCode::GSASL_AUTHENTICATION_ERROR
-                        }
-                    } else {
-                        ReturnCode::GSASL_AUTHENTICATION_ERROR
+                    if let Ok(Some(user)) = appdata.userdb.login(authid, pass.to_bytes()) {
+                        session.retrieve_mut().unwrap().authz.replace(user);
+                        return Ok(());
                     }
-                } else {
-                    ReturnCode::GSASL_AUTHENTICATION_ERROR
                 }
+
+                ReturnCode::GSASL_AUTHENTICATION_ERROR
             }
             p => {
                 println!("Callback called with property {:?}", p);
@@ -90,29 +82,28 @@ impl Callback<AppData, SessionData> for CB {
     }
 }
 
-pub struct Auth {
+pub struct Auth<'a> {
     pub ctx: RSASL<AppData, SessionData>,
-    session: Arc<Session>,
+    session: Rc<RefCell<Option<Session>>>,
+    access: Arc<AccessDB>,
+    log: Logger,
 }
 
-impl Auth {
-    pub fn new(dbs: Databases, session: Arc<Session>) -> Self {
+impl<'a> Auth<'a> {
+    pub fn new(log: Logger, dbs: Databases, session: Rc<RefCell<Option<Session>>>) -> Self {
         let mut ctx = SASL::new().unwrap();
 
         let appdata = Box::new(AppData { passdb: dbs.passdb.clone(), userdb: dbs.userdb.clone() });
 
         ctx.store(appdata);
-
         ctx.install_callback::<CB>();
 
-        info!(session.log, "Auth created");
-
-        Self { ctx, session }
+        Self { log, ctx, session, access: dbs.access.clone() }
     }
 }
 
 use crate::schema::authenticationsystem_capnp::*;
-impl authentication_system::Server for Auth {
+impl<'a> authentication_system::Server for Auth<'a> {
     fn mechanisms(&mut self, 
         _: authentication_system::MechanismsParams,
         mut res: authentication_system::MechanismsResults
@@ -166,7 +157,7 @@ impl authentication_system::Server for Auth {
                 }),
         };
 
-        session.store(Box::new(SessionData { session: self.session.clone() }));
+        session.store(Box::new(SessionData { authz: None }));
 
         // If the client has provided initial data go use that
         use request::initial_response::Which;
@@ -188,12 +179,28 @@ impl authentication_system::Server for Auth {
 
         // The step may either return an error, a success or the need for more data
         // TODO: Set the session user. Needs a lookup though <.>
+        use response::Result as Resres;
         match step_res {
             Ok(Step::Done(b)) => {
-                use response::Result;
+                let user = session
+                    .retrieve_mut()
+                    .and_then(|data| {
+                        data.authz.take()
+                    })
+                    .expect("Authentication returned OK but didn't set user id");
+
+                let perms = pry!(self.access.collect_permrules(&user.data)
+                    .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e))));
+                self.session.replace(Session::new(
+                    self.log.new(o!()),
+                    user.id,
+                    "".to_string(),
+                    user.data.roles.into_boxed_slice(),
+                    perms.into_boxed_slice()
+                ));
 
                 let mut outcome = pry!(res.get().get_response()).init_outcome();
-                outcome.reborrow().set_result(Result::Successful);
+                outcome.reborrow().set_result(Resres::Successful);
                 if b.len() != 0 {
                     outcome.init_additional_data().set_additional(&b);
                 }
@@ -204,11 +211,13 @@ impl authentication_system::Server for Auth {
                 Promise::ok(())
             }
             // TODO: This should really be an outcome because this is failed auth just as much atm.
-            Err(e) => 
-                return Promise::err(capnp::Error {
-                    kind: capnp::ErrorKind::Failed,
-                    description: format!("SASL error: {}", e),
-                }),
+            Err(e) => {
+                let mut outcome = pry!(res.get().get_response()).init_outcome();
+                outcome.reborrow().set_result(Resres::Failed);
+                let text = format!("{}", e);
+                outcome.set_help_text(&text);
+                Promise::ok(())
+            }
         }
 
     }

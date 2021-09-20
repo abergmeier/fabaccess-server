@@ -1,22 +1,22 @@
-use std::sync::Arc;
-use std::future::Future;
 use futures::FutureExt;
+use std::future::Future;
+use std::sync::Arc;
 
 use slog::Logger;
 
 use smol::lock::Mutex;
 use smol::net::TcpStream;
 
-use crate::error::Result;
 use crate::api::Bootstrap;
+use crate::error::Result;
 
-use capnp_rpc::{twoparty, rpc_twoparty_capnp};
+use capnp_rpc::{rpc_twoparty_capnp, twoparty};
 
 use crate::schema::connection_capnp;
 
+use crate::db::access::{AccessControl, PermRule, RoleIdentifier};
+use crate::db::user::UserId;
 use crate::db::Databases;
-use crate::db::access::{AccessControl, Permission};
-use crate::db::user::User;
 use crate::network::Network;
 
 #[derive(Debug)]
@@ -25,15 +25,42 @@ use crate::network::Network;
 pub struct Session {
     // Session-spezific log
     pub log: Logger,
-    pub user: Mutex<Option<User>>,
-    pub accessdb: Arc<AccessControl>,
+
+    /// User this session has been authorized as.
+    ///
+    /// Slightly different than the authnid which indicates as what this session has been
+    /// authenticated as (e.g. using EXTERNAL auth the authnid would be the CN of the client
+    /// certificate, but the authzid would be an user)
+    pub authzid: UserId,
+
+    pub authnid: String,
+
+    /// Roles this session has been assigned via group memberships, direct role assignment or
+    /// authentication types
+    pub roles: Box<[RoleIdentifier]>,
+
+    /// Permissions this session has.
+    ///
+    /// This is a snapshot of the permissions the underlying user has
+    /// take at time of creation (i.e. session establishment)
+    pub perms: Box<[PermRule]>,
 }
 
 impl Session {
-    pub fn new(log: Logger, accessdb: Arc<AccessControl>) -> Self {
-        let user = Mutex::new(None);
-
-        Session { log, user, accessdb }
+    pub fn new(
+        log: Logger,
+        authzid: UserId,
+        authnid: String,
+        roles: Box<[RoleIdentifier]>,
+        perms: Box<[PermRule]>,
+    ) -> Self {
+        Session {
+            log,
+            authzid,
+            authnid,
+            roles,
+            perms,
+        }
     }
 }
 
@@ -48,14 +75,17 @@ impl ConnectionHandler {
         Self { log, db, network }
     }
 
-    pub fn handle(&mut self, stream: TcpStream) -> impl Future<Output=Result<()>> {
+    pub fn handle(&mut self, stream: TcpStream) -> impl Future<Output = Result<()>> {
         info!(self.log, "New connection from on {:?}", stream);
-        let session = Arc::new(Session::new(self.log.new(o!()), self.db.access.clone()));
-        let boots = Bootstrap::new(session, self.db.clone(), self.network.clone());
+        let boots = Bootstrap::new(self.log.new(o!()), self.db.clone(), self.network.clone());
         let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
 
-        let network = twoparty::VatNetwork::new(stream.clone(), stream,
-            rpc_twoparty_capnp::Side::Server, Default::default());
+        let network = twoparty::VatNetwork::new(
+            stream.clone(),
+            stream,
+            rpc_twoparty_capnp::Side::Server,
+            Default::default(),
+        );
         let rpc_system = capnp_rpc::RpcSystem::new(Box::new(network), Some(rpc.client));
 
         // Convert the error type to one of our errors

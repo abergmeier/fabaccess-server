@@ -89,6 +89,10 @@ pub struct UserData {
     /// The higher, the higher the priority. Higher priority users overwrite lower priority ones.
     pub priority: u64,
 
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub passwd: Option<String>,
+
     /// Additional data storage
     #[serde(flatten, skip_serializing_if = "HashMap::is_empty")]
     kv: HashMap<String, String>,
@@ -96,11 +100,7 @@ pub struct UserData {
 
 impl UserData {
     pub fn new(roles: Vec<RoleIdentifier>, priority: u64) -> Self {
-        Self { 
-            roles: roles,
-            priority: priority,
-            kv: HashMap::new(),
-        }
+        Self { roles, priority, kv: HashMap::new(), passwd: None }
     }
 }
 
@@ -124,30 +124,8 @@ pub fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, User>> {
 
 pub fn init(log: Logger, _config: &Config, env: Arc<lmdb::Environment>) -> Result<Internal> {
     let mut flags = lmdb::DatabaseFlags::empty();
-    flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
-    let db = env.create_db(Some("users"), flags)?;
+    let db = env.create_db(Some("userdb"), flags)?;
     debug!(&log, "Opened user db successfully.");
 
     Ok(Internal::new(log, env, db))
-}
-
-#[cfg(test_DISABLED)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn format_uid_test() {
-        let uid = "testuser".to_string();
-        let suid = "testsuid".to_string();
-        let realm = "testloc".to_string();
-
-        assert_eq!("testuser", 
-            format!("{}", UserIdentifier::new(uid.clone(), None, None)));
-        assert_eq!("testuser+testsuid", 
-            format!("{}", UserIdentifier::new(uid.clone(), Some(suid.clone()), None)));
-        assert_eq!("testuser+testsuid", 
-            format!("{}", UserIdentifier::new(uid.clone(), Some(suid.clone()), None)));
-        assert_eq!("testuser+testsuid@testloc", 
-            format!("{}", UserIdentifier::new(uid, Some(suid), Some(realm))));
-    }
 }

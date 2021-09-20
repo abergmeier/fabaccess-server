@@ -1,3 +1,9 @@
+use std::rc::Rc;
+use std::cell::RefCell;
+use std::ops::Deref;
+
+use slog::Logger;
+
 use std::sync::Arc;
 
 use capnp::capability::{Params, Results, Promise};
@@ -21,15 +27,19 @@ use users::Users;
 
 // TODO Session restoration by making the Bootstrap cap a SturdyRef
 pub struct Bootstrap {
-    session: Arc<Session>,
+    log: Logger,
+
     db: Databases,
     nw: Arc<Network>,
+
+    session: Rc<RefCell<Option<Session>>>,
 }
 
 impl Bootstrap {
-    pub fn new(session: Arc<Session>, db: Databases, nw: Arc<Network>) -> Self {
-        info!(session.log, "Created Bootstrap");
-        Self { session, db, nw }
+    pub fn new(log: Logger, db: Databases, nw: Arc<Network>) -> Self {
+        info!(log, "Created Bootstrap");
+        let session = Rc::new(RefCell::new(None));
+        Self { session, db, nw, log }
     }
 }
 
@@ -43,7 +53,15 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         // TODO: When should we allow multiple auth and how do me make sure that does not leak
         // priviledges (e.g. due to previously issues caps)?
 
-        res.get().set_authentication_system(capnp_rpc::new_client(auth::Auth::new(self.db.clone(), self.session.clone())));
+        // If this Rc has a strong count of 1 then there's no other cap issued yet meaning we can
+        // safely transform the inner session with an auth.
+        if Rc::strong_count(&self.session) == 1 {
+            let session = Rc::clone(&self.session);
+            let db = self.db.clone();
+            res.get().set_authentication_system(capnp_rpc::new_client(
+                    auth::Auth::new(self.log.new(o!()), db, session))
+            );
+        }
 
         Promise::ok(())
     }
@@ -52,32 +70,19 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         _: MachineSystemParams,
         mut res: MachineSystemResults
     ) -> Promise<(), capnp::Error> {
-        let session = self.session.clone();
-        let accessdb = self.db.access.clone();
-        let nw = self.nw.clone();
-        let f = async move {
-            // Ensure the lock is dropped as soon as possible
-            if let Some(user) = { session.user.lock().await.clone() } {
-                let perms = accessdb.collect_permrules(&user.data)
-                    .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e)))?;
-
-                debug!(session.log, "Giving MachineSystem cap to user {} with perms:", user.id);
-                for r in perms.iter() {
-                    debug!(session.log, "   {}", r);
-                }
-
-                // TODO actual permission check and stuff
-                //      Right now we only check that the user has authenticated at all.
-                let c = capnp_rpc::new_client(Machines::new(user.id, perms, nw));
-                res.get().set_machine_system(c);
+        if let Some(session) = self.session.borrow().deref() {
+            debug!(self.log, "Giving MachineSystem cap to user {} with perms:", session.authzid);
+            for r in session.perms.iter() {
+                debug!(session.log, "   {}", r);
             }
 
-            // Promise is Ok either way, just the machine system may not be set, indicating as
-            // usual a lack of permission.
-            Ok(())
-        };
+            // TODO actual permission check and stuff
+            //      Right now we only check that the user has authenticated at all.
+            let c = capnp_rpc::new_client(Machines::new(Rc::clone(&self.session), self.nw.clone()));
+            res.get().set_machine_system(c);
+        }
 
-        Promise::from_future(f)
+        Promise::ok(())
     }
 
     fn user_system(
@@ -85,25 +90,13 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         _: UserSystemParams,
         mut results: UserSystemResults
     ) -> Promise<(), capnp::Error> {
-        let session = self.session.clone();
-        let accessdb = self.db.access.clone();
-        let f = async move {
-            // Ensure the lock is dropped as soon as possible
-            if let Some(user) = { session.user.lock().await.clone() } {
-                let perms = accessdb.collect_permrules(&user.data)
-                    .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e)))?;
+        if self.session.borrow().is_some() {
+            // TODO actual permission check and stuff
+            //      Right now we only check that the user has authenticated at all.
+            let c = capnp_rpc::new_client(Users::new(Rc::clone(&self.session), self.db.userdb.clone()));
+            results.get().set_user_system(c);
+        }
 
-                // TODO actual permission check and stuff
-                //      Right now we only check that the user has authenticated at all.
-                let c = capnp_rpc::new_client(Users::new(perms));
-                results.get().set_user_system(c);
-            }
-
-            // Promise is Ok either way, just the machine system may not be set, indicating as
-            // usual a lack of permission.
-            Ok(())
-        };
-
-        Promise::from_future(f)
+        Promise::ok(())
     }
 }
