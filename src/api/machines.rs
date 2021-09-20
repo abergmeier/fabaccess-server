@@ -79,20 +79,29 @@ impl machines::Server for Machines {
                         builder.set_description(desc);
                     }
 
-                    let s = match machine.get_status().await {
+                    let machineapi = Machine::new(user.clone(), perms, machine.clone());
+
+                    let state = machine.get_status().await;
+                    let s = match state {
                         Status::Free => MachineState::Free,
                         Status::Disabled => MachineState::Disabled,
                         Status::Blocked(_) => MachineState::Blocked,
-                        Status::InUse(_) => MachineState::InUse,
+                        Status::InUse(ref u) => {
+                            if let Some(owner) = u.as_ref() {
+                                if owner == user {
+                                    builder.set_inuse(capnp_rpc::new_client(machineapi.clone()));
+                                }
+                            }
+
+                            MachineState::InUse
+                        },
                         Status::Reserved(_) => MachineState::Reserved,
                         Status::ToCheck(_) => MachineState::ToCheck,
                     };
                     builder.set_state(s);
 
-                    let machineapi = Machine::new(user.clone(), perms, machine.clone());
-                    if perms.write {
+                    if perms.write && state == Status::Free {
                         builder.set_use(capnp_rpc::new_client(machineapi.clone()));
-                        builder.set_inuse(capnp_rpc::new_client(machineapi.clone()));
                     }
                     if perms.manage {
                         builder.set_transfer(capnp_rpc::new_client(machineapi.clone()));
