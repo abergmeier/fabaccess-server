@@ -75,7 +75,7 @@ impl manage::Server for Users {
         let result: Result<(), error::Error> = 
             self.userdb.list_users()
                 .and_then(|users| {
-                    let builder = results.get().init_user_list(users.len() as u32);
+                    let mut builder = results.get().init_user_list(users.len() as u32);
                     let u = User::new(Rc::clone(&self.session));
                     for (i, user) in users.into_iter().enumerate() {
                         let mut b = builder.reborrow().get(i as u32);

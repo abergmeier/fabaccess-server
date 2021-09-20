@@ -47,13 +47,13 @@ impl machines::Server for Machines {
         mut results: machines::GetMachineListResults)
         -> Promise<(), Error>
     {
-        let session = Rc::clone(&self.session);
-        let session = session.borrow();
-        if let Some(session) = session.deref() {
+        let rc = Rc::clone(&self.session);
+        let session = self.session.borrow();
+        if session.deref().is_some() {
             let v: Vec<(String, crate::machine::Machine)> = self.network.machines.iter()
                 .filter(|(_name, machine)| {
                     let required_disclose = &machine.desc.privs.disclose;
-                    for perm_rule in session.perms.iter() {
+                    for perm_rule in session.as_ref().unwrap().perms.iter() {
                         if perm_rule.match_perm(required_disclose) {
                             return true;
                         }
@@ -64,10 +64,11 @@ impl machines::Server for Machines {
                 .map(|(n,m)| (n.clone(), m.clone()))
                 .collect();
 
-            let permissions = &session.perms;
-            let user = &session.authzid;
-
             let f = async move {
+                let session = rc.borrow();
+                let user = &session.as_ref().unwrap().authzid;
+                let permissions = &session.as_ref().unwrap().perms;
+
                 let mut machines = results.get().init_machine_list(v.len() as u32);
                 for (i, (name, machine)) in v.into_iter().enumerate() {
                     let perms = Perms::get_for(&machine.desc.privs, permissions.iter());
@@ -118,17 +119,19 @@ impl machines::Server for Machines {
         params: machines::GetMachineParams,
         mut results: machines::GetMachineResults
         ) -> Promise<(), capnp::Error> {
-        if let Some(session) = self.session.borrow().deref() {
+        let rc = Rc::clone(&self.session);
+        if self.session.borrow().is_some() {
             let name = {
                 let params = pry!(params.get());
                 pry!(params.get_name()).to_string()
             };
 
             let network = self.network.clone();
-            let user = session.authzid;
-            let permissions = session.perms;
-
             let f = async move {
+                let session = rc.borrow();
+                let user = &session.as_ref().unwrap().authzid;
+                let permissions = &session.as_ref().unwrap().perms;
+
                 if let Some(machine) = network.machines.get(&name) {
                     let mut builder = results.get().init_machine();
                     let perms = Perms::get_for(&machine.desc.privs, permissions.iter());
