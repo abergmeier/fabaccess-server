@@ -191,13 +191,13 @@ impl authentication_system::Server for Auth {
 
                 let perms = pry!(self.access.collect_permrules(&user.data)
                     .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e))));
-                self.session.replace(Session::new(
+                self.session.replace(Some(Session::new(
                     self.log.new(o!()),
                     user.id,
                     "".to_string(),
                     user.data.roles.into_boxed_slice(),
                     perms.into_boxed_slice()
-                ));
+                )));
 
                 let mut outcome = pry!(res.get().get_response()).init_outcome();
                 outcome.reborrow().set_result(Resres::Successful);
