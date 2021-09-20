@@ -82,14 +82,14 @@ impl Callback<AppData, SessionData> for CB {
     }
 }
 
-pub struct Auth<'a> {
+pub struct Auth {
     pub ctx: RSASL<AppData, SessionData>,
     session: Rc<RefCell<Option<Session>>>,
     access: Arc<AccessDB>,
     log: Logger,
 }
 
-impl<'a> Auth<'a> {
+impl Auth {
     pub fn new(log: Logger, dbs: Databases, session: Rc<RefCell<Option<Session>>>) -> Self {
         let mut ctx = SASL::new().unwrap();
 
@@ -103,7 +103,7 @@ impl<'a> Auth<'a> {
 }
 
 use crate::schema::authenticationsystem_capnp::*;
-impl<'a> authentication_system::Server for Auth<'a> {
+impl authentication_system::Server for Auth {
     fn mechanisms(&mut self, 
         _: authentication_system::MechanismsParams,
         mut res: authentication_system::MechanismsResults
