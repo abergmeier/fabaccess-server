@@ -40,4 +40,10 @@
   }
 , mqtt_url = "tcp://localhost:1883" 
 , db_path = "/tmp/bffh"
+, roles =
+  { Testrole = 
+    { parents = [] : List Text
+    , permissions = [] : List Text
+    }
+  }
 }
