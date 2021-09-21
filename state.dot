@@ -1,0 +1,62 @@
+strict digraph state {
+    started
+        [label="BFFH just started"];
+    created
+        [label="Machine was newly created"];
+
+    fresh
+        [label="State is fresh"];
+
+    started -> fresh;
+    created -> fresh;
+
+    unapplied
+        [label="Stored but not applied"];
+    applied
+        [label="All actors are done"];
+    verified
+        [label="State was verified"];
+
+    fresh -> unapplied
+        [label="statechange received"];
+    unapplied -> applied
+        [label="All actors have finished processing"];
+    applied -> verified
+        [label="All actors have verified that the state change happened in real life too"];
+
+    applied -> unapplied
+        [label="State was changed or a new actor was attached"];
+    verified -> unapplied
+        [label="State was changed or a new actor was attached"];
+
+    subgraph "actor" {
+        actor_fresh
+            [label="Actor was just constructed"];
+        actor_attached
+            [label="Actor was just attached to a machine"];
+        actor_unapplied
+            [label="statechange received"];
+        actor_applied
+            [label="statechange processed"];
+        actor_verified
+            [label="Measured real world and it matches the statechange"];
+
+        actor_fresh -> actor_attached
+            [label="Initial state received"];
+        actor_attached -> actor_applied
+            [label="Initial state applied (potentially noop)"];
+        actor_attached -> actor_unapplied
+            [label="statechange received before finishing initial application"];
+        actor_unapplied -> actor_applied
+            [label="processed statechange"];
+        actor_applied -> actor_verified
+            [label="measure"];
+    }
+
+    unapplied -> actor_unapplied
+        [label="send statechange to actor"];
+    actor_applied -> applied
+        [label="actor processed statechange"];
+    actor_verified -> verified
+        [label="actor verifies statechange"];
+}
