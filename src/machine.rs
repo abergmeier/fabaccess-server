@@ -163,9 +163,7 @@ impl Inner {
     }
 
     pub fn do_state_change(&mut self, new_state: MachineState) {
-            print!("State {:?}", &new_state);
             let old_state = self.state.replace(new_state);
-            print!("<- {:?}", &old_state);
             self.reset.replace(old_state);
     }
 

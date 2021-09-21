@@ -1,19 +1,29 @@
 -- { actor_connections = [] : List { _1 : Text, _2 : Text }
 { actor_connections = 
   [ { _1 = "Testmachine", _2 = "Actor" }
-  , { _1 = "Another", _2 = "Actor2" }
-  , { _1 = "Yetmore", _2 = "Actor3" }
+  , { _1 = "Another", _2 = "Bash" }
+  , { _1 = "Yetmore", _2 = "Bash2" }
   ]
 , actors = 
   { Actor = { module = "Dummy", params = {=} }
   , Actor2 = { module = "Dummy", params = {=} }
   , Actor3 = { module = "Dummy", params = {=} }
+  , Bash = { module = "Process", params =
+    { cmd = "./examples/actor.sh"
+    , args = "your ad could be here"
+    }}
+  , Bash2 = { module = "Process", params =
+    { cmd = "./examples/actor.sh"
+    , args = "this is a different one"
+    }}
+  , Bash3 = { module = "Process", params =
+    { cmd = "./examples/actor.sh" 
+    }}
   }
   , init_connections = [] : List { _1 : Text, _2 : Text }
 --, init_connections = [{ _1 = "Initiator", _2 = "Testmachine" }]
-, initiators = 
-  { Initiator = { module = "Dummy", params = {=} } 
-  }
+, initiators = --{=}
+  { Initiator = { module = "Dummy", params = {=} } }
 , listens = 
   [ { address = "127.0.0.1", port = Some 59661 }
   , { address = "::1", port = Some 59661 }

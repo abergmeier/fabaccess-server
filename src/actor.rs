@@ -161,6 +161,10 @@ fn load_single(
         "Dummy" => {
             Some(Box::new(Dummy::new(log)))
         }
+        "Process" => {
+            Process::new(log.new(o!("name" => name.clone())), name.clone(), params)
+                .map(|a| a.into_boxed_actuator())
+        }
         _ => {
             error!(log, "No actor found with name \"{}\", configured as \"{}\".", module_name, name);
             None
