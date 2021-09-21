@@ -22,8 +22,7 @@ pub struct Shelly {
 }
 
 impl Shelly {
-    pub fn new(log_view: &Logger, name: String, client: mqtt::AsyncClient) -> Self {
-        let log = log_view.new(o!("shelly_name" => name.clone()));
+    pub fn new(log: Logger, name: String, client: mqtt::AsyncClient) -> Self {
         debug!(log, "Starting shelly module for {}", &name);
         Shelly { log, name, client, }
     }

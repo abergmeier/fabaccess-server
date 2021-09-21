@@ -114,8 +114,8 @@ pub struct Dummy {
 }
 
 impl Dummy {
-    pub fn new(log: &Logger) -> Self {
-        Self { log: log.new(o!("module" => "Dummy Actor")) }
+    pub fn new(log: Logger) -> Self {
+        Self { log }
     }
 }
 
@@ -129,8 +129,12 @@ impl Actuator for Dummy {
 pub fn load(log: &Logger, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
     let mut map = HashMap::new();
 
+    let mqtt = AsyncClient::new(config.mqtt_url.clone())?;
+    let tok = mqtt.connect(paho_mqtt::ConnectOptions::new());
+    smol::block_on(tok)?;
+
     let actuators = config.actors.iter()
-        .map(|(k,v)| (k, load_single(log, k, &v.module, &v.params)))
+        .map(|(k,v)| (k, load_single(log, k, &v.module, &v.params, mqtt.clone())))
         .filter_map(|(k, n)| match n {
             None => None,
             Some(a) => Some((k, a))
@@ -151,19 +155,24 @@ fn load_single(
     log: &Logger, 
     name: &String,
     module_name: &String,
-    params: &HashMap<String, String>
+    params: &HashMap<String, String>,
+    client: AsyncClient,
     ) -> Option<Box<dyn Actuator + Sync + Send>> 
 {
     use crate::modules::*;
 
     info!(log, "Loading actor \"{}\" with module {} and params {:?}", name, module_name, params);
+    let log = log.new(o!("name" => name.clone()));
     match module_name.as_ref() {
         "Dummy" => {
             Some(Box::new(Dummy::new(log)))
         }
         "Process" => {
-            Process::new(log.new(o!("name" => name.clone())), name.clone(), params)
+            Process::new(log, name.clone(), params)
                 .map(|a| a.into_boxed_actuator())
+        }
+        "Shelly" => {
+            Some(Box::new(Shelly::new(log, name.clone(), client)))
         }
         _ => {
             error!(log, "No actor found with name \"{}\", configured as \"{}\".", module_name, name);

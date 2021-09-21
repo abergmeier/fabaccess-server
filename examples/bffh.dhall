@@ -1,14 +1,14 @@
 -- { actor_connections = [] : List { _1 : Text, _2 : Text }
 { actor_connections = 
   -- Link up machines to actors
-  [ { _1 = "Testmachine", _2 = "Actor" }
+  [ { _1 = "Testmachine", _2 = "Shelly_1234" }
   , { _1 = "Another", _2 = "Bash" }
   -- One machine can have as many actors as it wants
   , { _1 = "Yetmore", _2 = "Bash2" }
   , { _1 = "Yetmore", _2 = "FailBash"}
   ]
 , actors = 
-  { Actor = { module = "Dummy", params = {=} }
+  { Shelly_1234 = { module = "Shelly", params = {=} }
   , Bash = { module = "Process", params =
     { cmd = "./examples/actor.sh"
     , args = "your ad could be here"
@@ -23,8 +23,8 @@
   }
   , init_connections = [] : List { _1 : Text, _2 : Text }
 --, init_connections = [{ _1 = "Initiator", _2 = "Testmachine" }]
-, initiators = --{=}
-  { Initiator = { module = "Dummy", params = {=} } }
+, initiators = {=}
+  --{ Initiator = { module = "Dummy", params = {=} } }
 , listens = 
   [ { address = "127.0.0.1", port = Some 59661 }
   , { address = "::1", port = Some 59661 }
@@ -56,7 +56,7 @@
     , write = "lab.test.write" 
     }
   }
-, mqtt_url = "" 
+, mqtt_url = "tcp://localhost:1883" 
 , db_path = "/tmp/bffh"
 , roles =
   { testrole = 

@@ -167,11 +167,6 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         let ex = Executor::new();
         let db = db::Databases::new(&log, &config)?;
 
-        //let mqtt = AsyncClient::new(config.mqtt_url.clone())?;
-        //let tok = mqtt.connect(paho_mqtt::ConnectOptions::new());
-
-        //smol::block_on(tok)?;
-
         let machines = machine::load(&config)?;
         let (actor_map, actors) = actor::load(&log, &config)?;
         let (init_map, initiators) = initiator::load(&log, &config)?;
