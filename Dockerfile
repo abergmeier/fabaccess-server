@@ -18,6 +18,7 @@ COPY --from=builder /usr/local/cargo/bin/diflouroborane /usr/local/bin/diflourob
 #COPY --from=builder /usr/src/bffh/examples/bffh.dhall /etc/diflouroborane.dhall
 # RUN diflouroborane --print-default > /etc/diflouroborane.toml
 VOLUME /etc/bffh/
-VOLUME /var/lib/bffh
+VOLUME /var/lib/bffh/
+VOLUME /usr/local/lib/bffh/adapters/
 EXPOSE 59661
 ENTRYPOINT ["sh", "-c", "diflouroborane -c /etc/bffh/bffh.dhall --load=/etc/bffh; diflouroborane -c /etc/bffh/bffh.dhall"]
