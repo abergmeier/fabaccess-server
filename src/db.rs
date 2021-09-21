@@ -28,7 +28,6 @@ pub mod machine;
 pub struct Databases {
     pub access: Arc<access::AccessControl>,
     pub machine: Arc<machine::internal::Internal>,
-    pub passdb: Arc<pass::PassDB>,
     pub userdb: Arc<user::Internal>,
 }
 
@@ -53,13 +52,10 @@ impl Databases {
         let permdb = access::init(log.new(o!("system" => "permissions")), &config, env.clone())?;
         let ac = access::AccessControl::new(permdb);
 
-        let passdb = pass::PassDB::init(log.new(o!("system" => "passwords")), env.clone()).unwrap();
-
         let userdb = user::init(log.new(o!("system" => "users")), &config, env.clone())?;
 
         Ok(Self {
             access: Arc::new(ac),
-            passdb: Arc::new(passdb),
             machine: Arc::new(mdb),
             userdb: Arc::new(userdb),
         })

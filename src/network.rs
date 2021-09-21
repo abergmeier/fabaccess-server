@@ -17,17 +17,17 @@ pub type InitMap = HashMap<String, Mutable<Option<Machine>>>;
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Error {
-    NoSuchInitiator,
-    NoSuchMachine,
-    NoSuchActor,
+    NoSuchInitiator(String),
+    NoSuchMachine(String),
+    NoSuchActor(String),
 }
 
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::NoSuchInitiator => write!(f, "No initiator found with that name"),
-            Error::NoSuchActor => write!(f, "No actor found with that name"),
-            Error::NoSuchMachine => write!(f, "No machine found with that name"),
+            Error::NoSuchInitiator(n) => write!(f, "No initiator \"{}\" found.", n),
+            Error::NoSuchActor(n) => write!(f, "No actor \"{}\" found.", n),
+            Error::NoSuchMachine(n) => write!(f, "No machine \"{}\" found.", n),
         }
     }
 }
@@ -57,9 +57,9 @@ impl Network {
 
     pub fn connect_init(&self, init_key: &String, machine_key: &String) -> Result<()> {
         let init = self.inits.get(init_key)
-            .ok_or(Error::NoSuchInitiator)?;
+            .ok_or_else(|| Error::NoSuchInitiator(init_key.clone()))?;
         let machine = self.machines.get(machine_key)
-            .ok_or(Error::NoSuchMachine)?;
+            .ok_or_else(|| Error::NoSuchMachine(machine_key.clone()))?;
 
         init.set(Some(machine.clone()));
         Ok(())
@@ -69,13 +69,14 @@ impl Network {
         -> Result<()>
     {
         let machine = self.machines.get(machine_key)
-            .ok_or(Error::NoSuchMachine)?;
+            .ok_or_else(|| Error::NoSuchMachine(machine_key.clone()))?;
         let actor = self.actors.get(actor_key)
-            .ok_or(Error::NoSuchActor)?;
+            .ok_or_else(|| Error::NoSuchActor(actor_key.clone()))?;
 
         // FIXME Yeah this should not unwrap. Really, really shoudln't.
         let mut guard = actor.try_lock().unwrap();
 
-        guard.try_send(Some(Box::new(machine.signal()))).map_err(|_| Error::NoSuchActor.into())
+        guard.try_send(Some(Box::new(machine.signal())))
+             .map_err(|_| Error::NoSuchActor(actor_key.clone()).into())
     }
 }

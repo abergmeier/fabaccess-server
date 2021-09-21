@@ -126,11 +126,11 @@ impl Actuator for Dummy {
     }
 }
 
-pub fn load(log: &Logger, client: &AsyncClient, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
+pub fn load(log: &Logger, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
     let mut map = HashMap::new();
 
     let actuators = config.actors.iter()
-        .map(|(k,v)| (k, load_single(log, client, k, &v.module, &v.params)))
+        .map(|(k,v)| (k, load_single(log, k, &v.module, &v.params)))
         .filter_map(|(k, n)| match n {
             None => None,
             Some(a) => Some((k, a))
@@ -149,7 +149,6 @@ pub fn load(log: &Logger, client: &AsyncClient, config: &Config) -> Result<(Acto
 
 fn load_single(
     log: &Logger, 
-    client: &AsyncClient, 
     name: &String,
     module_name: &String,
     params: &HashMap<String, String>
@@ -157,14 +156,8 @@ fn load_single(
 {
     use crate::modules::*;
 
+    info!(log, "Loading actor \"{}\" with module {} and params {:?}", name, module_name, params);
     match module_name.as_ref() {
-        "Shelly" => {
-            if !params.is_empty() {
-                warn!(log, "\"{}\" module expects no parameters. Configured as \"{}\".",
-                    module_name, name);
-            }
-            Some(Box::new(Shelly::new(log, name.clone(), client.clone())))
-        },
         "Dummy" => {
             Some(Box::new(Dummy::new(log)))
         }

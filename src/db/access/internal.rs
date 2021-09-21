@@ -145,11 +145,6 @@ impl RoleDB for Internal {
         "Internal"
     }
 
-    fn check(&self, user: &UserData, perm: &Permission) -> Result<bool> {
-        let txn = self.env.begin_ro_txn()?;
-        self._check(&txn, user, &perm)
-    }
-
     fn get_role(&self, role_id: &RoleIdentifier) -> Result<Option<Role>> {
         let txn = self.env.begin_ro_txn()?;
         self._get_role(&txn, role_id)

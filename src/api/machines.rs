@@ -152,7 +152,6 @@ impl machines::Server for Machines {
                     let machineapi = Machine::new(user.clone(), perms, machine.clone());
                     if perms.write {
                         builder.set_use(capnp_rpc::new_client(machineapi.clone()));
-                        builder.set_inuse(capnp_rpc::new_client(machineapi.clone()));
                     }
                     if perms.manage {
                         builder.set_transfer(capnp_rpc::new_client(machineapi.clone()));
@@ -163,17 +162,25 @@ impl machines::Server for Machines {
                         builder.set_admin(capnp_rpc::new_client(machineapi.clone()));
                     }
 
-                    builder.set_info(capnp_rpc::new_client(machineapi));
 
                     let s = match machine.get_status().await {
                         Status::Free => MachineState::Free,
                         Status::Disabled => MachineState::Disabled,
                         Status::Blocked(_) => MachineState::Blocked,
-                        Status::InUse(_) => MachineState::InUse,
+                        Status::InUse(u) => {
+                            if let Some(owner) = u.as_ref() {
+                                if owner == user {
+                                    builder.set_inuse(capnp_rpc::new_client(machineapi.clone()));
+                                }
+                            }
+                            MachineState::InUse
+                        },
                         Status::Reserved(_) => MachineState::Reserved,
                         Status::ToCheck(_) => MachineState::ToCheck,
                     };
                     builder.set_state(s);
+
+                    builder.set_info(capnp_rpc::new_client(machineapi));
                 };
 
                 Ok(())

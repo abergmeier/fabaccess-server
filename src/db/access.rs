@@ -1,6 +1,9 @@
 //! Access control logic
 //!
 
+use slog::Logger;
+use std::sync::Arc;
+
 use std::fmt;
 use std::collections::HashMap;
 use std::cmp::Ordering;
@@ -15,11 +18,23 @@ use crate::error::Result;
 
 pub mod internal;
 
+use crate::config::Config;
 use crate::db::user::UserData;
-pub use internal::{init, Internal};
+pub use internal::Internal;
 
 pub struct AccessControl {
-    pub internal: Internal,
+    internal: HashMap<RoleIdentifier, Role>,
+}
+
+pub fn init(_log: Logger, config: &Config, _env: Arc<lmdb::Environment>) 
+    -> std::result::Result<HashMap<RoleIdentifier, Role>, crate::error::Error> 
+{
+    Ok(config.roles.iter().map(|(name, cfg)| {
+        let id = RoleIdentifier::new(name, "internal");
+        let parents = cfg.parents.iter().map(|n| RoleIdentifier::new(n, "internal")).collect();
+        let role = Role::new(parents, cfg.permissions.clone());
+        (id, role)
+    }).collect())
 }
 
 pub const ADMINPERM: &'static str = "bffh.admin";
@@ -28,7 +43,7 @@ pub fn admin_perm() -> &'static Permission {
 }
 
 impl AccessControl {
-    pub fn new(internal: Internal) -> Self {
+    pub fn new(internal: HashMap<RoleIdentifier, Role>) -> Self {
         Self {
             internal,
         }
@@ -39,7 +54,7 @@ impl AccessControl {
     }
 
     pub fn dump_roles(&self) -> Result<Vec<(RoleIdentifier, Role)>> {
-        self.internal.dump_roles()
+        Ok(self.internal.iter().map(|(k,v)| (k.clone(), v.clone())).collect())
     }
 }
 
@@ -55,38 +70,6 @@ pub trait RoleDB {
     fn get_type_name(&self) -> &'static str;
 
     fn get_role(&self, role_id: &RoleIdentifier) -> Result<Option<Role>>;
-
-    /// Check if a given user has the given permission
-    /// 
-    /// Default implementation which adapter may overwrite with more efficient specialized
-    /// implementations.
-    fn check(&self, user: &UserData, perm: &Permission) -> Result<bool> {
-        self.check_roles(&user.roles, perm)
-    }
-
-    /// Check if a given permission is granted by any of the given roles or their respective
-    /// parents
-    ///
-    /// A Default implementation exists which adapter may overwrite with more efficient specialized
-    /// implementations.
-    fn check_roles(&self, roles: &[RoleIdentifier], perm: &Permission) -> Result<bool> {
-        // Tally all roles. Makes dependent roles easier
-        let mut roleset = HashMap::new();
-        for role_id in roles {
-            self.tally_role(&mut roleset, role_id)?;
-        }
-
-        // Iter all unique role->permissions we've found and early return on match. 
-        for (_roleid, role) in roleset.iter() {
-            for perm_rule in role.permissions.iter() {
-                if perm_rule.match_perm(&perm) {
-                    return Ok(true);
-                }
-            }
-        }
-
-        return Ok(false);
-    }
 
     /// Tally a role dependency tree into a set
     ///
@@ -122,6 +105,16 @@ pub trait RoleDB {
         }
 
         return Ok(output);
+    }
+}
+
+impl RoleDB for HashMap<RoleIdentifier, Role> {
+    fn get_type_name(&self) -> &'static str {
+        "Internal"
+    }
+
+    fn get_role(&self, role_id: &RoleIdentifier) -> Result<Option<Role>> {
+        Ok(self.get(role_id).cloned())
     }
 }
 
@@ -161,6 +154,10 @@ impl Role {
         Ok(HashMap::from_iter(file_roles.into_iter().map(|(key, value)| {
             (RoleIdentifier::local_from_str("lmdb".to_string(), key), value)
         })))
+    }
+
+    pub fn new(parents: Vec<RoleIdentifier>, permissions: Vec<PermRule>) -> Self {
+        Self { parents, permissions }
     }
 }
 
@@ -207,6 +204,15 @@ pub struct RoleIdentifier {
     name: String,
     /// Role Source, i.e. the database the role comes from
     source: SourceID,
+}
+
+impl RoleIdentifier {
+    pub fn new<>(name: &str, source: &str) -> Self {
+        Self { name: name.to_string(), source: source.to_string() }
+    }
+    pub fn from_strings(name: String, source: String) -> Self {
+        Self { name, source }
+    }
 }
 
 impl fmt::Display for RoleIdentifier {

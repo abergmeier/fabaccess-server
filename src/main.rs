@@ -69,7 +69,6 @@ fn main() {
             .help("Dump all databases into the given directory")
             .long("dump")
             .conflicts_with("load")
-            .takes_value(true)
         )
         .arg(Arg::with_name("load")
             .help("Load databases from the given directory")
@@ -145,6 +144,11 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         for (id, role) in v.iter() {
             info!(log, "Role {}:\n{}", id, role);
         }
+
+        let v = db.userdb.list_users()?;
+        for user in v.iter() {
+            info!(log, "User {}:\n{:?}", user.id, user.data);
+        }
         Ok(())
     } else if matches.is_present("load") {
         let db = db::Databases::new(&log, &config)?;
@@ -158,41 +162,34 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         debug!(log, "Loaded users: {:?}", map);
         dir.pop();
 
-        dir.push("roles.toml");
-        db.access.internal.load_roles(&dir)?;
-        dir.pop();
-
-        dir.push("pass.toml");
-        db.passdb.load_file(&dir);
-        dir.pop();
-
         Ok(())
     } else {
         let ex = Executor::new();
         let db = db::Databases::new(&log, &config)?;
 
-        let mqtt = AsyncClient::new(config.mqtt_url.clone())?;
-        let tok = mqtt.connect(paho_mqtt::ConnectOptions::new());
+        //let mqtt = AsyncClient::new(config.mqtt_url.clone())?;
+        //let tok = mqtt.connect(paho_mqtt::ConnectOptions::new());
 
-        smol::block_on(tok)?;
+        //smol::block_on(tok)?;
 
-        let machines = machine::load(&config, db.access.clone())?;
-        let (actor_map, actors) = actor::load(&log, &mqtt, &config)?;
-        let (init_map, initiators) = initiator::load(&log, &mqtt, &config)?;
+        let machines = machine::load(&config)?;
+        let (actor_map, actors) = actor::load(&log, &config)?;
+        let (init_map, initiators) = initiator::load(&log, &config)?;
 
-        // TODO: restore connections between initiators, machines, actors
         let mut network = network::Network::new(machines, actor_map, init_map);
 
         for (a,b) in config.actor_connections.iter() {
             if let Err(e) = network.connect_actor(a,b) {
                 error!(log, "{}", e);
             }
+            info!(log, "[Actor] Connected {} to {}", a, b);
         }
 
         for (a,b) in config.init_connections.iter() {
             if let Err(e) = network.connect_init(a,b) {
                 error!(log, "{}", e);
             }
+            info!(log, "[Initi] Connected {} to {}", a, b);
         }
 
         for actor in actors.into_iter() {
@@ -202,22 +199,6 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
             ex.spawn(init).detach();
         }
 
-        let (signal, shutdown) = async_channel::bounded::<()>(1);
-        let (_, r) = easy_parallel::Parallel::new()
-            .each(0..4, |_| smol::block_on(ex.run(shutdown.recv())))
-            .finish(|| {
-                // TODO: Spawn api connections on their own (non-main) thread, use the main thread to
-                // handle signals (a cli if stdin is not closed?) and make it stop and clean up all threads
-                // when bffh should exit
-                let r = server::serve_api_connections(log.clone(), config, db, network);
-
-                // One of them would be enough really, but *shrug*
-                signal.try_send(());
-                std::mem::drop(signal);
-
-                return r;
-            });
-
-        return r;
+        server::serve_api_connections(log.clone(), config, db, network, ex)
     }
 }

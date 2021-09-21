@@ -1,7 +1,13 @@
 -- { actor_connections = [] : List { _1 : Text, _2 : Text }
-{ actor_connections = [{ _1 = "Testmachine", _2 = "Actor" }]
+{ actor_connections = 
+  [ { _1 = "Testmachine", _2 = "Actor" }
+  , { _1 = "Another", _2 = "Actor2" }
+  , { _1 = "Yetmore", _2 = "Actor3" }
+  ]
 , actors = 
-  { Actor = { module = "Shelly", params = {=} }
+  { Actor = { module = "Dummy", params = {=} }
+  , Actor2 = { module = "Dummy", params = {=} }
+  , Actor3 = { module = "Dummy", params = {=} }
   }
   , init_connections = [] : List { _1 : Text, _2 : Text }
 --, init_connections = [{ _1 = "Initiator", _2 = "Testmachine" }]
@@ -11,6 +17,7 @@
 , listens = 
   [ { address = "127.0.0.1", port = Some 59661 }
   , { address = "::1", port = Some 59661 }
+  , { address = "192.168.0.114", port = Some 59661 }
   ]
 , machines = 
   { Testmachine = 
@@ -38,12 +45,21 @@
     , write = "lab.test.write" 
     }
   }
-, mqtt_url = "tcp://localhost:1883" 
+, mqtt_url = "" 
 , db_path = "/tmp/bffh"
 , roles =
-  { Testrole = 
-    { parents = [] : List Text
-    , permissions = [] : List Text
+  { testrole = 
+    { permissions = [ "lab.test.*" ] }
+  , somerole = 
+    { parents = ["testparent"]
+    , permissions = [ "lab.some.admin" ]
+    }
+  , testparent = 
+    { permissions = 
+      [ "lab.some.write"
+      , "lab.some.read"
+      , "lab.some.disclose"
+      ]
     }
   }
 }

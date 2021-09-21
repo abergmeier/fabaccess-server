@@ -1,10 +1,12 @@
 [Testuser]
 # Define them in roles.toml as well
-roles = ["somerole/lmdb", "testrole/lmdb"]
+roles = ["somerole/internal", "testrole/internal"]
 
 # If two or more users want to use the same machine at once the higher prio
 # wins
 priority = 0
+
+passwd = "secret"
 
 # You can add whatever random data you want.
 # It will get stored in the `kv` field in UserData.

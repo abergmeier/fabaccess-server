@@ -8,6 +8,7 @@ use crate::connection;
 use smol::net::TcpListener;
 use smol::net::unix::UnixStream;
 use smol::LocalExecutor;
+use smol::Executor;
 
 use futures::prelude::*;
 
@@ -22,7 +23,7 @@ use crate::db::Databases;
 use crate::network::Network;
 
 /// Handle all API connections and run the RPC tasks spawned from that on the local thread.
-pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw: Network)
+pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw: Network, ex: Executor)
     -> Result<(), Error> 
 {
     let signal = Box::pin(async {
@@ -72,12 +73,10 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
     let inner_log = log.clone();
     let loop_log = log.clone();
 
-    smol::block_on(local_ex.run(async {
+    let control_fut = async {
         // Generate a stream of TcpStreams appearing on any of the interfaces we listen to
         let listeners = listeners_s.await;
         let incoming = stream::select_all(listeners.iter().map(|l| l.incoming()));
-
-        let mut handler = connection::ConnectionHandler::new(inner_log.new(o!()), db, network.clone());
 
         // For each incoming connection start a new task to handle it
         let handle_sockets = incoming.map(|socket| {
@@ -94,18 +93,26 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
                             inner_log.new(o!())
                         };
 
-                    // We handle the error using map_err
-                    let f = handler.handle(socket)
-                        .map_err(move |e| {
-                            error!(log, "Error occured during protocol handling: {}", e);
-                        })
-                    // Void any and all results since pool.spawn allows no return value.
-                    .map(|_| ());
+                    let db = db.clone();
+                    let network = network.clone();
+                    let tlog = inner_log.new(o!());
+                    std::thread::spawn(move || {
+                        let local_ex = LocalExecutor::new();
 
-                    // Spawn the connection context onto the local executor since it isn't Send
-                    // Also `detach` it so the task isn't canceled as soon as it's dropped.
-                    // TODO: Store all those tasks to have a easier way of managing them?
-                    local_ex.spawn(f).detach();
+                        let mut handler = connection::ConnectionHandler::new(tlog, db, network);
+                        // We handle the error using map_err
+                        let f = handler.handle(socket)
+                            .map_err(move |e| {
+                                error!(log, "Error occured during protocol handling: {}", e);
+                            })
+                        // Void any and all results since pool.spawn allows no return value.
+                        .map(|_| ());
+
+                        // Spawn the connection context onto the local executor since it isn't Send
+                        // Also `detach` it so the task isn't canceled as soon as it's dropped.
+                        // TODO: Store all those tasks to have a easier way of managing them?
+                        smol::block_on(f);
+                    });
                 },
                 Err(e) => {
                     error!(inner_log, "Socket `accept` error: {}", e);
@@ -147,7 +154,9 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
                 }
             }
         }
-    }));
+    };
+
+    smol::block_on(smol::future::race(control_fut, ex.run(smol::future::pending())));
 
     // TODO: Run actual shut down code here
     info!(log, "Shutting down...");

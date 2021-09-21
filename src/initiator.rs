@@ -117,7 +117,8 @@ impl Future for Initiator {
                     debug!(this.log, "Sensor returned a new state");
                     this.future.take();
                     let f = this.machine.as_mut().map(|machine| {
-                        machine.request_state_change(user.as_ref(), state)
+                        unimplemented!()
+                        //machine.request_state_change(user.as_ref(), state)
                     });
                     this.state_change_fut = f;
                 }
@@ -127,11 +128,11 @@ impl Future for Initiator {
     }
 }
 
-pub fn load(log: &Logger, client: &AsyncClient, config: &Config) -> Result<(InitMap, Vec<Initiator>)> {
+pub fn load(log: &Logger, config: &Config) -> Result<(InitMap, Vec<Initiator>)> {
     let mut map = HashMap::new();
 
     let initiators = config.initiators.iter()
-        .map(|(k,v)| (k, load_single(log, client, k, &v.module, &v.params)))
+        .map(|(k,v)| (k, load_single(log, k, &v.module, &v.params)))
         .filter_map(|(k,n)| match n {
             None => None,
             Some(i) => Some((k, i)),
@@ -149,7 +150,6 @@ pub fn load(log: &Logger, client: &AsyncClient, config: &Config) -> Result<(Init
 
 fn load_single(
     log: &Logger,
-    _client: &AsyncClient,
     name: &String,
     module_name: &String,
     _params: &HashMap<String, String>

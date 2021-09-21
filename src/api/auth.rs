@@ -33,7 +33,6 @@ use crate::db::user::{Internal as UserDB, UserId, User};
 use crate::db::access::AccessControl as AccessDB;
 
 pub struct AppData {
-    passdb: Arc<PassDB>,
     userdb: Arc<UserDB>,
 }
 pub struct SessionData {
@@ -93,7 +92,7 @@ impl Auth {
     pub fn new(log: Logger, dbs: Databases, session: Rc<RefCell<Option<Session>>>) -> Self {
         let mut ctx = SASL::new().unwrap();
 
-        let appdata = Box::new(AppData { passdb: dbs.passdb.clone(), userdb: dbs.userdb.clone() });
+        let appdata = Box::new(AppData { userdb: dbs.userdb.clone() });
 
         ctx.store(appdata);
         ctx.install_callback::<CB>();

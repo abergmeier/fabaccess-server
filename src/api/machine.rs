@@ -1,4 +1,5 @@
 use std::sync::Arc;
+use std::time::Duration;
 
 use capnp::capability::Promise;
 use capnp::Error;
@@ -102,23 +103,33 @@ impl use_::Server for Machine {
         let userid = self.userid.clone();
         let f = async move {
             let mut guard = machine.lock().await;
-            match guard.read_state().lock_ref().state {
-                Status::Free => {
-                    guard.do_state_change(MachineState::used(Some(userid)));
-                },
-                Status::Reserved(ref whom) => {
-                    // If it's reserved for us or we're allowed to take over
-                    if &userid == whom {
-                        guard.do_state_change(MachineState::used(Some(userid)));
-                    }
-                },
-                _ => { }
+            let mut ok = false;
+            {
+                match { guard.read_state().lock_ref().state.clone() } {
+                    Status::Free => {
+                        ok = true;
+                    },
+                    Status::Reserved(ref whom) => {
+                        // If it's reserved for us or we're allowed to take over
+                        if &userid == whom {
+                            ok = true;
+                        }
+                    },
+                    _ => { }
+                }
+            }
+
+            if ok {
+                guard.do_state_change(MachineState::used(Some(userid)));
             }
 
             Ok(())
         };
 
-        Promise::from_future(f)
+        let g = smol::future::race(f, smol::Timer::after(Duration::from_secs(4))
+            .map(|_| Err(capnp::Error::failed("Waiting for machine lock timed out!".to_string()))));
+
+        Promise::from_future(g)
     }
 }
 
@@ -132,13 +143,20 @@ impl in_use::Server for Machine {
         let userid = self.userid.clone();
         let f = async move {
             let mut guard = machine.lock().await;
-            match guard.read_state().lock_ref().state {
-                Status::InUse(ref whom) => {
-                    if &Some(userid) == whom {
-                        guard.reset_state()
-                    }
-                },
-                _ => {}
+            let mut ok = false;
+            {
+                match { guard.read_state().lock_ref().state.clone() } {
+                    Status::InUse(ref whom) => {
+                        if &Some(userid) == whom {
+                            ok = true;
+                        }
+                    },
+                    _ => { }
+                }
+            }
+
+            if ok {
+                guard.reset_state()
             }
 
             Ok(())

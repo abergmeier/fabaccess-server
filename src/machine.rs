@@ -29,26 +29,8 @@ use crate::db::user::{User, UserData};
 use crate::network::MachineMap;
 use crate::space;
 
-// Registry of all machines configured.
-// TODO: 
-// - Serialize machines into config
-// - Deserialize machines from config
-// - Index machines on deserialization to we can look them up efficiently
-// - Maybe store that index too
-// - Iterate over all or a subset of machines efficiently
 pub struct Machines {
     machines: Vec<Machine>
-}
-
-impl Machines {
-    /// Load machines from the config, looking up and linking the database entries as necessary
-    pub fn load() -> Self {
-        unimplemented!()
-    }
-
-    pub fn lookup(id: String) -> Option<Machine> {
-        unimplemented!()
-    }
 }
 
 #[derive(Debug, Clone)]
@@ -80,15 +62,13 @@ pub struct Machine {
     pub desc: MachineDescription,
 
     inner: Arc<Mutex<Inner>>,
-    access: Arc<access::AccessControl>,
 }
 
 impl Machine {
-    pub fn new(inner: Inner, desc: MachineDescription, access: Arc<access::AccessControl>) -> Self {
+    pub fn new(inner: Inner, desc: MachineDescription, ) -> Self {
         Self { 
             id: uuid::Uuid::default(),
             inner: Arc::new(Mutex::new(inner)),
-            access,
             desc,
         }
     }
@@ -97,81 +77,23 @@ impl Machine {
         ( id: MachineIdentifier
         , desc: MachineDescription
         , state: MachineState
-        , access: Arc<access::AccessControl>
         ) -> Machine
     {
-        Self::new(Inner::new(id, state), desc, access)
-    }
-
-    pub fn from_file<P: AsRef<Path>>(path: P, access: Arc<access::AccessControl>) 
-        -> Result<Vec<Machine>> 
-    {
-        let mut map: HashMap<MachineIdentifier, MachineDescription> = MachineDescription::load_file(path)?;
-        Ok(map.drain().map(|(id, desc)| {
-            Self::construct(id, desc, MachineState::new(), access.clone())
-        }).collect())
-    }
-
-    /// Requests to use a machine. Returns a return token if successful.
-    ///
-    /// This will update the internal state of the machine, notifying connected actors, if any.
-    /// The return token is a channel that considers the machine 'returned' if anything is sent
-    /// along it or if the sending end gets dropped. Anybody who holds this token needs to check if
-    /// the receiving end was canceled which indicates that the machine has been taken off their
-    /// hands.
-    pub fn request_state_change(&self, who: Option<&User>, new_state: MachineState) 
-        -> BoxFuture<'static, Result<ReturnToken>>
-    {
-        let this = self.clone();
-        let perms: Vec<access::PermRule> = who
-            .map(|u| self.access.collect_permrules(&u.data))
-            .and_then(|result| result.ok())
-            .unwrap_or(vec![]);
-        let write: bool = perms.iter().any(|rule| rule.match_perm(&self.desc.privs.write));
-        let manage: bool = perms.iter().any(|rule| rule.match_perm(&self.desc.privs.manage));
-
-        let f = async move {
-            match &new_state.state {
-                Status::Free => {
-                    let mut guard = this.inner.lock().await;
-                    guard.do_state_change(new_state);
-                    return Ok(ReturnToken::new(this.inner.clone()));
-                },
-                Status::InUse(_) | Status::ToCheck(_) if manage || write => {
-                    let mut guard = this.inner.lock().await;
-                    guard.do_state_change(new_state);
-                    return Ok(ReturnToken::new(this.inner.clone()))
-                },
-                Status::Blocked(_) | Status::Disabled | Status::Reserved(_) if manage => {
-                    let mut guard = this.inner.lock().await;
-                    guard.do_state_change(new_state);
-                    return Ok(ReturnToken::new(this.inner.clone()))
-                },
-                _ => {
-                    return Err(Error::Denied);
-                }
-            }
-        };
-
-        Box::pin(f)
+        Self::new(Inner::new(id, state), desc)
     }
 
     pub fn do_state_change(&self, new_state: MachineState) 
-        -> BoxFuture<'static, Result<ReturnToken>>
+        -> BoxFuture<'static, Result<()>>
     {
         let this = self.clone();
 
         let f = async move {
             let mut guard = this.inner.lock().await;
             guard.do_state_change(new_state);
-            return Ok(ReturnToken::new(this.inner.clone()))
+            return Ok(())
         };
 
         Box::pin(f)
-    }
-
-    pub fn create_token(&self)  -> ReturnToken {
-        ReturnToken::new(self.inner.clone())
     }
 
     pub async fn get_status(&self) -> Status {
@@ -241,7 +163,9 @@ impl Inner {
     }
 
     pub fn do_state_change(&mut self, new_state: MachineState) {
+            print!("State {:?}", &new_state);
             let old_state = self.state.replace(new_state);
+            print!("<- {:?}", &old_state);
             self.reset.replace(old_state);
     }
 
@@ -316,7 +240,7 @@ impl MachineDescription {
     }
 }
 
-pub fn load(config: &crate::config::Config, access: Arc<access::AccessControl>) 
+pub fn load(config: &crate::config::Config)
     -> Result<MachineMap> 
 {
     let mut map = config.machines.clone();
@@ -324,7 +248,7 @@ pub fn load(config: &crate::config::Config, access: Arc<access::AccessControl>)
     let it = map.drain()
         .map(|(k,v)| {
             // TODO: Read state from the state db
-            (v.name.clone(), Machine::construct(k, v, MachineState::new(), access.clone()))
+            (v.name.clone(), Machine::construct(k, v, MachineState::new()))
         });
 
 

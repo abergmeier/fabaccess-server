@@ -44,8 +44,10 @@ pub struct Config {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoleConfig {
-    parents: Vec<String>,
-    permissions: Vec<PermRule>,
+    #[serde(default = "Vec::new")]
+    pub parents: Vec<String>,
+    #[serde(default = "Vec::new")]
+    pub permissions: Vec<PermRule>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

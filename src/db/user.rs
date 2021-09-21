@@ -115,11 +115,22 @@ pub fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, User>> {
     let f = fs::read(path)?;
     let mut map: HashMap<String, UserData> = toml::from_slice(&f)?;
 
-    Ok(HashMap::from_iter(map.drain().map(|(uid, user_data)| 
+    Ok(HashMap::from_iter(map.drain().map(|(uid, mut user_data)| {
+        user_data.passwd = user_data.passwd.map(|pw| if !pw.starts_with("$argon2") {
+            let config = argon2::Config::default();
+            let salt: [u8; 16] = rand::random();
+            let hash = argon2::hash_encoded(pw.as_bytes(), &salt, &config)
+                .expect(&format!("Failed to hash password for {}: ", uid));
+            println!("Hashed pw for {} to {}", uid, hash);
+
+            hash
+        } else {
+            pw
+        });
         ( uid.clone()
         , User::new(UserId::new(uid, None, None), user_data)
         )
-    )))
+    })))
 }
 
 pub fn init(log: Logger, _config: &Config, env: Arc<lmdb::Environment>) -> Result<Internal> {
