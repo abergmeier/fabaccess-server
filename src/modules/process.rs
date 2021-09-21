@@ -78,7 +78,7 @@ impl Actuator for Process {
                 }
             }
             Ok(retv) => { 
-                warn!(flog, "Actor {} returned nonzero output {} for {:?}", name, retv.status, fstate); 
+                warn!(flog, "Actor {} returned nonzero status {} for State={:?}", name, retv.status, fstate); 
                 if !retv.stderr.is_empty() {
                     let errstr = String::from_utf8_lossy(&retv.stderr);
                     for line in errstr.lines() {

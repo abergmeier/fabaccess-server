@@ -1,13 +1,14 @@
 -- { actor_connections = [] : List { _1 : Text, _2 : Text }
 { actor_connections = 
+  -- Link up machines to actors
   [ { _1 = "Testmachine", _2 = "Actor" }
   , { _1 = "Another", _2 = "Bash" }
+  -- One machine can have as many actors as it wants
   , { _1 = "Yetmore", _2 = "Bash2" }
+  , { _1 = "Yetmore", _2 = "FailBash"}
   ]
 , actors = 
   { Actor = { module = "Dummy", params = {=} }
-  , Actor2 = { module = "Dummy", params = {=} }
-  , Actor3 = { module = "Dummy", params = {=} }
   , Bash = { module = "Process", params =
     { cmd = "./examples/actor.sh"
     , args = "your ad could be here"
@@ -16,8 +17,8 @@
     { cmd = "./examples/actor.sh"
     , args = "this is a different one"
     }}
-  , Bash3 = { module = "Process", params =
-    { cmd = "./examples/actor.sh" 
+  , FailBash = { module = "Process", params =
+    { cmd = "./examples/fail-actor.sh" 
     }}
   }
   , init_connections = [] : List { _1 : Text, _2 : Text }
