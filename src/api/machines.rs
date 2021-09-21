@@ -104,8 +104,8 @@ impl machines::Server for Machines {
                         builder.set_use(capnp_rpc::new_client(machineapi.clone()));
                     }
                     if perms.manage {
-                        builder.set_transfer(capnp_rpc::new_client(machineapi.clone()));
-                        builder.set_check(capnp_rpc::new_client(machineapi.clone()));
+                        //builder.set_transfer(capnp_rpc::new_client(machineapi.clone()));
+                        //builder.set_check(capnp_rpc::new_client(machineapi.clone()));
                         builder.set_manage(capnp_rpc::new_client(machineapi.clone()));
                     }
                     if permissions.iter().any(|r| r.match_perm(&admin_perm())) {
@@ -150,12 +150,13 @@ impl machines::Server for Machines {
                     }
 
                     let machineapi = Machine::new(user.clone(), perms, machine.clone());
-                    if perms.write {
+                    let state = machine.get_status().await;
+                    if perms.write && state == Status::Free {
                         builder.set_use(capnp_rpc::new_client(machineapi.clone()));
                     }
                     if perms.manage {
-                        builder.set_transfer(capnp_rpc::new_client(machineapi.clone()));
-                        builder.set_check(capnp_rpc::new_client(machineapi.clone()));
+                        //builder.set_transfer(capnp_rpc::new_client(machineapi.clone()));
+                        //builder.set_check(capnp_rpc::new_client(machineapi.clone()));
                         builder.set_manage(capnp_rpc::new_client(machineapi.clone()));
                     }
                     if permissions.iter().any(|r| r.match_perm(&admin_perm())) {
