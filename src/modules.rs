@@ -10,3 +10,6 @@ pub use shelly::Shelly;
 
 mod process;
 pub use process::Process;
+
+mod batch;
+pub use batch::Batch;
