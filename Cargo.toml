@@ -1,7 +1,7 @@
 [package]
 name = "diflouroborane"
-version = "0.2.0"
-authors = [ "Gregor Reitzenstein <me@dequbed.space>"
+version = "0.3.0"
+authors = [ "dequbed <me@dequbed.space>"
           , "Kai Jan Kriegel <kai@kjkriegel.de>"
           , "Joseph Langosch <thejoklla@gmail.com>"
           , "Jannis Rieger <omniskopus@gmail.com>"
