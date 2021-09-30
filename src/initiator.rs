@@ -1,3 +1,4 @@
+use std::sync::Arc;
 use std::pin::Pin;
 use std::task::{Poll, Context};
 use std::future::Future;
@@ -7,14 +8,13 @@ use smol::Timer;
 
 use slog::Logger;
 
-use paho_mqtt::AsyncClient;
-
 use futures::future::BoxFuture;
 
 use futures_signals::signal::{Signal, Mutable, MutableSignalCloned};
 use crate::machine::{Machine, ReturnToken};
 use crate::db::machine::MachineState;
-use crate::db::user::{User, UserId, UserData};
+use crate::db::user::{User, UserId, UserData, Internal as UserDB};
+use crate::db::access::AccessControl;
 
 use crate::network::InitMap;
 
@@ -22,7 +22,7 @@ use crate::error::Result;
 use crate::config::Config;
 
 pub trait Sensor {
-    fn run_sensor(&mut self) -> BoxFuture<'static, (Option<User>, MachineState)>;
+    fn run_sensor(&mut self) -> BoxFuture<'static, (Option<UserId>, MachineState)>;
 }
 
 type BoxSensor = Box<dyn Sensor + Send>;
@@ -36,10 +36,13 @@ pub struct Initiator {
     state_change_fut: Option<BoxFuture<'static, Result<ReturnToken>>>,
     token: Option<ReturnToken>,
     sensor: BoxSensor,
+
+    userdb: UserDB,
+    access: AccessControl,
 }
 
 impl Initiator {
-    pub fn new(log: Logger, sensor: BoxSensor, signal: MutableSignalCloned<Option<Machine>>) -> Self {
+    pub fn new(log: Logger, sensor: BoxSensor, signal: MutableSignalCloned<Option<Machine>>, userdb: UserDB, access: AccessControl) -> Self {
         Self {
             log: log,
             signal: signal,
@@ -48,14 +51,16 @@ impl Initiator {
             state_change_fut: None,
             token: None,
             sensor: sensor,
+            userdb,
+            access,
         }
     }
 
-    pub fn wrap(log: Logger, sensor: BoxSensor) -> (Mutable<Option<Machine>>, Self) {
+    pub fn wrap(log: Logger, sensor: BoxSensor, userdb: UserDB, access: Arc<AccessControl>) -> (Mutable<Option<Machine>>, Self) {
         let m = Mutable::new(None);
         let s = m.signal_cloned();
 
-        (m, Self::new(log, sensor, s))
+        (m, Self::new(log, sensor, s, userdb, access))
     }
 }
 
@@ -113,12 +118,11 @@ impl Future for Initiator {
                 None => {
                     this.future = Some(this.sensor.run_sensor());
                 },
-                Some(Poll::Ready((user, state))) => {
+                Some(Poll::Ready((uid, state))) => {
                     debug!(this.log, "Sensor returned a new state");
                     this.future.take();
                     let f = this.machine.as_mut().map(|machine| {
-                        unimplemented!()
-                        //machine.request_state_change(user.as_ref(), state)
+                        machine.request_state_change(state, this.access.clone(), user)
                     });
                     this.state_change_fut = f;
                 }
@@ -128,7 +132,7 @@ impl Future for Initiator {
     }
 }
 
-pub fn load(log: &Logger, config: &Config) -> Result<(InitMap, Vec<Initiator>)> {
+pub fn load(log: &Logger, config: &Config, userdb: UserDB, access: Arc<AccessControl>) -> Result<(InitMap, Vec<Initiator>)> {
     let mut map = HashMap::new();
 
     let initiators = config.initiators.iter()
@@ -140,7 +144,7 @@ pub fn load(log: &Logger, config: &Config) -> Result<(InitMap, Vec<Initiator>)> 
 
     let mut v = Vec::new();
     for (name, initiator) in initiators {
-        let (m, i) = Initiator::wrap(log.new(o!("name" => name.clone())), initiator);
+        let (m, i) = Initiator::wrap(log.new(o!("name" => name.clone())), initiator, userdb.clone(), access.clone());
         map.insert(name.clone(), m);
         v.push(i);
     }
@@ -180,7 +184,7 @@ impl Dummy {
 
 impl Sensor for Dummy {
     fn run_sensor(&mut self)
-        -> BoxFuture<'static, (Option<User>, MachineState)>
+        -> BoxFuture<'static, (Option<UserId>, MachineState)>
     {
         let step = self.step;
         self.step = !step;
@@ -192,12 +196,8 @@ impl Sensor for Dummy {
             if step {
                 return (None, MachineState::free());
             } else {
-                let user = User::new(
-                    UserId::new("test".to_string(), None, None),
-                    UserData::new(vec![crate::db::access::RoleIdentifier::local_from_str("lmdb".to_string(), "testrole".to_string())], 0),
-                );
-                let id = user.id.clone();
-                return (Some(user), MachineState::used(Some(id)));
+                let user = UserId::new("test".to_string(), None, None);
+                return (Some(user), MachineState::used(Some(user)));
             }
         };
 

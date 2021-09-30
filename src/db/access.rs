@@ -49,6 +49,21 @@ impl AccessControl {
         }
     }
 
+    pub fn check<P: AsRef<Permission>>(&self, user: &UserData, perm: P) -> Result<bool> {
+        let mut roles = HashMap::new();
+        // Check all user roles by..
+        Ok(user.roles.iter().any(|role| {
+            // 1. Getting the whole tree down to a list of Roles applied
+            self.internal.tally_role(&mut roles, role)?;
+
+            // 2. Checking if any of the roles the user has give any permission granting the
+            //    requested one.
+            roles.drain().any(|(rid, role)| {
+                role.permissions.iter().any(|rule| rule.match_perm(perm))
+            })
+        }))
+    }
+
     pub fn collect_permrules(&self, user: &UserData) -> Result<Vec<PermRule>> {
         self.internal.collect_permrules(user)
     }

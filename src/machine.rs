@@ -22,9 +22,9 @@ use futures_signals::signal::{Mutable, ReadOnlyMutable};
 
 use crate::error::{Result, Error};
 
-use crate::db::access;
+use crate::db::access::{AccessControl, PrivilegesBuf, PermissionBuf};
 use crate::db::machine::{MachineIdentifier, MachineState, Status};
-use crate::db::user::{User, UserData};
+use crate::db::user::{User, UserData, UserId};
 
 use crate::network::MachineMap;
 use crate::space;
@@ -82,6 +82,52 @@ impl Machine {
         Self::new(Inner::new(id, state), desc)
     }
 
+    fn match_perm(&self, status: &Status) -> Option<&PermissionBuf> {
+        let p = self.desc.privs;
+        match status {
+            // If you were allowed to use it you're allowed to give it back
+            Status::Free 
+            | Status::ToCheck(_)
+                => None,
+
+            Status::Blocked(_) 
+            | Status::Disabled 
+            | Status::Reserved(_) 
+                => Some(&p.manage),
+
+            Status::InUse(_) => Some(&p.write),
+        }
+    }
+
+    pub fn request_state_change(&self, new_state: MachineState, access: AccessControl, user: &User)
+        -> BoxFuture<'static, Result<()>>
+    {
+        let this = self.clone();
+        let perm = self.match_perm(&new_state.state);
+        let grant = perm.map(|p| access.check(&user.data, p).unwrap_or(false));
+
+        let uid = user.id.clone();
+        // is it a return
+        let is_ret = new_state.state == Status::Free;
+        // is it a (normal) write /the user is allowed to do/?
+        let is_wri = new_state.state == Status::InUse(Some(uid))
+                     && access.check(&user.data, self.desc.privs.write).unwrap_or(false);
+
+        let f = async move {
+            let mut guard = this.inner.lock().await;
+            // either e.g. InUse(<myself>) => Free or I'm allowed to overwrite
+            if (is_ret && guard.is_self(uid))
+            || (is_wri && guard.is_free())
+            || grant.unwrap_or(false)
+            {
+                guard.do_state_change(new_state);
+            }
+            return Ok(())
+        };
+
+        Box::pin(f)
+    }
+
     pub fn do_state_change(&self, new_state: MachineState) 
         -> BoxFuture<'static, Result<()>>
     {
@@ -126,6 +172,10 @@ impl Deref for Machine {
 /// A machine connects an event from a sensor to an actor activating/deactivating a real-world
 /// machine, checking that the user who wants the machine (de)activated has the required
 /// permissions.
+///
+/// Machines have a rather complex state machine since they have to be eventually consistent and
+/// can fail at any point in time (e.g. because power cuts out suddenly, a different task on this
+/// thread panics, some loaded code produces a segfault, ...)
 pub struct Inner {
     /// Globally unique machine readable identifier
     pub id: MachineIdentifier,
@@ -180,6 +230,20 @@ impl Inner {
             self.state.replace(state);
         }
     }
+
+    pub fn is_self(&mut self, uid: UserId) -> bool {
+        match self.read_state().get_cloned().state {
+            Status::InUse(u) if u == uid => true,
+            _ => false,
+        }
+    }
+
+    pub fn is_free(&mut self) -> bool {
+        match self.read_state().get_cloned().state {
+            Status::Free => true,
+            _ => false,
+        }
+    }
 }
 
 //pub type ReturnToken = futures::channel::oneshot::Sender<()>;
@@ -228,7 +292,7 @@ pub struct MachineDescription {
 
     /// The permission required
     #[serde(flatten)]
-    pub privs: access::PrivilegesBuf,
+    pub privs: PrivilegesBuf,
 }
 
 impl MachineDescription {

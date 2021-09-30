@@ -1,12 +1,13 @@
+use std::io::{Read, Write};
 use std::pin::Pin;
 use std::cell::RefCell;
 
 use std::collections::HashMap;
 use std::process::Stdio;
 use smol::process::{Command, Child};
-use smol::io::{AsyncWriteExt, AsyncReadExt};
+use smol::io::{AsyncWrite, AsyncWriteExt, AsyncReadExt};
 
-use futures::future::FutureExt;
+use futures::future::{Future, FutureExt};
 
 use crate::actor::Actuator;
 use crate::initiator::Sensor;
@@ -19,13 +20,14 @@ use slog::Logger;
 use serde::{Serialize, Deserialize};
 
 pub struct Batch {
+    log: Logger,
     userdb: UserDB,
     name: String,
     cmd: String,
     args: Vec<String>,
     kill: bool,
     child: Child,
-    stdout: RefCell<Pin<Box<dyn AsyncWrite>>>,
+    stdout: Pin<Box<dyn AsyncWrite>>,
 }
 
 impl Batch {
@@ -39,24 +41,28 @@ impl Batch {
                     .collect())
             .unwrap_or_else(Vec::new);
 
-        let kill = params.get("kill_on_exit").and_then(|s|
-            s.parse()
-             .or_else(|| {
-                 warn!(log, "Can't parse `kill_on_exit` for {} set as {} as boolean. \
-                             Must be either \"True\" or \"False\".", &name, &s);
-                 false
-             }));
+        let kill = params
+            .get("kill_on_exit")
+            .and_then(|kill|
+                kill.parse()
+                    .or_else(|_| {
+                        warn!(log, "Can't parse `kill_on_exit` for {} set as {} as boolean. \
+                                    Must be either \"True\" or \"False\".", &name, &s);
+                        Ok(false)
+                    })
+                    .ok())
+            .unwrap_or(false);
 
         info!(log, "Starting {} ({})…", &name, &cmd);
         let mut child = Self::start(&name, &cmd, &args)
             .map_err(|err| error!(log, "Failed to spawn {} ({}): {}", &name, &cmd, err))
             .ok()?;
-        let stdout = Self::get_stdin(&mut child);
+        let stdout = Self::get_stdout(&mut child);
 
-        Ok(Self { userdb, name, cmd, args, kill, child, stdout })
+        Ok(Self { log, userdb, name, cmd, args, kill, child, stdout })
     }
 
-    fn start_actor(name: &String, cmd: &String, args: &Vec<String>) -> Result<Child> {
+    fn start(name: &String, cmd: &String, args: &Vec<String>) -> std::io::Result<Child> {
         let mut command = Command::new(cmd);
         command
             .stdin(Stdio::piped())
@@ -74,7 +80,7 @@ impl Batch {
         stdout.boxed_writer()
     }
 
-    fn maybe_restart(&mut self, f: &mut Option<impl Future<Item=()>>) -> bool {
+    fn maybe_restart(&mut self, f: &mut Option<BoxFuture<'static, ()>>) -> bool {
         let stat = self.child.try_status();
         if stat.is_err() {
             error!(self.log, "Can't check process for {} ({}) [{}]: {}", 
@@ -87,22 +93,22 @@ impl Batch {
             let errlog = self.log.new(o!("pid" => self.child.id()));
             // If we have any stderr try to log it
             if let Some(stderr) = self.child.stderr.take() {
-                f = Some(async move {
-                    match stderr.into_stdio().await {
-                        Err(err) => error!(errlog, "Failed to open actor process STDERR: ", err),
-                        Ok(err) => if !retv.stderr.is_empty() {
-                            let errstr = String::from_utf8_lossy(err);
+                *f = Some(Box::pin(async move {
+                    let mut out = String::new();
+                    match stderr.read_to_string(&mut out).await {
+                        Err(e) => warn!(errlog, "Failed to read child stderr: {}", e),
+                        Ok(n) => if n != 0 {
+                            let errstr = String::from_utf8_lossy(out);
                             for line in errstr.lines() {
                                 warn!(errlog, "{}", line);
                             }
                         }
-                        _ => {}
                     }
-                });
+                }));
             }
             info!(self.log, "Attempting to re-start {}", &self.name);
             let mut child = Self::start(&self.name, &self.cmd, &self.args)
-                .map_err(|err| error!(log, "Failed to spawn {} ({}): {}", &self.name, &self.cmd, err))
+                .map_err(|err| error!(self.log, "Failed to spawn {} ({}): {}", &self.name, &self.cmd, err))
                 .ok();
             // Nothing else to do with the currect architecture. In reality we should fail here
             // because we *didn't apply* the change.

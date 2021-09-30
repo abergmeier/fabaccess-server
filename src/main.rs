@@ -25,6 +25,8 @@ mod actor;
 mod initiator;
 mod space;
 
+mod resource;
+
 use clap::{App, Arg};
 
 use std::io;
@@ -169,7 +171,7 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
 
         let machines = machine::load(&config)?;
         let (actor_map, actors) = actor::load(&log, &config)?;
-        let (init_map, initiators) = initiator::load(&log, &config)?;
+        let (init_map, initiators) = initiator::load(&log, &config, db.userdb.clone(), db.access.clone())?;
 
         let mut network = network::Network::new(machines, actor_map, init_map);
 
