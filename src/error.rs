@@ -10,7 +10,7 @@ use futures::task as futures_task;
 
 use paho_mqtt::errors as mqtt;
 
-use crate::network;
+//FIXME use crate::network;
 
 #[derive(Debug)]
 pub enum Error {
@@ -28,7 +28,7 @@ pub enum Error {
     MQTT(mqtt::Error),
     BadVersion((u32,u32)),
     Argon2(argon2::Error),
-    EventNetwork(network::Error),
+    //EventNetwork(network::Error),
     Denied,
 }
 
@@ -80,9 +80,9 @@ impl fmt::Display for Error {
             Error::Denied => {
                 write!(f, "You do not have the permission required to do that.")
             }
-            Error::EventNetwork(e) => {
+            /*Error::EventNetwork(e) => {
                 e.fmt(f)
-            }
+            }*/
         }
     }
 }
@@ -159,11 +159,11 @@ impl From<mqtt::Error> for Error {
     }
 }
 
-impl From<network::Error> for Error {
+/*impl From<network::Error> for Error {
     fn from(e: network::Error) -> Error {
         Error::EventNetwork(e)
     }
-}
+}*/
 
 impl From<argon2::Error> for Error {
     fn from(e: argon2::Error) -> Error {

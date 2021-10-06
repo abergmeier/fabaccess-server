@@ -1,99 +1,73 @@
-use std::sync::Arc;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::ops::{Deref, DerefMut};
+use std::{
+    mem::size_of,
+    ops::Deref,
+    ptr::NonNull,
+    rc::Rc,
+    sync::Arc,
+    marker::PhantomData,
+    hash::{
+        Hash,
+        Hasher,
+        BuildHasher,
+    },
+    collections::hash_map::RandomState,
+};
 
-use slog::Logger;
+use rkyv::{
+    Archive,
+    Archived,
+    archived_root,
 
-use crate::error::Result;
-use crate::config::Config;
+    Serialize,
+    Deserialize,
 
-/// (Hashed) password database
-pub mod pass;
-
-/// User storage
-pub mod user;
-
-/// Access control storage
-///
-/// Stores&Retrieves Permissions and Roles
-pub mod access;
-
-/// Machine storage
-///
-/// Stores&Retrieves Machines
-pub mod machine;
-
-#[derive(Clone)]
-pub struct Databases {
-    pub access: Arc<access::AccessControl>,
-    pub machine: Arc<machine::internal::Internal>,
-    pub userdb: Arc<user::Internal>,
-}
-
-const LMDB_MAX_DB: u32 = 16;
-
-impl Databases {
-    pub fn new(log: &Logger, config: &Config) -> Result<Self> {
-
-        // Initialize the LMDB environment. This blocks until the mmap() finishes
-        info!(log, "LMDB env");
-        let env = lmdb::Environment::new()
-            .set_flags(lmdb::EnvironmentFlags::MAP_ASYNC | lmdb::EnvironmentFlags::NO_SUB_DIR)
-            .set_max_dbs(LMDB_MAX_DB as libc::c_uint)
-            .open(config.db_path.as_path())?;
-
-        // Start loading the machine database, authentication system and permission system
-        // All of those get a custom logger so the source of a log message can be better traced and
-        // filtered
-        let env = Arc::new(env);
-        let mdb = machine::init(log.new(o!("system" => "machines")), &config, env.clone())?;
-
-        let permdb = access::init(log.new(o!("system" => "permissions")), &config, env.clone())?;
-        let ac = access::AccessControl::new(permdb);
-
-        let userdb = user::init(log.new(o!("system" => "users")), &config, env.clone())?;
-
-        Ok(Self {
-            access: Arc::new(ac),
-            machine: Arc::new(mdb),
-            userdb: Arc::new(userdb),
-        })
-    }
-}
+    ser::serializers::AllocScratchError,
+};
 
 use lmdb::{
-    Environment,
     Database,
-    Transaction,
-    RoTransaction,
-    RwTransaction,
-    WriteFlags,
     Cursor,
     RoCursor,
-    RwCursor,
     Iter,
 };
 
+pub use rkyv::{
+    Fallible,
+};
+pub use lmdb::{
+    Environment,
+
+    DatabaseFlags,
+    WriteFlags,
+
+    Transaction,
+    RoTransaction,
+    RwTransaction,
+};
+
+
 #[derive(Debug, Clone)]
-pub struct DB {
-    env: Arc<Environment>,
+pub struct RawDB {
     db: Database,
 }
 
-impl DB {
-    pub fn new(env: Arc<Environment>, db: Database) -> Self {
-        Self { env, db }
+impl RawDB {
+    pub fn open(env: &Environment, name: Option<&str>) -> lmdb::Result<Self> {
+        env.open_db(name).map(|db| Self { db })
+    }
+    
+    pub fn create(env: &Environment, name: Option<&str>, flags: DatabaseFlags) -> lmdb::Result<Self> {
+        env.create_db(name, flags).map(|db| Self { db })
     }
 
-    pub fn open(env: Arc<Environment>, name: &str) -> lmdb::Result<Self> {
-        env.open_db(Some(name)).map(|db| { Self::new(env.clone(), db) })
-    }
-
-    pub fn get<'txn, T: Transaction, K>(&self, txn: &'txn T, key: &K) -> lmdb::Result<&'txn [u8]> 
+    pub fn get<'txn, T: Transaction, K>(&self, txn: &'txn T, key: &K) -> lmdb::Result<Option<&'txn [u8]>>
         where K: AsRef<[u8]>
     {
-        txn.get(self.db, key)
+        match txn.get(self.db, key) {
+            Ok(buf) => Ok(Some(buf)),
+            Err(lmdb::Error::NotFound) => Ok(None),
+            Err(e) => Err(e),
+        }
     }
 
     pub fn put<K, V>(&self, txn: &mut RwTransaction, key: &K, value: &V, flags: WriteFlags)
@@ -125,154 +99,144 @@ impl DB {
     pub fn open_ro_cursor<'txn, T: Transaction>(&self, txn: &'txn T) -> lmdb::Result<RoCursor<'txn>> {
         txn.open_ro_cursor(self.db)
     }
+}
 
-    pub fn begin_ro_txn<'env>(&'env self) -> lmdb::Result<RoTransaction<'env>> {
-        self.env.begin_ro_txn()
+/// An read-only entry reference
+pub struct EntryPtr<'txn, K, V> {
+    key: &'txn K,
+    val: &'txn V,
+}
+
+#[derive(Archive, Serialize, Deserialize)]
+/// The entry as it is stored inside the database.
+struct Entry<K: Archive, V: Archive> {
+    key: K,
+    val: V,
+}
+
+pub struct HashDB<'txn, K, V, S = RandomState> {
+    db: RawDB,
+    hash_builder: S,
+    phantom: &'txn PhantomData<(K,V)>,
+}
+
+impl<K, V> HashDB<'_, K, V>
+{
+    pub fn create(env: &Environment, name: Option<&str>) -> lmdb::Result<Self> {
+        Self::create_with_hasher(env, name, RandomState::new())
+    }
+    pub fn open(env: &Environment, name: Option<&str>) -> lmdb::Result<Self> {
+        Self::open_with_hasher(env, name, RandomState::new())
+    }
+}
+
+impl<K, V, S> HashDB<'_, K, V, S>
+{
+    pub fn create_with_hasher(env: &Environment, name: Option<&str>, hash_builder: S) -> lmdb::Result<Self> {
+        let flags = DatabaseFlags::INTEGER_KEY | DatabaseFlags::DUP_SORT;
+        let db = RawDB::create(env, name, flags)?;
+
+        Ok(Self {
+            db,
+            hash_builder,
+            phantom: &PhantomData,
+        })
+    }
+    pub fn open_with_hasher(env: &Environment, name: Option<&str>, hash_builder: S) -> lmdb::Result<Self> {
+        let db = RawDB::open(env, name)?;
+
+        Ok(Self {
+            db,
+            hash_builder,
+            phantom: &PhantomData,
+        })
     }
 
-    pub fn begin_rw_txn<'env>(&'env self) -> lmdb::Result<RwTransaction<'env>> {
-        self.env.begin_rw_txn()
+}
+
+impl<'txn, K, V, S> HashDB<'txn, K, V, S>
+    where K: Eq + Hash + Archive,
+          V: Archive,
+          S: BuildHasher,
+          K::Archived: PartialEq<K>,
+{
+    /// Retrieve an entry from the hashdb
+    ///
+    /// The result is a view pinned to the lifetime of the transaction. You can get owned Values
+    /// using [`Deserialize`].
+    pub fn get<T: Transaction>(&self, txn: &'txn T, key: &K) -> lmdb::Result<Option<&'txn Archived<Entry<K, V>>>>
+    {
+        let mut hasher = self.hash_builder.build_hasher();
+        key.hash(&mut hasher);
+        let hash = hasher.finish();
+
+        let mut cursor = self.db.open_ro_cursor(txn)?;
+        for res in cursor.iter_dup_of(&hash.to_ne_bytes()) {
+            let (_keybuf, valbuf) = res?;
+            let entry: &Archived<Entry<K, V>> = unsafe { archived_root::<Entry<K,V>>(valbuf.as_ref()) };
+
+            if &entry.key == key {
+                return Ok(Some(entry)) /*(EntryPtr {
+                    key: &entry.key,
+                    val: &entry.val,
+                }))*/;
+            }
+        }
+
+        Ok(None)
+    }
+
+    pub fn insert(&self, txn: &mut RwTransaction, entry: Archived<Entry<K, V>>) -> lmdb::Result<()> {
+
     }
 }
 
-use std::result::Result as StdResult;
-use serde::{Serialize, Deserialize};
-use bincode::Options;
-
-pub trait DatabaseAdapter {
-    type Key: ?Sized;
-    type Err: From<lmdb::Error> + From<bincode::Error>;
-
-    fn serialize_key(key: &Self::Key) -> &[u8];
-    fn deserialize_key<'de>(input: &'de [u8]) -> StdResult<&'de Self::Key, Self::Err>;
+/// Memory Fixpoint for a value in the DB
+///
+/// LMDB binds lifetimes of buffers to the transaction that returned the buffer. As long as this
+/// transaction is not `commit()`ed, `abort()`ed or `reset()`ed the pages containing these values
+/// are not returned into circulation.
+/// This struct encodes this by binding a live reference to the Transaction to the returned
+/// and interpreted buffer. The placeholder `T` is the container for the transaction. This may be a
+/// plain `RoTransaction<'env>`, a `Rc<RoTxn>` (meaning Fix is !Send) or an `Arc<RoTxn>`, depending
+/// on your needs.
+pub struct Fix<T, V: Archive> {
+    ptr: NonNull<V::Archived>,
+    txn: T,
 }
+pub type PinnedGet<'env, V> = Fix<RoTransaction<'env>, V>;
+pub type LocalKeep<'env, V> = Fix<Rc<RoTransaction<'env>>, V>;
+pub type GlobalKeep<'env, V> = Fix<Arc<RoTransaction<'env>>, V>;
 
-// Should we for some reason ever need to have different Options for different adapters we can have
-// this in the DatabaseAdapter trait too
-fn bincode_default() -> impl bincode::Options {
-    bincode::DefaultOptions::new()
-        .with_varint_encoding()
-}
-
-use std::marker::PhantomData;
-
-pub struct Objectstore<'a, A, V: ?Sized> {
-    pub db: DB,
-    adapter: PhantomData<A>,
-    marker: PhantomData<&'a V>
-}
-
-impl<A, V: ?Sized> Objectstore<'_, A, V> {
-    pub fn new(db: DB) -> Self {
-        Self {
-            db: db,
-            adapter: PhantomData,
-            marker: PhantomData,
+impl<'env, T, V> Fix<T, V>
+    where T: AsRef<RoTransaction<'env>>,
+          V: Archive,
+{
+    pub fn get(txn: T, db: &DB<V>, key: u64) -> lmdb::Result<Option<Self>> {
+        match db.get(txn.as_ref(), &key.to_ne_bytes()) {
+            Ok(buf) => Ok(Some(
+                Self { 
+                    ptr: unsafe { archived_root::<V>(buf.as_ref()).into() },
+                    txn, 
+                }
+            )),
+            Err(lmdb::Error::NotFound) => Ok(None),
+            Err(e) => Err(e),
         }
     }
 }
-
-impl<'txn, A, V> Objectstore<'txn, A, V>
-    where A: DatabaseAdapter,
-          V: ?Sized + Serialize + Deserialize<'txn>,
+impl<'env, T, V> Deref for Fix<T, V>
+    where T: AsRef<RoTransaction<'env>>,
+          V: Archive,
 {
-    pub fn get<T: Transaction>(&self, txn: &'txn T, key: &A::Key) 
-        -> StdResult<Option<V>, A::Err>
-    {
-        let opts = bincode_default();
+    type Target = V::Archived;
 
-        self.db.get(txn, &A::serialize_key(key))
-            .map_or_else(
-                |err| match err {
-                    lmdb::Error::NotFound => Ok(None),
-                    e => Err(e.into()),
-                },
-                |ok| opts.deserialize(ok)
-                    .map_err(|e| e.into())
-                    .map(Option::Some)
-            )
-    }
-
-    /// Update `value` in-place from the database
-    /// 
-    /// Returns `Ok(false)` if the key wasn't found. If this functions returns an error `value`
-    /// will be in an indeterminate state where some parts may be updated from the db.
-    pub fn get_in_place<T: Transaction>(&self, txn: &'txn T, key: &A::Key, value: &mut V)
-        -> StdResult<bool, A::Err>
-    {
-        let opts = bincode_default();
-
-        self.db.get(txn, &A::serialize_key(key))
-            .map_or_else(
-                |err| match err {
-                    lmdb::Error::NotFound => Ok(false),
-                    e => Err(e.into()),
-                },
-                |ok| opts.deserialize_in_place_buffer(ok, value)
-                    .map_err(|e| e.into())
-                    .map(|()| true)
-            )
-    }
-
-    pub fn iter<T: Transaction>(&self, txn: &'txn T) -> StdResult<ObjectIter<'txn, A, V>, A::Err> {
-        let mut cursor = self.db.open_ro_cursor(txn)?;
-        let iter = cursor.iter_start();
-        Ok(ObjectIter::new(cursor, iter))
-    }
-
-    pub fn put(&self, txn: &'txn mut RwTransaction, key: &A::Key, value: &V, flags: lmdb::WriteFlags)
-        -> StdResult<(), A::Err>
-    {
-        let opts = bincode::DefaultOptions::new()
-            .with_varint_encoding();
-
-        // Serialized values are always at most as big as their memory representation.
-        // So even if usize is 32 bit this is safe given no segmenting is taking place.
-        let bufsize = opts.serialized_size(value)? as usize;
-
-        let buffer = self.db.reserve(txn, &A::serialize_key(key), bufsize, flags)?;
-
-        opts.serialize_into(buffer, value).map_err(|e| e.into())
-    }
-
-    pub fn del(&self, txn: &'txn mut RwTransaction, key: &A::Key)
-        -> StdResult<(), A::Err>
-    {
-        self.db.del::<&[u8], &[u8]>(txn, &A::serialize_key(key), None).map_err(|e| e.into())
+    fn deref(&self) -> &Self::Target {
+        // As long as the transaction is kept alive (which it is, because it's in self) state is a
+        // valid pointer so this is safe.
+        unsafe { self.ptr.as_ref() }
     }
 }
-
-pub struct ObjectIter<'txn, A, V: ?Sized> {
-    cursor: RoCursor<'txn>,
-    inner: Iter<'txn>,
-
-    adapter: PhantomData<A>,
-    marker: PhantomData<&'txn V>,
-}
-
-impl<'txn, A, V: ?Sized> ObjectIter<'txn, A, V> {
-    pub fn new(cursor: RoCursor<'txn>, inner: Iter<'txn>) -> Self {
-        let marker = PhantomData;
-        let adapter = PhantomData;
-        Self { cursor, inner, adapter, marker }
-    }
-}
-
-impl<'txn, A, V> Iterator for ObjectIter<'txn, A, V>
-    where A: DatabaseAdapter,
-          V: ?Sized + Serialize + Deserialize<'txn>,
-{
-    type Item = StdResult<V, A::Err>;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        self.inner.next()?
-            .map_or_else(
-                |err| Some(Err(err.into())),
-                |(_, v)| Some(bincode_default().deserialize(v).map_err(|e| e.into()))
-            )
-    }
-}
-
 
 #[cfg(test)]
 mod tests {
@@ -356,7 +320,6 @@ mod tests {
 
         let db = DB::new(e.env.clone(), ldb);
 
-        let adapter = TestAdapter;
         let testdb = TestDB::new(db.clone());
 
         let mut val = "value";

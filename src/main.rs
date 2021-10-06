@@ -9,13 +9,11 @@ extern crate capnp_rpc;
 
 extern crate async_trait;
 
+/*
 mod modules;
 mod log;
-mod api;
 mod config;
-mod error;
 mod connection;
-mod schema;
 mod db;
 mod machine;
 mod builtin;
@@ -24,8 +22,15 @@ mod network;
 mod actor;
 mod initiator;
 mod space;
+*/
 
 mod resource;
+mod schema;
+mod state;
+mod error;
+mod db;
+
+/*
 
 use clap::{App, Arg};
 
@@ -44,8 +49,13 @@ use slog::Logger;
 
 use paho_mqtt::AsyncClient;
 use crate::config::Config;
+*/
 
-fn main() {
+pub fn main() {
+    
+}
+
+/*fn main() {
     use clap::{crate_version, crate_description, crate_name};
 
     // Argument parsing
@@ -199,3 +209,4 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         server::serve_api_connections(log.clone(), config, db, network, ex)
     }
 }
+*/

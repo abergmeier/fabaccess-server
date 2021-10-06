@@ -7,7 +7,6 @@ use slog::Logger;
 use smol::lock::Mutex;
 use smol::net::TcpStream;
 
-use crate::api::Bootstrap;
 use crate::error::Result;
 
 use capnp_rpc::{rpc_twoparty_capnp, twoparty};
@@ -78,7 +77,8 @@ impl ConnectionHandler {
     pub fn handle(&mut self, stream: TcpStream) -> impl Future<Output = Result<()>> {
         info!(self.log, "New connection from on {:?}", stream);
         let boots = Bootstrap::new(self.log.new(o!()), self.db.clone(), self.network.clone());
-        let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
+        unimplemented!();
+        /*let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
 
         let network = twoparty::VatNetwork::new(
             stream.clone(),
@@ -90,5 +90,6 @@ impl ConnectionHandler {
 
         // Convert the error type to one of our errors
         rpc_system.map(|r| r.map_err(Into::into))
+        */
     }
 }

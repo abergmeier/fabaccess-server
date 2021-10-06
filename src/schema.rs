@@ -1,31 +1,28 @@
+pub use capnpc::schema_capnp;
+
 #[allow(dead_code)]
-pub mod authenticationsystem_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/authenticationsystem_capnp.rs"));
+pub mod auth_capnp {
+    include!(concat!(env!("OUT_DIR"), "/schema/auth_capnp.rs"));
 }
 
 #[allow(dead_code)]
-pub mod connection_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/connection_capnp.rs"));
+pub mod main_capnp {
+    include!(concat!(env!("OUT_DIR"), "/schema/main_capnp.rs"));
 }
 
 #[allow(dead_code)]
-pub mod general_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/general_capnp.rs"));
+pub mod utils_capnp {
+    include!(concat!(env!("OUT_DIR"), "/schema/utils_capnp.rs"));
 }
 
 #[allow(dead_code)]
-pub mod machine_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/machine_capnp.rs"));
+pub mod resource_capnp {
+    include!(concat!(env!("OUT_DIR"), "/schema/resource_capnp.rs"));
 }
 
 #[allow(dead_code)]
-pub mod machinesystem_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/machinesystem_capnp.rs"));
-}
-
-#[allow(dead_code)]
-pub mod permissionsystem_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/permissionsystem_capnp.rs"));
+pub mod resources_capnp {
+    include!(concat!(env!("OUT_DIR"), "/schema/resources_capnp.rs"));
 }
 
 #[allow(dead_code)]
@@ -34,16 +31,11 @@ pub mod role_capnp {
 }
 
 #[allow(dead_code)]
-pub mod space_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/space_capnp.rs"));
-}
-
-#[allow(dead_code)]
 pub mod user_capnp {
     include!(concat!(env!("OUT_DIR"), "/schema/user_capnp.rs"));
 }
 
 #[allow(dead_code)]
-pub mod usersystem_capnp {
-    include!(concat!(env!("OUT_DIR"), "/schema/usersystem_capnp.rs"));
+pub mod users_capnp {
+    include!(concat!(env!("OUT_DIR"), "/schema/users_capnp.rs"));
 }
