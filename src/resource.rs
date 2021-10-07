@@ -1,20 +1,12 @@
 use async_trait::async_trait;
 
-use std::pin::Pin;
-use std::task::{Poll, Context};
-
-use futures::ready;
-use futures::future::{Future, BoxFuture};
 use futures::channel::oneshot;
-use futures::sink::Sink;
 use futures_signals::signal::Mutable;
 
-use smol::prelude::*;
-use smol::future::FutureExt;
-use smol::channel::{Sender, Receiver};
+use smol::channel::Receiver;
 
 use crate::error::Error;
-use crate::state::{State, StateStorage};
+use crate::state::{State, StateDB};
 
 /// A resource in BFFH has to contain several different parts;
 /// - Currently set state
@@ -60,7 +52,7 @@ pub struct Update {
 
 pub struct ResourceDriver {
     res: Box<dyn Resource>,
-    db: StateStorage,
+    db: StateDB,
 
     rx: Receiver<Update>,
     signal: Mutable<State>,
@@ -80,7 +72,7 @@ impl ResourceDriver {
                     // Not applying the new state isn't correct either since we don't know what the
                     // internal logic of the resource has done to make this happen.
                     // Another half right solution is to unwrap and recreate everything.
-                    self.db.store(&state, &outstate);
+                    //self.db.store(&state, &outstate);
                     self.signal.set_neq(outstate);
                 },
                 Err(e) => {

@@ -1,13 +1,18 @@
-use std::fmt;
-use std::rc::Rc;
-use std::sync::Arc;
-use std::any::Any;
-use std::collections::{HashMap, hash_map::DefaultHasher};
-use std::hash::{Hash, Hasher};
-use std::default::Default;
-use std::ptr::NonNull;
-use std::alloc::Layout;
-use std::ops::Deref;
+use std::{
+    fmt,
+
+    any::Any,
+
+    collections::{
+        hash_map::DefaultHasher
+    },
+    hash::{
+        Hash, 
+        Hasher
+    },
+
+    path::Path,
+};
 
 use rkyv::{
     Archive,
@@ -16,28 +21,29 @@ use rkyv::{
     Serialize,
     Deserialize,
 
-    Fallible,
-    ser::{
-        Serializer,
-        ScratchSpace,
-        serializers::*,
-    },
-
-    string::{
-        StringResolver,
-        ArchivedString,
-    },
-
     out_field,
-    archived_root,
+
+    Fallible,
+    ser::serializers::AllocSerializer,
 };
 use rkyv_dyn::{
     archive_dyn,
 };
 use rkyv_typename::TypeName;
 
-use crate::error::Error;
-use crate::db::{DB, Environment, WriteFlags, Transaction, RoTransaction};
+use crate::db::{
+    DB,
+    Environment,
+
+    EnvironmentFlags,
+    DatabaseFlags,
+    WriteFlags,
+
+    Adapter,
+
+    Transaction,
+    RwTransaction,
+};
 
 #[archive_dyn(deserialize)]
 /// Trait to be implemented by any value in the state map.
@@ -160,122 +166,101 @@ impl StateBuilder {
     }
 }
 
-pub struct StateStorage {
-    key: u64,
-    db: StateDB
+struct StateAdapter;
+
+enum StateError {
+    LMDB(lmdb::Error),
+    RKYV(<AllocSerializer<1024> as Fallible>::Error),
 }
 
-impl StateStorage {
-    pub fn new(key: u64, db: StateDB) -> Self {
-        Self { key, db }
-    }
-
-    pub fn store(&mut self, instate: &State, outstate: &State) -> Result<(), Error> {
-        self.db.store(self.key, instate, outstate)
+impl From<lmdb::Error> for StateError {
+    fn from(e: lmdb::Error) -> Self {
+        Self::LMDB(e)
     }
 }
 
-struct SizeSerializer {
-    pos: usize,
-    scratch: FallbackScratch<HeapScratch<1024>, AllocScratch>,
+impl Fallible for StateAdapter {
+    type Error = StateError;
 }
-impl SizeSerializer {
-    pub fn new() -> Self {
-        Self { pos: 0, scratch: FallbackScratch::default() }
-    }
-}
-impl Fallible for SizeSerializer {
-    type Error = AllocScratchError;
-}
-impl Serializer for SizeSerializer {
-    fn pos(&self) -> usize {
-        self.pos
-    }
-    fn write(&mut self, bytes: &[u8]) -> Result<(), Self::Error> {
-        self.pos += bytes.len();
-        Ok(())
-    }
-}
-impl ScratchSpace for SizeSerializer {
-    unsafe fn push_scratch(
-        &mut self,
-        layout: Layout
-    ) -> Result<NonNull<[u8]>, Self::Error> {
-        self.scratch.push_scratch(layout)
+impl Adapter for StateAdapter {
+    type Serializer = AllocSerializer<1024>;
+    type Value = State;
+
+    fn new_serializer() -> Self::Serializer {
+        Self::Serializer::default()
     }
 
-    unsafe fn pop_scratch(
-        &mut self, 
-        ptr: NonNull<u8>, 
-        layout: Layout
-    ) -> Result<(), Self::Error> {
-        self.scratch.pop_scratch(ptr, layout)
+    fn from_ser_err(e: <Self::Serializer as Fallible>::Error) -> Self::Error {
+        StateError::RKYV(e)
+    }
+    fn from_db_err(e: lmdb::Error) -> Self::Error {
+        e.into()
     }
 }
 
-type LmdbSerializer<B, const N: usize> = CompositeSerializer<
-    BufferSerializer<B>, 
-    FallbackScratch<HeapScratch<N>, AllocScratch>, 
-    SharedSerializeMap,
->;
-
-
+/// State Database containing the currently set state
 pub struct StateDB {
-    input: DB,
-    output: DB,
+    /// The environment for all the databases below
+    env: Environment,
+
+    input: DB<StateAdapter>,
+    output: DB<StateAdapter>,
+
+    // TODO: Index resource name/id/uuid -> u64
 }
 
 impl StateDB {
-    pub fn new(input: DB, output: DB) -> Self {
-        Self { input, output }
+    fn open_env<P: AsRef<Path>>(path: &P) -> lmdb::Result<Environment> {
+        Environment::new()
+            .set_flags( EnvironmentFlags::WRITE_MAP 
+                      | EnvironmentFlags::NO_SUB_DIR 
+                      | EnvironmentFlags::NO_TLS
+                      | EnvironmentFlags::NO_READAHEAD)
+            .set_max_dbs(2)
+            .open(path.as_ref())
     }
 
-    fn get_size(&self, state: &State) -> usize {
-        let mut serializer = SizeSerializer::new();
-        serializer.serialize_value(state);
-        serializer.pos()
+    fn new(env: Environment, input: DB<StateAdapter>, output: DB<StateAdapter>) -> Self {
+        Self { env, input, output }
     }
 
-    pub fn store(&self, key: u64, instate: &State, outstate: &State) -> Result<(), Error> {
-        let insize = self.get_size(instate);
-        let outsize = self.get_size(outstate);
+    pub fn init<P: AsRef<Path>>(path: &P) -> lmdb::Result<Self> {
+        let env = Self::open_env(path)?;
+        let input = unsafe {
+            DB::create(&env, Some("input"), DatabaseFlags::INTEGER_KEY)?
+        };
+        let output = unsafe {
+            DB::create(&env, Some("output"), DatabaseFlags::INTEGER_KEY)?
+        };
 
-        let mut txn = self.input.begin_rw_txn()?;
+        Ok(Self::new(env, input, output))
+    }
 
-        let mut inbuf = self.input.reserve(&mut txn, &key.to_ne_bytes(), insize, WriteFlags::empty())?;
-        let bufser = BufferSerializer::new(inbuf);
-        let ser: LmdbSerializer<&mut [u8], 1024> = LmdbSerializer::new(
-            bufser,
-            FallbackScratch::default(),
-            SharedSerializeMap::default()
-        );
+    pub fn open<P: AsRef<Path>>(path: &P) -> lmdb::Result<Self> {
+        let env = Self::open_env(path)?;
+        let input = unsafe { DB::open(&env, Some("input"))?  };
+        let output = unsafe { DB::open(&env, Some("output"))?  };
 
-        let mut outbuf = self.output.reserve(&mut txn, &key.to_ne_bytes(), outsize, WriteFlags::empty())?;
-        let bufser = BufferSerializer::new(outbuf);
-        let ser: LmdbSerializer<&mut [u8], 1024> = LmdbSerializer::new(
-            bufser,
-            FallbackScratch::default(),
-            SharedSerializeMap::default()
-        );
+        Ok(Self::new(env, input, output))
+    }
 
-        txn.commit()?;
-
+    fn update_txn(&self, txn: &mut RwTransaction, key: u64, input: &State, output: &State)
+        -> Result<(), <StateAdapter as Fallible>::Error>
+    {
+        let flags = WriteFlags::empty();
+        let k = key.to_ne_bytes();
+        self.input.put(txn, &k, input, flags)?;
+        self.output.put(txn, &k, output, flags)?;
         Ok(())
     }
 
-    pub fn get_txn<'txn, T: Transaction>(&self, key: u64, txn: &'txn T)
-        -> Result<(&'txn ArchivedState, &'txn ArchivedState), Error> 
+    fn update(&self, key: u64, input: &State, output: &State) 
+        -> Result<(), <StateAdapter as Fallible>::Error>
     {
-        let inbuf = self.input.get(txn, &key.to_ne_bytes())?;
-        let outbuf = self.output.get(txn, &key.to_ne_bytes())?;
-        let instate = unsafe {
-            archived_root::<State>(inbuf.as_ref())
-        };
-        let outstate = unsafe {
-            archived_root::<State>(outbuf.as_ref())
-        };
+        let mut txn = self.env.begin_rw_txn().map_err(StateAdapter::from_db_err)?;
+        self.update_txn(&mut txn, key, input, output)?;
 
-        Ok((instate, outstate))
+        txn.commit().map_err(StateAdapter::from_db_err)
     }
 }
 

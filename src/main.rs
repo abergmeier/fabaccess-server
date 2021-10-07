@@ -1,11 +1,6 @@
 // FIXME: No.
 #![allow(dead_code)]
-
-#[macro_use]
-extern crate slog;
-
-#[macro_use]
-extern crate capnp_rpc;
+#![forbid(unused_imports)]
 
 extern crate async_trait;
 
