@@ -2,8 +2,6 @@
 #![allow(dead_code)]
 #![forbid(unused_imports)]
 
-extern crate async_trait;
-
 /*
 mod modules;
 mod log;
@@ -19,11 +17,16 @@ mod initiator;
 mod space;
 */
 
+use crate::oid::ObjectIdentifier;
+use std::convert::TryFrom;
+use crate::state::value::{UInt32, Vec3u8, SerializeValue};
+
 mod resource;
 mod schema;
 mod state;
-mod error;
 mod db;
+mod network;
+mod oid;
 
 /*
 
@@ -47,7 +50,32 @@ use crate::config::Config;
 */
 
 pub fn main() {
-    
+    let db = db::StateDB::init("/tmp/state").unwrap();
+    println!("{:#?}", db);
+
+    let s = state::StateBuilder::new();
+    let state = s.add(
+            ObjectIdentifier::try_from("1.3.6.1.4.1.48398.612.1").unwrap(),
+            Box::new(UInt32(0)))
+        .add(
+            ObjectIdentifier::try_from("1.3.6.1.4.1.48398.612.2").unwrap(),
+            Box::new(Vec3u8 { a: 1, b: 2, c: 3})
+        )
+        .finish();
+
+    println!("{:?}", state);
+
+    let b = true;
+    println!("{:?}", b.archived_type_oid());
+
+    let boid = ObjectIdentifier::try_from("1.3.6.1.4.1.48398.612.1.1").unwrap();
+    let b2 = Box::new(false);
+    let ent = state::value::Entry { oid: &boid, val: &b2 };
+    println!("ent {:?}", &ent);
+    let s = serde_json::to_string(&ent).unwrap();
+    println!("{}", &s);
+    let ent2: state::value::OwnedEntry = serde_json::from_str(&s).unwrap();
+    println!("ent2: {:?}", ent2);
 }
 
 /*fn main() {

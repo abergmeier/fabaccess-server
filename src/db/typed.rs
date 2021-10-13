@@ -1,4 +1,6 @@
 use std::{
+    fmt,
+    any::type_name,
     marker::PhantomData,
 };
 
@@ -39,6 +41,21 @@ pub trait Adapter: Fallible {
     fn from_db_err(e: lmdb::Error) -> <Self as Fallible>::Error;
 }
 
+struct AdapterPrettyPrinter<A: Adapter>(PhantomData<A>);
+
+impl<A: Adapter> AdapterPrettyPrinter<A> {
+    pub fn new() -> Self { Self(PhantomData) }
+}
+
+impl<A: Adapter> fmt::Debug for AdapterPrettyPrinter<A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct(&type_name::<A>())
+            .field("serializer", &type_name::<A::Serializer>())
+            .field("value", &type_name::<A::Value>())
+            .finish()
+    }
+}
+
 pub trait OutputBuffer {
     type Buffer: AsRef<[u8]>;
     fn into_slice(self) -> Self::Buffer;
@@ -58,6 +75,22 @@ pub trait OutputWriter: Fallible {
 pub struct DB<A> {
     db: RawDB,
     phantom: PhantomData<A>,
+}
+impl<A> Clone for DB<A> {
+    fn clone(&self) -> Self {
+        Self {
+            db: self.db.clone(),
+            phantom: PhantomData,
+        }
+    }
+}
+impl<A: Adapter> fmt::Debug for DB<A> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("DB")
+            .field("db", &self.db)
+            .field("adapter", &AdapterPrettyPrinter::<A>::new())
+            .finish()
+    }
 }
 
 impl<A> DB<A> {
@@ -165,6 +198,12 @@ impl<'txn, C, A> Cursor<C, A>
     // Unsafe because we don't know if the given adapter matches the given cursor
     pub unsafe fn new(cursor: C) -> Self {
         Self { cursor, phantom: PhantomData }
+    }
+
+    pub fn iter_start(&mut self) -> Iter<'txn, A> {
+        let iter = self.cursor.iter_start();
+        // Safe because `new` isn't :P
+        unsafe { Iter::new(iter) }
     }
 
     pub fn iter_dup_of<K: AsRef<[u8]>>(&mut self, key: &K) -> Iter<'txn, A> {

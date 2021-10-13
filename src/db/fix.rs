@@ -22,7 +22,10 @@ pub struct LMDBorrow<T, V> {
 impl<'env, T, V> LMDBorrow<T, V>
     where T: Transaction,
 {
-    pub unsafe fn fix(txn: T, ptr: &'_ V) -> Self {
+    pub unsafe fn reborrow(ptr: &'_ V) -> NonNull<V> {
+        ptr.into()
+    }
+    pub unsafe fn new(ptr: NonNull<V>, txn: T) -> Self {
         Self { ptr: ptr.into(), txn, }
     }
 }
@@ -37,5 +40,3 @@ impl<'env, T, V> Deref for LMDBorrow<T, V>
         unsafe { self.ptr.as_ref() }
     }
 }
-
-

@@ -38,6 +38,7 @@ pub struct Entry<K: Archive, V: Archive> {
     pub val: V,
 }
 
+#[derive(Clone, Copy)]
 pub struct HashAdapter<K, A> {
     k: PhantomData<K>,
     a: PhantomData<A>,

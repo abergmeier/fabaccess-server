@@ -5,8 +5,11 @@ use futures_signals::signal::Mutable;
 
 use smol::channel::Receiver;
 
-use crate::error::Error;
-use crate::state::{State, StateDB};
+use crate::state::State;
+use crate::db::{
+    state::StateAccessor,
+    DBError,
+};
 
 /// A resource in BFFH has to contain several different parts;
 /// - Currently set state
@@ -37,24 +40,26 @@ use crate::state::{State, StateDB};
 ///   - Check authorization of updates i.e. is this user allowed to do that
 #[async_trait]
 pub trait Resource {
-    /// Returns true if the given state is valid, and false otherwise
-    fn validate(&mut self, state: &State) -> bool;
-
     /// Run whatever internal logic this resource has for the given State update, and return the
     /// new output state that this update produces.
-    async fn update(&mut self, state: &State) -> Result<State, Error>;
+    async fn update(&mut self, input: &State /*, internal: &State*/) -> Result<State, DBError>;
 }
 
 pub struct Update {
     pub state: State,
-    pub errchan: oneshot::Sender<Error>,
+    pub errchan: oneshot::Sender<DBError>,
 }
 
 pub struct ResourceDriver {
+    // putput
     res: Box<dyn Resource>,
-    db: StateDB,
 
+    // input
     rx: Receiver<Update>,
+
+    // output
+    db: StateAccessor,
+
     signal: Mutable<State>,
 }
 
@@ -72,11 +77,14 @@ impl ResourceDriver {
                     // Not applying the new state isn't correct either since we don't know what the
                     // internal logic of the resource has done to make this happen.
                     // Another half right solution is to unwrap and recreate everything.
-                    //self.db.store(&state, &outstate);
-                    self.signal.set_neq(outstate);
+                    // "Best" solution would be to tell the resource to rollback their interal
+                    // changes on a fatal failure and then notify the Claimant, while simply trying
+                    // again for temporary failures.
+                    let _ = self.db.set(&state, &outstate);
+                    self.signal.set(outstate);
                 },
                 Err(e) => {
-                    errchan.send(e);
+                    let _ = errchan.send(e);
                 }
             }
         }
