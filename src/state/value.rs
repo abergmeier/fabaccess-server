@@ -9,33 +9,43 @@ use std::{
     convert::TryFrom,
 };
 
-use rkyv::{Archive, Archived, Serialize, Deserialize, out_field, };
+use rkyv::{Archive, Archived, Serialize, Deserialize, out_field, Fallible, DeserializeUnsized, ArchivePointee, ArchiveUnsized, ArchivedMetadata, SerializeUnsized};
 use rkyv_dyn::{archive_dyn, DynSerializer, DynError, DynDeserializer};
 use rkyv_typename::TypeName;
 use ptr_meta::{DynMetadata, Pointee};
-use std::marker::PhantomData;
 
 use inventory;
 use crate::oid::{ObjectIdentifier};
-use rkyv::ser::{Serializer, };
+use rkyv::ser::{Serializer, ScratchSpace};
 use std::collections::HashMap;
 use std::alloc::Layout;
 use serde::ser::SerializeMap;
 use std::fmt::Formatter;
 use serde::de::Error as _;
+use std::mem::MaybeUninit;
 
 
 pub trait Value: fmt::Debug + erased_serde::Serialize {
-    fn deserialize_val_in_place<'de>(&mut self, deserializer: &mut dyn erased_serde::Deserializer<'de>)
-        -> Result<(), erased_serde::Error>;
+    /// Initialize `&mut self` from `deserializer`
+    ///
+    /// At the point this is called &mut self is of undefined value but guaranteed to be well
+    /// aligned and non-null. Any read access into &mut self before all of &self is brought into
+    /// a valid state is however undefined behaviour.
+    /// To this end you *must* initialize `self` **completely**. Serde will do the right thing if
+    /// you directly deserialize the type you're implementing `Value` for, but for manual
+    /// implementations this is important to keep in mind.
+    fn deserialize_init<'de>(&mut self, deserializer: &mut dyn erased_serde::Deserializer<'de>)
+                                     -> Result<(), erased_serde::Error>;
 }
 erased_serde::serialize_trait_object!(Value);
 
 impl<T> Value for T
-    where T: fmt::Debug + Archive + erased_serde::Serialize + for<'de> serde::Deserialize<'de>
+    where T: fmt::Debug
+           + erased_serde::Serialize
+           + for<'de> serde::Deserialize<'de>
 {
-    fn deserialize_val_in_place<'de>(&mut self, deserializer: &mut dyn erased_serde::Deserializer<'de>)
-        -> Result<(), erased_serde::Error>
+    fn deserialize_init<'de>(&mut self, deserializer: &mut dyn erased_serde::Deserializer<'de>)
+                                     -> Result<(), erased_serde::Error>
     {
         *self = erased_serde::deserialize(deserializer)?;
         Ok(())
@@ -51,10 +61,11 @@ pub struct Entry<'a> {
     pub oid: &'a ObjectIdentifier,
     pub val: &'a dyn Value,
 }
+
 #[derive(Debug)]
 pub struct OwnedEntry {
     pub oid: ObjectIdentifier,
-    pub val: Box<dyn Value>,
+    pub val: Box<dyn DeserializeValue>,
 }
 
 impl<'a> serde::Serialize for Entry<'a> {
@@ -74,7 +85,9 @@ impl<'de> serde::Deserialize<'de> for OwnedEntry {
         deserializer.deserialize_map(OwnedEntryVisitor)
     }
 }
+
 struct OwnedEntryVisitor;
+
 impl<'de> serde::de::Visitor<'de> for OwnedEntryVisitor {
     type Value = OwnedEntry;
 
@@ -97,13 +110,15 @@ impl<'de> serde::de::Visitor<'de> for OwnedEntryVisitor {
         let valimpl = IMPL_REGISTRY.get(ImplId::from_type_oid(&b))
             .ok_or(serde::de::Error::invalid_value(
                 serde::de::Unexpected::Other("unknown oid"),
-                &"oid an implementation was registered for"
+                &"oid an implementation was registered for",
             ))?;
 
         // Casting random usize you find on the side of the road as vtable on unchecked pointers.
         // What could possibly go wrong? >:D
-        let valbox: Box<dyn Value> = unsafe {
-            // recreate vtable as fat ptr metadata
+        let valbox: MaybeUninit<Box<dyn DeserializeValue>> = unsafe {
+            // "recreate" vtable as fat ptr metadata (we literally just cast an `usize` but the
+            // only way to put this usize into that spot is by having a valid vtable cast so it's
+            // probably almost safe)
             let meta = valimpl.pointer_metadata();
 
             // Don't bother checking here. The only way this could be bad is if the vtable above
@@ -116,29 +131,42 @@ impl<'de> serde::de::Visitor<'de> for OwnedEntryVisitor {
             // validate in any other way if this is sane?
             // Well...
             let ptr: *mut () = std::alloc::alloc(layout).cast::<()>();
-            Box::from_raw(ptr_meta::from_raw_parts_mut(ptr, meta))
+            let b = Box::from_raw(ptr_meta::from_raw_parts_mut(
+                ptr,
+                meta));
+
+            // We make this a MaybeUninit so `Drop` is never called on the uninitialized value
+            MaybeUninit::new(b)
         };
         // ... The only way we can make Value a trait object by having it deserialize *into
         // it's own uninitialized representation*. Yeah don't worry, this isn't the worst part of
         // the game yet. >:D
-        let seed = ValueSeed(valbox);
+        let seed = InitIntoSelf(valbox);
         let val = map.next_value_seed(seed)?;
         Ok(OwnedEntry { oid, val })
     }
 }
-struct ValueSeed(Box<dyn Value>);
-impl<'de> serde::de::DeserializeSeed<'de> for ValueSeed {
-    type Value = Box<dyn Value>;
+
+struct InitIntoSelf(MaybeUninit<Box<dyn DeserializeValue>>);
+
+impl<'de> serde::de::DeserializeSeed<'de> for InitIntoSelf {
+    type Value = Box<dyn DeserializeValue>;
 
     fn deserialize<D>(mut self, deserializer: D) -> Result<Self::Value, D::Error>
         where D: serde::Deserializer<'de>
     {
         let mut deser = <dyn erased_serde::Deserializer>::erase(deserializer);
-        // Hey, better initialize late than never. Oh completely unrelated but if we unwind after
-        // allocating the box and before completing this function call that's undefined behaviour
-        // so maybe don't do that thanks <3
-        self.0.deserialize_val_in_place(&mut deser);
-        Ok(self.0)
+
+        // Unsafe as hell but if we never read from this reference before initializing it's not
+        // undefined behaviour.
+        let selfptr = unsafe { &mut *self.0.as_mut_ptr() };
+
+        // Hey, better initialize late than never.
+        selfptr.deserialize_init(&mut deser).map_err(|e|
+            D::Error::custom(e))?;
+
+        // Assuming `deserialize_init` didn't error and did its job this is now safe.
+        unsafe { Ok(self.0.assume_init()) }
     }
 }
 
@@ -151,17 +179,46 @@ impl TypeOid for Archived<bool> {
         ObjectIdentifier::try_from("1.3.6.1.4.1.48398.612.1.1").unwrap()
     }
 }
+impl DeserializeDynOid for Archived<bool>
+    where Archived<bool>: for<'a> Deserialize<bool, (dyn DynDeserializer + 'a)>
+{
+    unsafe fn deserialize_dynoid(&self, deserializer: &mut dyn DynDeserializer, alloc: &mut dyn FnMut(Layout) -> *mut u8) -> Result<*mut (), DynError> {
+        let ptr = alloc(Layout::new::<bool>()).cast::<bool>();
+        ptr.write(self.deserialize(deserializer)?);
+        Ok(ptr as *mut ())
+    }
 
-pub trait SerializeValue {
-    fn serialize_val(&self, serializer: &mut dyn DynSerializer) -> Result<usize, DynError>;
+    fn deserialize_dynoid_metadata(&self, deserializer: &mut dyn DynDeserializer) -> Result<<dyn SerializeValue as Pointee>::Metadata, DynError> {
+        unsafe {
+            Ok(core::mem::transmute(ptr_meta::metadata(
+                core::ptr::null::<bool>() as *const dyn SerializeValue
+            )))
+        }
+    }
+}
+impl<S: ScratchSpace + Serializer + ?Sized> SerializeUnsized<S> for dyn SerializeValue {
+    fn serialize_unsized(&self, mut serializer: &mut S) -> Result<usize, S::Error> {
+        self.serialize_dynoid(&mut serializer)
+            .map_err(|e| *e.downcast::<S::Error>().unwrap())
+    }
+
+    fn serialize_metadata(&self, mut serializer: &mut S) -> Result<Self::MetadataResolver, S::Error> {
+        self.serialize_metadata(serializer)
+    }
+}
+
+
+/// Serialize dynamic types by storing an OID alongside
+pub trait SerializeDynOid {
+    fn serialize_dynoid(&self, serializer: &mut dyn DynSerializer) -> Result<usize, DynError>;
     fn archived_type_oid(&self) -> ObjectIdentifier;
 }
 
-impl<T> SerializeValue for T
+impl<T> SerializeDynOid for T
     where T: for<'a> Serialize<dyn DynSerializer + 'a>,
           T::Archived: TypeOid,
 {
-    fn serialize_val(&self, serializer: &mut dyn DynSerializer) -> Result<usize, DynError> {
+    fn serialize_dynoid(&self, serializer: &mut dyn DynSerializer) -> Result<usize, DynError> {
         serializer.serialize_value(self)
     }
 
@@ -170,37 +227,81 @@ impl<T> SerializeValue for T
     }
 }
 
-trait DeserializeValue<T: Pointee + ?Sized> {
-    unsafe fn deserialize_val(
+trait DeserializeDynOid {
+    unsafe fn deserialize_dynoid(
         &self,
         deserializer: &mut dyn DynDeserializer,
         alloc: &mut dyn FnMut(Layout) -> *mut u8,
     ) -> Result<*mut (), DynError>;
 
-    fn deserialize_dyn_metadata(
+    fn deserialize_dynoid_metadata(
         &self,
         deserializer: &mut dyn DynDeserializer,
-    ) -> Result<T::Metadata, DynError>;
+    ) -> Result<<dyn SerializeValue as Pointee>::Metadata, DynError>;
 }
 
-pub struct ArchivedValueMetadata<T: ?Sized> {
+#[ptr_meta::pointee]
+pub trait SerializeValue: Value + SerializeDynOid {}
+
+impl<T: Archive + SerializeDynOid + Value> SerializeValue for T
+    where
+        T::Archived: RegisteredImpl
+{}
+
+#[ptr_meta::pointee]
+pub trait DeserializeValue: Value + DeserializeDynOid {}
+impl<T: Value + DeserializeDynOid> DeserializeValue for T {}
+impl ArchivePointee for dyn DeserializeValue {
+    type ArchivedMetadata = ArchivedValueMetadata;
+
+    fn pointer_metadata(archived: &Self::ArchivedMetadata) -> <Self as Pointee>::Metadata {
+        archived.pointer_metadata()
+    }
+}
+impl<D: ?Sized> DeserializeUnsized<dyn SerializeValue, D> for dyn DeserializeValue
+    where D: Fallible + DynDeserializer
+{
+    unsafe fn deserialize_unsized(&self,
+                                  mut deserializer: &mut D,
+                                  mut alloc: impl FnMut(Layout) -> *mut u8
+    ) -> Result<*mut (), D::Error> {
+        self.deserialize_dynoid(&mut deserializer, &mut alloc).map_err(|e| *e.downcast().unwrap())
+    }
+
+    fn deserialize_metadata(&self, mut deserializer: &mut D)
+        -> Result<<dyn SerializeValue as Pointee>::Metadata, D::Error>
+    {
+        self.deserialize_dynoid_metadata(&mut deserializer).map_err(|e| *e.downcast().unwrap())
+    }
+}
+
+impl ArchiveUnsized for dyn SerializeValue {
+    type Archived = dyn DeserializeValue;
+    type MetadataResolver = <ObjectIdentifier as Archive>::Resolver;
+
+    unsafe fn resolve_metadata(&self, pos: usize, resolver: Self::MetadataResolver, out: *mut ArchivedMetadata<Self>) {
+        let (oid_pos, oid) = out_field!(out.type_oid);
+        let type_oid = self.archived_type_oid();
+        type_oid.resolve(oid_pos, resolver, oid);
+    }
+}
+
+pub struct ArchivedValueMetadata {
     type_oid: Archived<ObjectIdentifier>,
-    phantom: PhantomData<T>,
 }
 
-impl<T: TypeOid + ?Sized> ArchivedValueMetadata<T> {
+impl ArchivedValueMetadata {
     pub unsafe fn emplace(type_oid: Archived<ObjectIdentifier>, out: *mut Self) {
         ptr::addr_of_mut!((*out).type_oid).write(type_oid);
     }
 
     pub fn vtable(&self) -> usize {
         IMPL_REGISTRY
-            .get(ImplId::from_type_oid(&self.type_oid))
-            .expect("Unregistered type oid")
+            .get(ImplId::from_type_oid(&self.type_oid)).expect("Unregistered type oid")
             .vtable
     }
 
-    pub fn pointer_metadata(&self) -> DynMetadata<T> {
+    pub fn pointer_metadata(&self) -> DynMetadata<dyn DeserializeValue> {
         unsafe { core::mem::transmute(self.vtable()) }
     }
 }
@@ -215,6 +316,7 @@ impl<'a> ImplId<'a> {
         Self { type_oid }
     }
 }
+
 impl ImplId<'static> {
     fn new<T: TypeOid>() -> Self {
         let oid: Vec<u8> = T::get_type_oid().into();
@@ -230,6 +332,7 @@ struct ImplData {
     // TODO DebugImpl
     // TODO DebugInfo
 }
+
 impl ImplData {
     pub unsafe fn pointer_metadata<T: ?Sized>(&self) -> DynMetadata<T> {
         core::mem::transmute(self.vtable)
@@ -292,7 +395,7 @@ unsafe impl RegisteredImpl for bool {
     fn vtable() -> usize {
         unsafe {
             core::mem::transmute(ptr_meta::metadata(
-                core::ptr::null::<bool>() as *const dyn Value
+                core::ptr::null::<bool>() as *const dyn DeserializeValue
             ))
         }
     }
@@ -383,5 +486,4 @@ impl DynValue for Vec3u8 {}
 impl DynValue for Archived<Vec3u8> {}
 
 #[cfg(test)]
-mod tests {
-}
+mod tests {}

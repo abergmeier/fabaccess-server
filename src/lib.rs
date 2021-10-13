@@ -19,7 +19,9 @@ mod space;
 
 use crate::oid::ObjectIdentifier;
 use std::convert::TryFrom;
-use crate::state::value::{UInt32, Vec3u8, SerializeValue};
+use crate::state::value::{UInt32, Vec3u8, SerializeDynOid};
+use rkyv::ser::serializers::AllocSerializer;
+use rkyv::SerializeUnsized;
 
 mod resource;
 mod schema;
@@ -76,6 +78,12 @@ pub fn main() {
     println!("{}", &s);
     let ent2: state::value::OwnedEntry = serde_json::from_str(&s).unwrap();
     println!("ent2: {:?}", ent2);
+
+    let mut ser = AllocSerializer::<1024>::default();
+    let b3 = Box::new(true) as Box<dyn state::value::SerializeValue>;
+    let pos = b3.serialize_unsized(&mut ser).unwrap();
+    let buf = ser.into_serializer().into_inner();
+    println!("Serialized {} bytes: {:?}", pos, buf.as_slice());
 }
 
 /*fn main() {
