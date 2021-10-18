@@ -398,6 +398,7 @@ dependencies = [
  "libc",
  "lmdb-rkv",
  "ptr_meta",
+ "rand",
  "rkyv",
  "rkyv_dyn",
  "rkyv_typename",

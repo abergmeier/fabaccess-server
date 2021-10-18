@@ -53,6 +53,7 @@ pub use resources::{
     ResourceDB,
 };
 
+#[derive(Debug)]
 pub enum DBError {
     LMDB(lmdb::Error),
     RKYV(<AllocSerializer<1024> as Fallible>::Error),
@@ -89,4 +90,3 @@ impl<V: Serialize<Ser>> Adapter for AllocAdapter<V> {
         e.into()
     }
 }
-

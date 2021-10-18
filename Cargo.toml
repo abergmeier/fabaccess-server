@@ -85,6 +85,7 @@ walkdir = "2.3.2"
 futures-test = "0.3.16"
 tempfile = "3.2"
 bincode = "2.0.0-dev"
+rand = "0.8"
 
 [patch.crates-io]
 bincode = { git = "https://github.com/dequbed/bincode.git", branch = "feature/in_place_buffer" }

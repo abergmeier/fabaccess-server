@@ -149,54 +149,38 @@ impl StateAccessor {
     }
 }
 
-#[cfg(test_dis)]
+#[cfg(test)]
 mod tests {
     use super::*;
 
-    use crate::db::tests::open_test_env;
-    use lmdb::{
-        EnvironmentFlags as EF,
-        DatabaseFlags as DF,
-        WriteFlags as WF,
-    };
-
-    use rkyv::Infallible;
-    use rkyv::ser::serializers::AllocSerializer;
-    use rkyv::archived_root;
-    use rkyv::util::archived_value;
+    use crate::state::value::Vec3u8;
+    use crate::state::value::{OID_COLOUR, OID_POWERED, OID_INTENSITY};
+    use std::ops::Deref;
 
     #[test]
     fn construct_state() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut tmppath = tmpdir.path().to_owned();
+        tmppath.push("db");
+        let db = StateDB::init(tmppath).unwrap();
         let b = State::build()
-            .add("Colour".to_string(), Vec3u8 { a: 1, b: 2, c: 3})
-            .add("Powered".to_string(), Bool(true))
-            .add("Intensity".to_string(), UInt32(4242))
+            .add(OID_COLOUR.clone(), Box::new(Vec3u8 { a: 1, b: 2, c: 3}))
+            .add(OID_POWERED.clone(), Box::new(true))
+            .add(OID_INTENSITY.clone(), Box::new(1023))
             .finish();
-
         println!("({}) {:?}", b.hash(), b);
 
-        let mut serializer = AllocSerializer::<256>::default();
-        let pos = serializer.serialize_value(&b).unwrap();
-        let buf = serializer.into_serializer().into_inner();
+        let c = State::build()
+            .add(OID_COLOUR.clone(), Box::new(Vec3u8 { a: 1, b: 2, c: 3}))
+            .add(OID_POWERED.clone(), Box::new(true))
+            .add(OID_INTENSITY.clone(), Box::new(1023))
+            .finish();
 
-        println!("Encsize: {}", buf.len());
-
-        let archived_state = unsafe {
-            archived_value::<State>(buf.as_ref(), pos)
-        };
-        let s: State = archived_state.deserialize(&mut Infallible).unwrap();
-
-        println!("({}) {:?}", pos, s);
-    }
-
-    #[test]
-    fn function_name_test() {
-        let te = open_text_env();
-        let ildb = e.create_db(Some("input"), DF::empty()).expect("Failed to create db file");
-        let oldb = e.create_db(Some("output"), DF::empty()).expect("Failed to create db file");
-
-        let idb = DB::new(e.env.clone(), ildb);
-        let odb = DB::new(e.env.clone(), oldb);
-        let db = StateDB::new(idb, odb);
+        let key = rand::random();
+        db.update(key, &b, &c).unwrap();
+        let d = db.get_input(key).unwrap().unwrap();
+        let e = db.get_output(key).unwrap().unwrap();
+        assert_eq!(&b, d.deref());
+        assert_eq!(&c, e.deref());
     }
 }

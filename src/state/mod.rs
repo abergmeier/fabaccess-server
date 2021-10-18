@@ -33,6 +33,7 @@ use serde::de::Error as _;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Archive, Serialize, Deserialize)]
+#[archive_attr(derive(Debug))]
 /// State object of a resource
 ///
 /// This object serves three functions:
@@ -55,6 +56,12 @@ impl State {
 
 impl PartialEq for State {
     fn eq(&self, other: &Self) -> bool {
+        self.hash == other.hash
+    }
+}
+
+impl PartialEq<Archived<State>> for State {
+    fn eq(&self, other: &Archived<Self>) -> bool {
         self.hash == other.hash
     }
 }
@@ -117,6 +124,7 @@ pub struct Entry<'a> {
 }
 
 #[derive(Debug, Archive, Serialize, Deserialize)]
+#[archive_attr(derive(Debug))]
 pub struct OwnedEntry {
     pub oid: ObjectIdentifier,
     pub val: Box<dyn SerializeValue>,

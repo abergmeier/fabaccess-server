@@ -261,6 +261,7 @@ impl ArchiveUnsized for dyn SerializeValue {
     }
 }
 
+#[derive(Debug)]
 pub struct ArchivedValueMetadata {
     type_oid: Archived<ObjectIdentifier>,
 }
@@ -465,35 +466,45 @@ lazy_static::lazy_static! {
     pub static ref OID_U8: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.2").unwrap()
     };
-    static ref OID_U16: ObjectIdentifier = {
+    pub static ref OID_U16: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.3").unwrap()
     };
-    static ref OID_U32: ObjectIdentifier = {
+    pub static ref OID_U32: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.4").unwrap()
     };
-    static ref OID_U64: ObjectIdentifier = {
+    pub static ref OID_U64: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.5").unwrap()
     };
-    static ref OID_U128: ObjectIdentifier = {
+    pub static ref OID_U128: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.6").unwrap()
     };
-    static ref OID_I8: ObjectIdentifier = {
+    pub static ref OID_I8: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.7").unwrap()
     };
-    static ref OID_I16: ObjectIdentifier = {
+    pub static ref OID_I16: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.8").unwrap()
     };
-    static ref OID_I32: ObjectIdentifier = {
+    pub static ref OID_I32: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.9").unwrap()
     };
-    static ref OID_I64: ObjectIdentifier = {
+    pub static ref OID_I64: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.10").unwrap()
     };
-    static ref OID_I128: ObjectIdentifier = {
+    pub static ref OID_I128: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.11").unwrap()
     };
-    static ref OID_VEC3U8: ObjectIdentifier = {
+    pub static ref OID_VEC3U8: ObjectIdentifier = {
         ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.13").unwrap()
+    };
+
+    pub static ref OID_POWERED: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.2.1").unwrap()
+    };
+    pub static ref OID_INTENSITY: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.2.2").unwrap()
+    };
+    pub static ref OID_COLOUR: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.2.3").unwrap()
     };
 }
 oidvalue!(OID_BOOL, bool);
