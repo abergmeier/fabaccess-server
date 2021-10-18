@@ -17,7 +17,7 @@ lmdb = []
 
 [dependencies]
 futures = { version = "0.3.16", features = ["thread-pool", "compat"] }
-futures-util = "0.3.16"
+#futures-util = "0.3.16"
 futures-signals = "0.3.22"
 
 smol = "1.2.5"
@@ -26,9 +26,9 @@ tracing = "0.1.28"
 
 signal-hook = "0.3.9"
 
-slog = { version = "2.7.0", features = ["max_level_trace"] }
-slog-term = "2.8.0"
-slog-async = "2.7.0"
+#slog = { version = "2.7.0", features = ["max_level_trace"] }
+#slog-term = "2.8.0"
+#slog-async = "2.7.0"
 
 capnp = "0.14.3"
 capnpc = "0.14.4"
@@ -36,28 +36,29 @@ capnp-rpc = "0.14.1"
 capnp-futures = "0.14.1"
 
 serde = { version = "1.0.130", features = ["derive"] }
-toml = "0.5.8"
-flexbuffers = "2.0.0"
-bincode = "2.0.0-dev"
+erased-serde = "0.3"
+#toml = "0.5.8"
+#flexbuffers = "2.0.0"
 
 rkyv = "0.7"
 ptr_meta = "0.1"
 rkyv_typename = "0.7"
 rkyv_dyn = "0.7"
+inventory = "0.1"
 
 serde_dhall = { version = "0.10.1", default-features = false }
 serde_json = "1.0"
 
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
 
-clap = "2.33.3"
+#clap = "2.33.3"
 
 # TODO update this if bindgen breaks (again)
-rsasl = "1.4.0"
+#rsasl = "1.4.0"
 #rsasl = { path = "../../rsasl" }
 
 # rumqtt needs tokio which I'm trying to get away from
-paho-mqtt = { git = "https://github.com/dequbed/paho.mqtt.rust.git", branch = "master", features = ["build_bindgen"] }
+#paho-mqtt = { git = "https://github.com/dequbed/paho.mqtt.rust.git", branch = "master", features = ["build_bindgen"] }
 
 #mlua = { version = "0.4", features = ["async", "luajit"] }
 
@@ -68,12 +69,12 @@ async-trait = "0.1.51"
 
 lazy_static = "1.4.0"
 
-rust-argon2 = "0.8.3"
-rand = "0.8.4"
+#rust-argon2 = "0.8.3"
+#rand = "0.8.4"
 
-async-channel = "1.6.1"
-easy-parallel = "3.1.0"
-genawaiter = "0.99.1"
+#async-channel = "1.6.1"
+#easy-parallel = "3.1.0"
+#genawaiter = "0.99.1"
 
 [build-dependencies]
 capnpc = "0.14.4"
@@ -83,6 +84,7 @@ walkdir = "2.3.2"
 [dev-dependencies]
 futures-test = "0.3.16"
 tempfile = "3.2"
+bincode = "2.0.0-dev"
 
 [patch.crates-io]
 bincode = { git = "https://github.com/dequbed/bincode.git", branch = "feature/in_place_buffer" }

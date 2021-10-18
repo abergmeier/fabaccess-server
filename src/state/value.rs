@@ -5,12 +5,13 @@ use std::{
     fmt,
     any::Any,
     hash::Hash,
-    ops::Deref,
-    convert::TryFrom,
+    str::FromStr,
 };
 
-use rkyv::{Archive, Archived, Serialize, Deserialize, out_field, Fallible, DeserializeUnsized, ArchivePointee, ArchiveUnsized, ArchivedMetadata, SerializeUnsized};
-use rkyv_dyn::{archive_dyn, DynSerializer, DynError, DynDeserializer};
+use rkyv::{Archive, Archived, Serialize, Deserialize, out_field, Fallible, DeserializeUnsized,
+           ArchivePointee, ArchiveUnsized, ArchivedMetadata, SerializeUnsized,
+           };
+use rkyv_dyn::{DynSerializer, DynError, DynDeserializer};
 use rkyv_typename::TypeName;
 use ptr_meta::{DynMetadata, Pointee};
 
@@ -24,8 +25,14 @@ use std::fmt::Formatter;
 use serde::de::Error as _;
 use std::mem::MaybeUninit;
 
-
-pub trait Value: fmt::Debug + erased_serde::Serialize {
+/// Adding a custom type to BFFH state managenment:
+///
+/// 1. Implement `serde`'s [`Serialize`](serde::Serialize) and [`Deserialize`](serde::Deserialize)
+///     - `derive()`d instances work just fine, but keep stability over releases in mind.
+/// 2. Implement rkyv's [`Serialize`](rkyv::Serialize).
+/// 3. Implement TypeOid on your Archived type (i.e. `<T as Archive>::Archived`)
+/// 4. Implement this
+pub trait Value: Any + fmt::Debug + erased_serde::Serialize {
     /// Initialize `&mut self` from `deserializer`
     ///
     /// At the point this is called &mut self is of undefined value but guaranteed to be well
@@ -38,9 +45,11 @@ pub trait Value: fmt::Debug + erased_serde::Serialize {
                                      -> Result<(), erased_serde::Error>;
 }
 erased_serde::serialize_trait_object!(Value);
+erased_serde::serialize_trait_object!(SerializeValue);
+erased_serde::serialize_trait_object!(DeserializeValue);
 
 impl<T> Value for T
-    where T: fmt::Debug
+    where T: Any + fmt::Debug
            + erased_serde::Serialize
            + for<'de> serde::Deserialize<'de>
 {
@@ -52,44 +61,32 @@ impl<T> Value for T
     }
 }
 
-impl Pointee for dyn Value {
-    type Metadata = DynMetadata<dyn Value>;
-}
-
-#[derive(Debug)]
-pub struct Entry<'a> {
-    pub oid: &'a ObjectIdentifier,
-    pub val: &'a dyn Value,
-}
-
-#[derive(Debug)]
-pub struct OwnedEntry {
-    pub oid: ObjectIdentifier,
-    pub val: Box<dyn DeserializeValue>,
-}
-
-impl<'a> serde::Serialize for Entry<'a> {
+#[repr(transparent)]
+pub(super) struct DynVal<'a>(pub &'a dyn SerializeValue);
+impl<'a> serde::Serialize for DynVal<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::Serializer
     {
         let mut ser = serializer.serialize_map(Some(1))?;
-        ser.serialize_entry(self.oid, self.val)?;
+        let oid = self.0.archived_type_oid();
+        ser.serialize_entry(oid, self.0)?;
         ser.end()
     }
 }
-
-impl<'de> serde::Deserialize<'de> for OwnedEntry {
+#[repr(transparent)]
+pub(super) struct DynOwnedVal(pub Box<dyn SerializeValue>);
+impl<'de> serde::Deserialize<'de> for DynOwnedVal {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where D: serde::Deserializer<'de>
     {
-        deserializer.deserialize_map(OwnedEntryVisitor)
+        deserializer.deserialize_map(DynValVisitor)
     }
 }
 
-struct OwnedEntryVisitor;
+struct DynValVisitor;
 
-impl<'de> serde::de::Visitor<'de> for OwnedEntryVisitor {
-    type Value = OwnedEntry;
+impl<'de> serde::de::Visitor<'de> for DynValVisitor {
+    type Value = DynOwnedVal;
 
     fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
         write!(formatter, "an one entry map from OID to some value object")
@@ -104,10 +101,9 @@ impl<'de> serde::de::Visitor<'de> for OwnedEntryVisitor {
         // Get OID first. That's easy, we know it's the key, we know how to read it.
         let oid: ObjectIdentifier = map.next_key()?
             .ok_or(A::Error::missing_field("oid"))?;
-        let b: Vec<u8> = oid.clone().into();
 
         // Get the Value vtable for that OID. Or fail because we don't know that OID, either works.
-        let valimpl = IMPL_REGISTRY.get(ImplId::from_type_oid(&b))
+        let valimpl = IMPL_REGISTRY.get(ImplId::from_type_oid(&oid))
             .ok_or(serde::de::Error::invalid_value(
                 serde::de::Unexpected::Other("unknown oid"),
                 &"oid an implementation was registered for",
@@ -115,7 +111,7 @@ impl<'de> serde::de::Visitor<'de> for OwnedEntryVisitor {
 
         // Casting random usize you find on the side of the road as vtable on unchecked pointers.
         // What could possibly go wrong? >:D
-        let valbox: MaybeUninit<Box<dyn DeserializeValue>> = unsafe {
+        let valbox: MaybeUninit<Box<dyn SerializeValue>> = unsafe {
             // "recreate" vtable as fat ptr metadata (we literally just cast an `usize` but the
             // only way to put this usize into that spot is by having a valid vtable cast so it's
             // probably almost safe)
@@ -143,14 +139,14 @@ impl<'de> serde::de::Visitor<'de> for OwnedEntryVisitor {
         // the game yet. >:D
         let seed = InitIntoSelf(valbox);
         let val = map.next_value_seed(seed)?;
-        Ok(OwnedEntry { oid, val })
+        Ok(DynOwnedVal(val))
     }
 }
 
-struct InitIntoSelf(MaybeUninit<Box<dyn DeserializeValue>>);
+struct InitIntoSelf(MaybeUninit<Box<dyn SerializeValue>>);
 
 impl<'de> serde::de::DeserializeSeed<'de> for InitIntoSelf {
-    type Value = Box<dyn DeserializeValue>;
+    type Value = Box<dyn SerializeValue>;
 
     fn deserialize<D>(mut self, deserializer: D) -> Result<Self::Value, D::Error>
         where D: serde::Deserializer<'de>
@@ -171,39 +167,20 @@ impl<'de> serde::de::DeserializeSeed<'de> for InitIntoSelf {
 }
 
 pub trait TypeOid {
-    fn get_type_oid() -> ObjectIdentifier;
+    fn get_type_oid() -> &'static ObjectIdentifier;
+    fn get_type_name() -> &'static str;
+    fn get_type_desc() -> &'static str;
 }
 
-impl TypeOid for Archived<bool> {
-    fn get_type_oid() -> ObjectIdentifier {
-        ObjectIdentifier::try_from("1.3.6.1.4.1.48398.612.1.1").unwrap()
-    }
-}
-impl DeserializeDynOid for Archived<bool>
-    where Archived<bool>: for<'a> Deserialize<bool, (dyn DynDeserializer + 'a)>
-{
-    unsafe fn deserialize_dynoid(&self, deserializer: &mut dyn DynDeserializer, alloc: &mut dyn FnMut(Layout) -> *mut u8) -> Result<*mut (), DynError> {
-        let ptr = alloc(Layout::new::<bool>()).cast::<bool>();
-        ptr.write(self.deserialize(deserializer)?);
-        Ok(ptr as *mut ())
-    }
-
-    fn deserialize_dynoid_metadata(&self, deserializer: &mut dyn DynDeserializer) -> Result<<dyn SerializeValue as Pointee>::Metadata, DynError> {
-        unsafe {
-            Ok(core::mem::transmute(ptr_meta::metadata(
-                core::ptr::null::<bool>() as *const dyn SerializeValue
-            )))
-        }
-    }
-}
 impl<S: ScratchSpace + Serializer + ?Sized> SerializeUnsized<S> for dyn SerializeValue {
     fn serialize_unsized(&self, mut serializer: &mut S) -> Result<usize, S::Error> {
         self.serialize_dynoid(&mut serializer)
             .map_err(|e| *e.downcast::<S::Error>().unwrap())
     }
 
-    fn serialize_metadata(&self, mut serializer: &mut S) -> Result<Self::MetadataResolver, S::Error> {
-        self.serialize_metadata(serializer)
+    fn serialize_metadata(&self, serializer: &mut S) -> Result<Self::MetadataResolver, S::Error> {
+        let oid = self.archived_type_oid();
+        oid.serialize(serializer)
     }
 }
 
@@ -211,7 +188,7 @@ impl<S: ScratchSpace + Serializer + ?Sized> SerializeUnsized<S> for dyn Serializ
 /// Serialize dynamic types by storing an OID alongside
 pub trait SerializeDynOid {
     fn serialize_dynoid(&self, serializer: &mut dyn DynSerializer) -> Result<usize, DynError>;
-    fn archived_type_oid(&self) -> ObjectIdentifier;
+    fn archived_type_oid(&self) -> &'static ObjectIdentifier;
 }
 
 impl<T> SerializeDynOid for T
@@ -222,12 +199,12 @@ impl<T> SerializeDynOid for T
         serializer.serialize_value(self)
     }
 
-    fn archived_type_oid(&self) -> ObjectIdentifier {
+    fn archived_type_oid(&self) -> &'static ObjectIdentifier {
         Archived::<T>::get_type_oid()
     }
 }
 
-trait DeserializeDynOid {
+pub trait DeserializeDynOid {
     unsafe fn deserialize_dynoid(
         &self,
         deserializer: &mut dyn DynDeserializer,
@@ -243,7 +220,7 @@ trait DeserializeDynOid {
 #[ptr_meta::pointee]
 pub trait SerializeValue: Value + SerializeDynOid {}
 
-impl<T: Archive + SerializeDynOid + Value> SerializeValue for T
+impl<T: Archive + Value + SerializeDynOid> SerializeValue for T
     where
         T::Archived: RegisteredImpl
 {}
@@ -258,9 +235,7 @@ impl ArchivePointee for dyn DeserializeValue {
         archived.pointer_metadata()
     }
 }
-impl<D: ?Sized> DeserializeUnsized<dyn SerializeValue, D> for dyn DeserializeValue
-    where D: Fallible + DynDeserializer
-{
+impl<D: Fallible + ?Sized> DeserializeUnsized<dyn SerializeValue, D> for dyn DeserializeValue {
     unsafe fn deserialize_unsized(&self,
                                   mut deserializer: &mut D,
                                   mut alloc: impl FnMut(Layout) -> *mut u8
@@ -282,7 +257,7 @@ impl ArchiveUnsized for dyn SerializeValue {
     unsafe fn resolve_metadata(&self, pos: usize, resolver: Self::MetadataResolver, out: *mut ArchivedMetadata<Self>) {
         let (oid_pos, oid) = out_field!(out.type_oid);
         let type_oid = self.archived_type_oid();
-        type_oid.resolve(oid_pos, resolver, oid);
+        type_oid.resolve(pos + oid_pos, resolver, oid);
     }
 }
 
@@ -297,7 +272,10 @@ impl ArchivedValueMetadata {
 
     pub fn vtable(&self) -> usize {
         IMPL_REGISTRY
-            .get(ImplId::from_type_oid(&self.type_oid)).expect("Unregistered type oid")
+            .get(ImplId::from_type_oid(&self.type_oid)).expect(&format!("Unregistered \
+            type \
+            oid \
+            {:?}", self.type_oid))
             .vtable
     }
 
@@ -307,41 +285,58 @@ impl ArchivedValueMetadata {
 }
 
 #[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
-struct ImplId<'a> {
+pub struct ImplId<'a> {
     type_oid: &'a [u8],
 }
 
 impl<'a> ImplId<'a> {
-    fn from_type_oid(type_oid: &'a [u8]) -> Self {
+    pub fn from_type_oid(type_oid: &'a [u8]) -> Self {
         Self { type_oid }
     }
 }
 
 impl ImplId<'static> {
     fn new<T: TypeOid>() -> Self {
-        let oid: Vec<u8> = T::get_type_oid().into();
         Self {
-            type_oid: oid.leak()
+            type_oid: &T::get_type_oid()
         }
     }
 }
 
 #[derive(Copy, Clone, Debug)]
-struct ImplData {
+struct ImplData<'a> {
     pub vtable: usize,
-    // TODO DebugImpl
-    // TODO DebugInfo
+    pub name: &'a str,
+    pub desc: &'a str,
+    pub info: ImplDebugInfo,
 }
 
-impl ImplData {
+#[derive(Copy, Clone, Debug)]
+#[doc(hidden)]
+pub struct ImplDebugInfo {
+    pub file: &'static str,
+    pub line: u32,
+    pub column: u32,
+}
+macro_rules! debug_info {
+    () => {
+        ImplDebugInfo {
+            file: core::file!(),
+            line: core::line!(),
+            column: core::column!(),
+        }
+    }
+}
+
+impl ImplData<'_> {
     pub unsafe fn pointer_metadata<T: ?Sized>(&self) -> DynMetadata<T> {
         core::mem::transmute(self.vtable)
     }
 }
 
-struct ImplEntry<'a> {
+pub struct ImplEntry<'a> {
     id: ImplId<'a>,
-    data: ImplData,
+    data: ImplData<'a>,
 }
 inventory::collect!(ImplEntry<'static>);
 
@@ -352,13 +347,17 @@ impl ImplEntry<'_> {
             id: ImplId::new::<T>(),
             data: ImplData {
                 vtable: <T as RegisteredImpl>::vtable(),
+                name: <T as TypeOid>::get_type_name(),
+                desc: <T as TypeOid>::get_type_desc(),
+                info: <T as RegisteredImpl>::debug_info(),
             },
         }
     }
 }
 
+#[derive(Debug)]
 struct ImplRegistry {
-    oid_to_data: HashMap<ImplId<'static>, ImplData>,
+    oid_to_data: HashMap<ImplId<'static>, ImplData<'static>>,
 }
 
 impl ImplRegistry {
@@ -368,6 +367,14 @@ impl ImplRegistry {
 
     fn add_entry(&mut self, entry: &'static ImplEntry) {
         let old_val = self.oid_to_data.insert(entry.id, entry.data);
+
+        if let Some(old) = old_val {
+            eprintln!("Value impl oid conflict for {:?}", entry.id.type_oid);
+            eprintln!("Existing impl registered at {}:{}:{}",
+                old.info.file, old.info.line, old.info.column);
+            eprintln!("New impl registered at {}:{}:{}",
+                entry.data.info.file, entry.data.info.line, entry.data.info.column);
+        }
         assert!(old_val.is_none());
     }
 
@@ -389,101 +396,124 @@ lazy_static::lazy_static! {
 
 pub unsafe trait RegisteredImpl {
     fn vtable() -> usize;
+    fn debug_info() -> ImplDebugInfo;
 }
 
-unsafe impl RegisteredImpl for bool {
-    fn vtable() -> usize {
-        unsafe {
-            core::mem::transmute(ptr_meta::metadata(
-                core::ptr::null::<bool>() as *const dyn DeserializeValue
-            ))
-        }
-    }
-}
-inventory::submit! {ImplEntry::new::<bool>()}
-
-#[archive_dyn(deserialize)]
-/// Trait to be implemented by any value in the state map.
-///
-/// A value can be any type not having dangling references (with the added
-/// restriction that it has to implement `Debug` for debugger QoL).
-/// In fact Value *also* needs to implement Hash since BFFH checks if the state
-/// is different to before on input and output before updating the resource re.
-/// notifying actors and notifys.  This dependency is not expressable via
-/// supertraits since it is not possible to make Hash into a trait object.
-/// To solve this [`State`] uses the [`StateBuilder`] which adds an `Hash`
-/// requirement for inputs on [`add`](struct::StateBuilder::add). The hash is
-/// being created over all inserted values and then used to check for equality.
-/// Note that in addition to collisions, Hash is not guaranteed stable over
-/// ordering and will additionally not track overwrites, so if the order of
-/// insertions changes or values are set and later overwritten then two equal
-/// States can and are likely to have different hashes.
-pub trait DynValue: Any + fmt::Debug {}
-
-macro_rules! valtype {
-    ( $x:ident, $y:ident ) => {
-        #[repr(transparent)]
-        #[derive(Debug, PartialEq, Eq, Hash)]
-        #[derive(Archive, Serialize, Deserialize)]
-        #[derive(serde::Serialize, serde::Deserialize)]
-        #[archive_attr(derive(TypeName, Debug))]
-        pub struct $x(pub $y);
-
-        #[archive_dyn(deserialize)]
-        impl DynValue for $x {}
-        impl DynValue for Archived<$x> {}
-
-        impl Deref for $x {
-            type Target = $y;
-            fn deref(&self) -> &Self::Target {
-                &self.0
-            }
-        }
-
-        impl From<$y> for $x {
-            fn from(e: $y) -> $x {
-                Self(e)
-            }
-        }
-
-        impl $x {
-            pub fn new(e: $y) -> Self {
-                Self(e)
+macro_rules! oiddeser {
+    ( $y:ty, $z:ty ) => {
+        impl DeserializeDynOid for $y
+            where $y: for<'a> Deserialize<$z, (dyn DynDeserializer + 'a)>
+        {
+            unsafe fn deserialize_dynoid(&self, deserializer: &mut dyn DynDeserializer, alloc: &mut dyn FnMut(Layout) -> *mut u8) -> Result<*mut (), DynError> {
+                let ptr = alloc(Layout::new::<$z>()).cast::<$z>();
+                ptr.write(self.deserialize(deserializer)?);
+                Ok(ptr as *mut ())
             }
 
-            pub fn into_inner(self) -> $y {
-                self.0
+            fn deserialize_dynoid_metadata(&self, _: &mut dyn DynDeserializer) -> Result<<dyn
+            SerializeValue as Pointee>::Metadata, DynError> {
+                unsafe {
+                    Ok(core::mem::transmute(ptr_meta::metadata(
+                        core::ptr::null::<$z>() as *const dyn SerializeValue
+                    )))
+                }
             }
         }
     }
 }
+macro_rules! oidvalue {
+    ( $x:ident, $y:ty ) => {
+        oidvalue! {$x, $y, $y}
+    };
+    ( $x:ident, $y:ty, $z:ty ) => {
+        oiddeser! {$z, $y}
 
-valtype!(Bool, bool);
-valtype!(UInt8, u8);
-valtype!(UInt16, u16);
-valtype!(UInt32, u32);
-valtype!(UInt64, u64);
-valtype!(UInt128, u128);
-valtype!(Int8, i8);
-valtype!(Int16, i16);
-valtype!(Int32, i32);
-valtype!(Int64, i64);
-valtype!(Int128, i128);
-valtype!(RString, String);
+        impl TypeOid for $z {
+            fn get_type_oid() -> &'static ObjectIdentifier {
+                &$x
+            }
+
+            fn get_type_name() -> &'static str {
+                stringify!($y)
+            }
+
+            fn get_type_desc() -> &'static str {
+                "builtin"
+            }
+        }
+        unsafe impl RegisteredImpl for $z {
+            fn vtable() -> usize {
+                unsafe {
+                    core::mem::transmute(ptr_meta::metadata(
+                        core::ptr::null::<$z>() as *const dyn DeserializeValue
+                    ))
+                }
+            }
+            fn debug_info() -> ImplDebugInfo {
+                debug_info!()
+            }
+        }
+
+        inventory::submit! {ImplEntry::new::<$z>()}
+    }
+}
+
+lazy_static::lazy_static! {
+    pub static ref OID_BOOL: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.1").unwrap()
+    };
+    pub static ref OID_U8: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.2").unwrap()
+    };
+    static ref OID_U16: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.3").unwrap()
+    };
+    static ref OID_U32: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.4").unwrap()
+    };
+    static ref OID_U64: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.5").unwrap()
+    };
+    static ref OID_U128: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.6").unwrap()
+    };
+    static ref OID_I8: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.7").unwrap()
+    };
+    static ref OID_I16: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.8").unwrap()
+    };
+    static ref OID_I32: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.9").unwrap()
+    };
+    static ref OID_I64: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.10").unwrap()
+    };
+    static ref OID_I128: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.11").unwrap()
+    };
+    static ref OID_VEC3U8: ObjectIdentifier = {
+        ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.13").unwrap()
+    };
+}
+oidvalue!(OID_BOOL, bool);
+oidvalue!(OID_U8, u8);
+oidvalue!(OID_U16, u16);
+oidvalue!(OID_U32, u32);
+oidvalue!(OID_U64, u64);
+oidvalue!(OID_U128, u128);
+oidvalue!(OID_I8, i8);
+oidvalue!(OID_I16, i16);
+oidvalue!(OID_I32, i32);
+oidvalue!(OID_I64, i64);
+oidvalue!(OID_I128, i128);
 
 #[derive(serde::Serialize, serde::Deserialize)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(TypeName, Debug))]
+#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
+#[archive_attr(derive(TypeName, Debug, serde::Serialize, serde::Deserialize))]
 pub struct Vec3u8 {
     pub a: u8,
     pub b: u8,
     pub c: u8,
 }
-
-#[archive_dyn(deserialize)]
-impl DynValue for Vec3u8 {}
-
-impl DynValue for Archived<Vec3u8> {}
-
-#[cfg(test)]
-mod tests {}
+oidvalue!(OID_VEC3U8, Vec3u8, ArchivedVec3u8);

@@ -17,18 +17,18 @@ mod initiator;
 mod space;
 */
 
-use crate::oid::ObjectIdentifier;
-use std::convert::TryFrom;
-use crate::state::value::{UInt32, Vec3u8, SerializeDynOid};
 use rkyv::ser::serializers::AllocSerializer;
-use rkyv::SerializeUnsized;
+use rkyv::{SerializeUnsized, archived_value, Infallible, Deserialize};
+use crate::oid::ObjectIdentifier;
+use std::str::FromStr;
 
 mod resource;
 mod schema;
 mod state;
 mod db;
 mod network;
-mod oid;
+pub mod oid;
+mod varint;
 
 /*
 
@@ -55,35 +55,46 @@ pub fn main() {
     let db = db::StateDB::init("/tmp/state").unwrap();
     println!("{:#?}", db);
 
-    let s = state::StateBuilder::new();
-    let state = s.add(
-            ObjectIdentifier::try_from("1.3.6.1.4.1.48398.612.1").unwrap(),
-            Box::new(UInt32(0)))
-        .add(
-            ObjectIdentifier::try_from("1.3.6.1.4.1.48398.612.2").unwrap(),
-            Box::new(Vec3u8 { a: 1, b: 2, c: 3})
-        )
-        .finish();
-
-    println!("{:?}", state);
-
     let b = true;
-    println!("{:?}", b.archived_type_oid());
+    //println!("{}", b.archived_type_oid());
 
-    let boid = ObjectIdentifier::try_from("1.3.6.1.4.1.48398.612.1.1").unwrap();
-    let b2 = Box::new(false);
-    let ent = state::value::Entry { oid: &boid, val: &b2 };
+    let boid = &state::value::OID_BOOL;
+    let b2 = false;
+    let ent = state::Entry { oid: boid, val: &b2 };
     println!("ent {:?}", &ent);
     let s = serde_json::to_string(&ent).unwrap();
     println!("{}", &s);
-    let ent2: state::value::OwnedEntry = serde_json::from_str(&s).unwrap();
+    let ent2: state::OwnedEntry = serde_json::from_str(&s).unwrap();
     println!("ent2: {:?}", ent2);
 
-    let mut ser = AllocSerializer::<1024>::default();
+    println!("Hello");
+
+    let mut ser = AllocSerializer::<32>::default();
+    //let b3 = Box::new(u32::from_ne_bytes([0xDE, 0xAD, 0xBE, 0xEF])) as Box<dyn state::value::SerializeValue>;
     let b3 = Box::new(true) as Box<dyn state::value::SerializeValue>;
-    let pos = b3.serialize_unsized(&mut ser).unwrap();
+    let pos3 = b3.serialize_unsized(&mut ser).unwrap();
+    let pos4 = 0;
+    //let pos4 = b4.serialize_unsized(&mut ser).unwrap();
     let buf = ser.into_serializer().into_inner();
-    println!("Serialized {} bytes: {:?}", pos, buf.as_slice());
+    println!("({}) {:?} | {:?}", pos3, &buf[..pos3], &buf[pos3..]);
+    //println!("Serialized {} bytes: {:?} | {:?} | {:?}", pos4, &buf[..pos3], &buf[pos3+12..pos4], &buf[pos4+12..]);
+    let r3 = unsafe {
+        archived_value::<Box<dyn state::value::SerializeValue>>(&buf.as_slice(), pos3)
+    };
+    let v3: Box<dyn state::value::SerializeValue> = r3.deserialize(&mut Infallible).unwrap();
+    println!("{:?}", v3);
+
+    let koid = ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.2.1").unwrap();
+    let state = state::State::build()
+        .add(koid, Box::new(0xDEADBEEFu32))
+        .finish();
+
+    println!("{:?}", state);
+    let json = serde_json::to_string(&state).unwrap();
+    println!("{}", json);
+    let state_back: state::State = serde_json::from_str(&json).unwrap();
+    println!("{:?}", state_back);
+    let val = state_back.inner;
 }
 
 /*fn main() {

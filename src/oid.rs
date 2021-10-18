@@ -6,8 +6,8 @@
 //!
 //!
 //! ## Parsing OID String Representation
-//! ```rust
-//! use oid::prelude::*;
+//! ```ignore
+//! use crate::oid::prelude::*;
 //!
 //! fn main() -> Result<(), ObjectIdentifierError> {
 //!     let oid = ObjectIdentifier::try_from("0.1.2.3")?;
@@ -16,8 +16,8 @@
 //! ```
 //!
 //! ## Parsing OID Binary Representation
-//! ```rust
-//! use oid::prelude::*;
+//! ```ignore
+//! use prelude::*;
 //!
 //! fn main() -> Result<(), ObjectIdentifierError> {
 //!     let oid = ObjectIdentifier::try_from(vec![0x00, 0x01, 0x02, 0x03])?;
@@ -26,8 +26,8 @@
 //! ```
 //!
 //! ## Encoding OID as String Representation
-//! ```rust
-//! use oid::prelude::*;
+//! ```ignore
+//! use prelude::*;
 //!
 //! fn main() -> Result<(), ObjectIdentifierError> {
 //!     let oid = ObjectIdentifier::try_from("0.1.2.3")?;
@@ -38,7 +38,7 @@
 //! ```
 //!
 //! ## Encoding OID as Binary Representation
-//! ```rust
+//! ```ignore
 //! use oid::prelude::*;
 //!
 //! fn main() -> Result<(), ObjectIdentifierError> {
@@ -52,13 +52,20 @@
 //! [Object Identifiers]: https://en.wikipedia.org/wiki/Object_identifier
 //! [ITU]: https://en.wikipedia.org/wiki/International_Telecommunications_Union
 
-use core::convert::{TryFrom, TryInto};
+use core::convert::{TryFrom };
 
-use rkyv::{Archive, Serialize, Fallible};
+use rkyv::{Archive, Serialize};
 use rkyv::vec::{ArchivedVec, VecResolver};
+use std::ops::Deref;
+use std::fmt;
+use std::fmt::Formatter;
+use rkyv::ser::Serializer;
+use std::str::FromStr;
+use crate::varint::VarU128;
+use std::convert::TryInto;
 
-// OID spec doesn't specify the maximum integer size of each node, so we default to usize
-type Node = usize;
+type Node = u128;
+type VarNode = VarU128;
 
 /// Convenience module for quickly importing the public interface (e.g., `use oid::prelude::*`)
 pub mod prelude {
@@ -106,111 +113,253 @@ pub enum ObjectIdentifierError {
 }
 
 /// Object Identifier (OID)
-#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[derive(Clone, Eq, PartialEq, Hash)]
+#[repr(transparent)]
 pub struct ObjectIdentifier {
-    root: ObjectIdentifierRoot,
-    first_node: u8,
-    child_nodes: Vec<Node>,
+    nodes: Box<[u8]>,
 }
 
 impl ObjectIdentifier {
-    const fn new(root: ObjectIdentifierRoot, first_node: u8, child_nodes: Vec<Node>)
-                 -> Self
+    #[inline(always)]
+    pub const fn new_unchecked(nodes: Box<[u8]>) -> Self {
+        Self { nodes }
+    }
+    pub fn from_box(nodes: Box<[u8]>) -> Result<Self, ObjectIdentifierError> {
+        if nodes.len() < 1 {
+            return Err(ObjectIdentifierError::IllegalRootNode);
+        };
+        ObjectIdentifierRoot::try_from(nodes[0] / 40)?;
+
+        let mut parsing_big_int = false;
+        let mut big_int: Node = 0;
+        for i in 1..nodes.len() {
+            if !parsing_big_int && nodes[i] < 128 {} else {
+                if big_int > 0 {
+                    if big_int >= Node::MAX >> 7 {
+                        return Err(ObjectIdentifierError::IllegalChildNodeValue);
+                    }
+                    big_int <<= 7;
+                };
+                big_int |= (nodes[i] & !0x80) as Node;
+                parsing_big_int = nodes[i] & 0x80 != 0;
+            }
+            if big_int > 0 && !parsing_big_int {
+                big_int = 0;
+            }
+        }
+        Ok(Self { nodes })
+    }
+
+    pub fn build<B: AsRef<[Node]>>(root: ObjectIdentifierRoot, first: u8, children: B)
+        -> Result<Self, ObjectIdentifierError>
     {
-        Self { root, first_node, child_nodes }
+        if first > 40 {
+            return Err(ObjectIdentifierError::IllegalFirstChildNode);
+        }
+
+        let children = children.as_ref();
+        let mut vec = Vec::with_capacity(children.len() + 1);
+        vec.push((root as u8) * 40 + first);
+        for child in children {
+            let var: VarNode = child.into();
+            vec.extend_from_slice(var.as_bytes())
+        }
+        Ok(Self { nodes: vec.into_boxed_slice() })
+    }
+
+    #[inline(always)]
+    pub fn root(&self) -> Result<ObjectIdentifierRoot, ObjectIdentifierError> {
+        ObjectIdentifierRoot::try_from(self.nodes[0] / 40)
+    }
+    #[inline(always)]
+    pub const fn first_node(&self) -> u8 {
+        self.nodes[0] % 40
+    }
+    #[inline(always)]
+    pub fn child_nodes(&self) -> &[u8] {
+        &self.nodes[1..]
+    }
+    #[inline(always)]
+    pub const fn as_bytes(&self) -> &[u8] {
+        &self.nodes
     }
 }
 
+impl Deref for ObjectIdentifier {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        &self.nodes
+    }
+}
+
+impl FromStr for ObjectIdentifier {
+    type Err = ObjectIdentifierError;
+
+    fn from_str(value: &str) -> Result<Self, Self::Err> {
+        let mut nodes = value.split(".");
+        let root = nodes.next()
+            .and_then(|n| n.parse::<u8>().ok())
+            .and_then(|n| n.try_into().ok())
+            .ok_or(ObjectIdentifierError::IllegalRootNode)?;
+
+        let first = nodes.next()
+            .and_then(|n| parse_string_first_node(n).ok())
+            .ok_or(ObjectIdentifierError::IllegalFirstChildNode)?;
+
+        let mut children = if let (_, Some(hint)) = nodes.size_hint() {
+            Vec::with_capacity(hint)
+        } else {
+            Vec::new()
+        };
+
+        for child in nodes.map(|n| n.parse().ok()) {
+            if let Some(c) = child {
+                children.push(c);
+            } else {
+                return Err(ObjectIdentifierError::IllegalChildNodeValue);
+            }
+        }
+
+        ObjectIdentifier::build(root, first, children)
+    }
+}
+
+impl fmt::Display for ObjectIdentifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let show: String = self.into();
+        write!(f, "{}", show)
+    }
+}
+impl fmt::Debug for ObjectIdentifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        let show: String = self.into();
+        write!(f, "{}", show)
+    }
+}
+
+#[repr(transparent)]
+pub struct ArchivedObjectIdentifier {
+    archived: ArchivedVec<u8>
+}
+
+impl Deref for ArchivedObjectIdentifier {
+    type Target = [u8];
+    fn deref(&self) -> &Self::Target {
+        self.archived.as_slice()
+    }
+}
+
+impl fmt::Debug for ArchivedObjectIdentifier {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+         write!(f, "{}", &convert_to_string(self.archived.as_slice())
+             .unwrap_or_else(|e| format!("Invalid OID: {:?}", e)))
+    }
+}
 
 impl Archive for ObjectIdentifier {
-    type Archived = ArchivedVec<u8>;
+    type Archived = ArchivedObjectIdentifier;
     type Resolver = VecResolver;
 
     unsafe fn resolve(&self, pos: usize, resolver: Self::Resolver, out: *mut Self::Archived) {
-        let vec: Vec<u8> = self.clone().into();
-        vec.resolve(pos, resolver, out);
+        let (oid_pos, oid_out) = rkyv::out_field!(out.archived);
+        ArchivedVec::resolve_from_slice(self.nodes.as_ref(), pos + oid_pos, resolver, oid_out);
+    }
+}
+impl Archive for &'static ObjectIdentifier {
+    type Archived = ArchivedObjectIdentifier;
+    type Resolver = VecResolver;
+
+    unsafe fn resolve(&self, pos: usize, resolver: Self::Resolver, out: *mut Self::Archived) {
+        let (oid_pos, oid_out) = rkyv::out_field!(out.archived);
+        ArchivedVec::resolve_from_slice(self.nodes.as_ref(), pos + oid_pos, resolver, oid_out);
     }
 }
 
-impl<S: Fallible> Serialize<S> for ObjectIdentifier
-    where Vec<u8>: Serialize<S>
+impl<S: Serializer + ?Sized> Serialize<S> for ObjectIdentifier
+    where [u8]: rkyv::SerializeUnsized<S>
 {
     fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
-        let vec: Vec<u8> = self.clone().into();
-        vec.serialize(serializer)
+        ArchivedVec::serialize_from_slice(self.nodes.as_ref(), serializer)
     }
 }
 
-fn parse_string_first_node(
-    nodes: &mut dyn Iterator<Item = &str>,
-) -> Result<u8, ObjectIdentifierError> {
-    if let Some(first_child_node) = nodes.next() {
-        let first_child_node: u8 = first_child_node
-            .parse()
-            .map_err(|_| ObjectIdentifierError::IllegalFirstChildNode)?;
-        if first_child_node > 39 {
-            return Err(ObjectIdentifierError::IllegalFirstChildNode);
-        }
-        Ok(first_child_node)
+fn parse_string_first_node(first_child_node: &str) -> Result<u8, ObjectIdentifierError> {
+    let first_child_node: u8 = first_child_node
+        .parse()
+        .map_err(|_| ObjectIdentifierError::IllegalFirstChildNode)?;
+    if first_child_node > 39 {
+        return Err(ObjectIdentifierError::IllegalFirstChildNode);
+    }
+    Ok(first_child_node)
+}
+
+fn parse_string_child_node(
+    node_str: &str,
+    out: &mut Vec<u8>
+) -> Result<(), ObjectIdentifierError> {
+    let mut node: Node = node_str.parse()
+        .map_err(|_| ObjectIdentifierError::IllegalChildNodeValue)?;
+    // TODO bench against !*node &= 0x80, compiler may already optimize better
+    if node <= 127 {
+        out.push(node as u8);
     } else {
-        Err(ObjectIdentifierError::IllegalFirstChildNode)
+        let vi: VarNode = node.into();
+        out.extend_from_slice(vi.as_bytes());
     }
-}
 
-fn parse_string_child_nodes(
-    nodes: &mut dyn Iterator<Item = &str>,
-) -> Result<Vec<Node>, ObjectIdentifierError> {
-    let mut result: Vec<Node> = vec![];
-    while let Some(node) = nodes.next() {
-        result.push(
-            node.parse()
-                .map_err(|_| ObjectIdentifierError::IllegalChildNodeValue)?,
-        );
-    }
-    Ok(result)
+    Ok(())
 }
 
 impl ObjectIdentifier {
     fn from_string<S>(value: S) -> Result<ObjectIdentifier, ObjectIdentifierError>
     where
-        S: Into<String>,
+        S: AsRef<str>,
     {
-        let value = value.into();
-        let mut nodes = value.split(".");
-        match &nodes.next() {
-            Some(root_node_value) => {
-                let root_node_value: Result<u8, _> = root_node_value.parse();
-                match root_node_value {
-                    Ok(root_node) => {
-                        let root_node: Result<ObjectIdentifierRoot, _> = root_node.try_into();
-                        match root_node {
-                            Ok(root) => {
-                                let first_node = parse_string_first_node(&mut nodes)?;
-                                Ok(ObjectIdentifier {
-                                    root,
-                                    first_node,
-                                    child_nodes: parse_string_child_nodes(&mut nodes)?,
-                                })
-                            }
-                            Err(_err) => Err(ObjectIdentifierError::IllegalRootNode),
-                        }
-                    }
-                    Err(_) => Err(ObjectIdentifierError::IllegalRootNode),
+        ObjectIdentifier::from_str(value.as_ref())
+    }
+}
+
+fn convert_to_string(nodes: &[u8]) -> Result<String, ObjectIdentifierError> {
+    assert!(nodes.len() > 0);
+    let root = nodes[0] / 40;
+    let mut out = root.to_string();
+
+    out.push('.');
+    let first = nodes[0] % 40;
+    out.extend(first.to_string().chars());
+
+    let mut parsing_big_int = false;
+    let mut big_int: Node = 0;
+    for i in 1..nodes.len() {
+        if !parsing_big_int && nodes[i] < 128 {
+            // less than 7 bit of node value
+            out.push('.');
+            let nr = nodes[i].to_string();
+            out.extend(nr.chars());
+        } else {
+            if big_int > 0 {
+                if big_int >= Node::MAX >> 7 {
+                    return Err(ObjectIdentifierError::IllegalChildNodeValue);
                 }
-            }
-            None => Err(ObjectIdentifierError::IllegalRootNode),
+                big_int <<= 7;
+            };
+            big_int += (nodes[i] & !0x80) as Node;
+            parsing_big_int = nodes[i] & 0x80 != 0;
+        }
+        if big_int > 0 && !parsing_big_int {
+            out.push('.');
+            out.extend(big_int.to_string().chars());
+            big_int = 0;
         }
     }
+
+    Ok(out)
 }
 
 impl Into<String> for &ObjectIdentifier {
     fn into(self) -> String {
-        let mut result: String = self.root.into();
-        result.push_str(&format!(".{}", self.first_node));
-        for node in &self.child_nodes {
-            result.push_str(&format!(".{}", node));
-        }
-        result
+        convert_to_string(&self.nodes)
+            .expect("Valid OID object couldn't be serialized.")
     }
 }
 
@@ -220,34 +369,15 @@ impl Into<String> for ObjectIdentifier {
     }
 }
 
-impl Into<Vec<u8>> for &ObjectIdentifier {
-    fn into(self) -> Vec<u8> {
-        let mut result: Vec<u8> = vec![self.root as u8];
-        result[0] = result[0] * 40 + self.first_node;
-        for node in self.child_nodes.iter() {
-            // TODO bench against !*node &= 0x80, compiler may already optimize better
-            if *node <= 127 {
-                result.push(*node as u8);
-            } else {
-                let mut value = *node;
-                let mut mask: Node = 0;
-                let mut encoded: Vec<u8> = vec![];
-                while value > 0x80 {
-                    encoded.insert(0, (value & 0x7f | mask) as u8);
-                    value >>= 7;
-                    mask = 0x80;
-                }
-                encoded.insert(0, (value | mask) as u8);
-                result.append(&mut encoded);
-            }
-        }
-        result
+impl<'a> Into<&'a [u8]> for &'a ObjectIdentifier {
+    fn into(self) -> &'a [u8] {
+        &self.nodes
     }
 }
 
 impl Into<Vec<u8>> for ObjectIdentifier {
     fn into(self) -> Vec<u8> {
-        (&self).into()
+        self.nodes.into_vec()
     }
 }
 
@@ -267,45 +397,15 @@ impl TryFrom<String> for ObjectIdentifier {
 
 impl TryFrom<&[u8]> for ObjectIdentifier {
     type Error = ObjectIdentifierError;
-    fn try_from(value: &[u8]) -> Result<ObjectIdentifier, Self::Error> {
-        if value.len() < 1 {
-            return Err(ObjectIdentifierError::IllegalRootNode);
-        };
-        let root = ObjectIdentifierRoot::try_from(value[0] / 40)?;
-        let first_node = value[0] % 40;
-        let mut child_nodes = vec![];
-        let mut parsing_big_int = false;
-        let mut big_int: Node = 0;
-        for i in 1..value.len() {
-            if !parsing_big_int && value[i] < 128 {
-                child_nodes.push(value[i] as Node);
-            } else {
-                if big_int > 0 {
-                    if big_int >= Node::max_value() >> 7 {
-                        return Err(ObjectIdentifierError::IllegalChildNodeValue);
-                    }
-                    big_int <<= 7;
-                };
-                big_int |= (value[i] & !0x80) as Node;
-                parsing_big_int = value[i] & 0x80 != 0;
-            }
-            if big_int > 0 && !parsing_big_int {
-                child_nodes.push(big_int);
-                big_int = 0;
-            }
-        }
-        Ok(ObjectIdentifier {
-            root,
-            first_node,
-            child_nodes,
-        })
+    fn try_from(nodes: &[u8]) -> Result<ObjectIdentifier, Self::Error> {
+        Self::from_box(nodes.into())
     }
 }
 
 impl TryFrom<Vec<u8>> for ObjectIdentifier {
     type Error = ObjectIdentifierError;
     fn try_from(value: Vec<u8>) -> Result<ObjectIdentifier, Self::Error> {
-        value.as_slice().try_into()
+        Self::from_box(value.into_boxed_slice())
     }
 }
 
@@ -381,8 +481,7 @@ mod serde_support {
                 let encoded: String = self.into();
                 serializer.serialize_str(&encoded)
             } else {
-                let encoded: Vec<u8> = self.into();
-                serializer.serialize_bytes(&encoded)
+                serializer.serialize_bytes(self.as_bytes())
             }
         }
     }
@@ -391,125 +490,65 @@ mod serde_support {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::convert::TryInto;
 
-    mod serde_support {
-        use super::*;
-        use serde_derive::{Deserialize, Serialize};
-        use serde_xml_rs;
-
-        #[test]
-        fn bincode_serde_serialize() {
-            let expected: Vec<u8> = vec![
-                0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08,
-                0x0D, 0x15,
-            ];
-            let oid = ObjectIdentifier {
-                root: ObjectIdentifierRoot::ItuT,
-                first_node: 0x01,
-                child_nodes: vec![1, 2, 3, 5, 8, 13, 21],
-            };
-            let actual: Vec<u8> = bincode::serialize(&oid).unwrap();
-            assert_eq!(expected, actual);
-        }
-
-        #[test]
-        fn bincode_serde_deserialize() {
-            let expected = ObjectIdentifier {
-                root: ObjectIdentifierRoot::ItuT,
-                first_node: 0x01,
-                child_nodes: vec![1, 2, 3, 5, 8, 13, 21],
-            };
-            let actual: ObjectIdentifier = bincode::deserialize(&[
-                0x08, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01, 0x01, 0x02, 0x03, 0x05, 0x08,
-                0x0D, 0x15,
-            ])
-            .unwrap();
-            assert_eq!(expected, actual);
-        }
-
-        #[derive(Debug, Deserialize, PartialEq, Serialize)]
-        struct MyStruct {
-            oid: ObjectIdentifier
-        }
-
-        #[test]
-        fn xml_serde_serialize() {
-            let mydata = MyStruct {
-                oid: ObjectIdentifier::try_from("1.2.3.5.8.13.21").unwrap()
-            };
-            let expected = r#"<MyStruct><oid>1.2.3.5.8.13.21</oid></MyStruct>"#;
-            let actual = serde_xml_rs::to_string(&mydata).unwrap();
-            assert_eq!(expected, actual);
-        }
-
-        #[test]
-        fn xml_serde_deserialize_element() {
-            let src = r#"<mystruct><oid>1.2.3.5.8.13.21</oid></mystruct>"#;
-
-            let expected = MyStruct {
-                oid: ObjectIdentifier::try_from("1.2.3.5.8.13.21").unwrap()
-            };
-            let actual: MyStruct = serde_xml_rs::from_str(&src).unwrap();
-            assert_eq!(expected, actual);
-        }
-
-        #[test]
-        fn xml_serde_deserialize_attribute() {
-            let src = r#"<mystruct oid="1.2.3.5.8.13.21" />"#;
-
-            let expected = MyStruct {
-                oid: ObjectIdentifier::try_from("1.2.3.5.8.13.21").unwrap()
-            };
-            let actual: MyStruct = serde_xml_rs::from_str(&src).unwrap();
-            assert_eq!(expected, actual);
-        }
+    #[test]
+    fn bincode_serde_roundtrip() {
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::ItuT,
+            0x01,
+            vec![1, 2, 3, 5, 8, 13, 21],
+        ).unwrap();
+        let buffer: Vec<u8> = bincode::serialize(&expected).unwrap();
+        let actual = bincode::deserialize(&buffer).unwrap();
+        assert_eq!(expected, actual);
     }
 
     #[test]
     fn encode_binary_root_node_0() {
         let expected: Vec<u8> = vec![0];
-        let oid = ObjectIdentifier {
-            root: ObjectIdentifierRoot::ItuT,
-            first_node: 0x00,
-            child_nodes: vec![],
-        };
-        let actual: Vec<u8> = (&oid).into();
+        let oid = ObjectIdentifier::build(
+            ObjectIdentifierRoot::ItuT,
+            0x00,
+            vec![],
+        ).unwrap();
+        let actual: Vec<u8> = oid.into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn encode_binary_root_node_1() {
         let expected: Vec<u8> = vec![40];
-        let oid = ObjectIdentifier {
-            root: ObjectIdentifierRoot::Iso,
-            first_node: 0x00,
-            child_nodes: vec![],
-        };
-        let actual: Vec<u8> = (&oid).into();
+        let oid = ObjectIdentifier::build(
+            ObjectIdentifierRoot::Iso,
+            0x00,
+            vec![],
+        ).unwrap();
+        let actual: Vec<u8> = oid.into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn encode_binary_root_node_2() {
         let expected: Vec<u8> = vec![80];
-        let oid = ObjectIdentifier {
-            root: ObjectIdentifierRoot::JointIsoItuT,
-            first_node: 0x00,
-            child_nodes: vec![],
-        };
-        let actual: Vec<u8> = (&oid).into();
+        let oid = ObjectIdentifier::build(
+            ObjectIdentifierRoot::JointIsoItuT,
+            0x00,
+            vec![],
+        ).unwrap();
+        let actual: Vec<u8> = oid.into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn encode_binary_example_1() {
         let expected: Vec<u8> = vec![0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0D, 0x15];
-        let oid = ObjectIdentifier {
-            root: ObjectIdentifierRoot::ItuT,
-            first_node: 0x01,
-            child_nodes: vec![1, 2, 3, 5, 8, 13, 21],
-        };
-        let actual: Vec<u8> = (&oid).into();
+        let oid = ObjectIdentifier::build(
+            ObjectIdentifierRoot::ItuT,
+            0x01,
+            vec![1, 2, 3, 5, 8, 13, 21],
+        ).unwrap();
+        let actual: Vec<u8> = oid.into();
         assert_eq!(expected, actual);
     }
 
@@ -519,35 +558,35 @@ mod tests {
             0x77, 0x2A, 0x93, 0x45, 0x83, 0xFF, 0x7F, 0x87, 0xFF, 0xFF, 0xFF, 0x7F, 0x89, 0x53,
             0x92, 0x30,
         ];
-        let oid = ObjectIdentifier {
-            root: ObjectIdentifierRoot::JointIsoItuT,
-            first_node: 39,
-            child_nodes: vec![42, 2501, 65535, 2147483647, 1235, 2352],
-        };
-        let actual: Vec<u8> = (&oid).into();
+        let oid = ObjectIdentifier::build(
+            ObjectIdentifierRoot::JointIsoItuT,
+            39,
+            vec![42, 2501, 65535, 2147483647, 1235, 2352],
+        ).unwrap();
+        let actual: Vec<u8> = (oid).into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn encode_string_root_node_0() {
         let expected = "0.0";
-        let oid = ObjectIdentifier {
-            root: ObjectIdentifierRoot::ItuT,
-            first_node: 0x00,
-            child_nodes: vec![],
-        };
-        let actual: String = (&oid).into();
+        let oid = ObjectIdentifier::build(
+            ObjectIdentifierRoot::ItuT,
+            0x00,
+            vec![],
+        ).unwrap();
+        let actual: String = (oid).into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn encode_string_root_node_1() {
         let expected = "1.0";
-        let oid = ObjectIdentifier {
-            root: ObjectIdentifierRoot::Iso,
-            first_node: 0x00,
-            child_nodes: vec![],
-        };
+        let oid = ObjectIdentifier::build(
+            ObjectIdentifierRoot::Iso,
+            0x00,
+            vec![],
+        ).unwrap();
         let actual: String = (&oid).into();
         assert_eq!(expected, actual);
     }
@@ -555,11 +594,11 @@ mod tests {
     #[test]
     fn encode_string_root_node_2() {
         let expected = "2.0";
-        let oid = ObjectIdentifier {
-            root: ObjectIdentifierRoot::JointIsoItuT,
-            first_node: 0x00,
-            child_nodes: vec![],
-        };
+        let oid = ObjectIdentifier::build(
+            ObjectIdentifierRoot::JointIsoItuT,
+            0x00,
+            vec![],
+        ).unwrap();
         let actual: String = (&oid).into();
         assert_eq!(expected, actual);
     }
@@ -567,11 +606,11 @@ mod tests {
     #[test]
     fn encode_string_example_1() {
         let expected = "0.1.1.2.3.5.8.13.21";
-        let oid = ObjectIdentifier {
-            root: ObjectIdentifierRoot::ItuT,
-            first_node: 0x01,
-            child_nodes: vec![1, 2, 3, 5, 8, 13, 21],
-        };
+        let oid = ObjectIdentifier::build(
+            ObjectIdentifierRoot::ItuT,
+            0x01,
+            vec![1, 2, 3, 5, 8, 13, 21],
+        ).unwrap();
         let actual: String = (&oid).into();
         assert_eq!(expected, actual);
     }
@@ -579,66 +618,66 @@ mod tests {
     #[test]
     fn encode_string_example_2() {
         let expected = "2.39.42.2501.65535.2147483647.1235.2352";
-        let oid = ObjectIdentifier {
-            root: ObjectIdentifierRoot::JointIsoItuT,
-            first_node: 39,
-            child_nodes: vec![42, 2501, 65535, 2147483647, 1235, 2352],
-        };
+        let oid = ObjectIdentifier::build(
+            ObjectIdentifierRoot::JointIsoItuT,
+            39,
+            vec![42, 2501, 65535, 2147483647, 1235, 2352],
+        ).unwrap();
         let actual: String = (&oid).into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_binary_root_node_0() {
-        let expected = Ok(ObjectIdentifier {
-            root: ObjectIdentifierRoot::ItuT,
-            first_node: 0x00,
-            child_nodes: vec![],
-        });
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::ItuT,
+            0x00,
+            vec![],
+        );
         let actual = vec![0x00].try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_binary_root_node_1() {
-        let expected = Ok(ObjectIdentifier {
-            root: ObjectIdentifierRoot::Iso,
-            first_node: 0x00,
-            child_nodes: vec![],
-        });
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::Iso,
+            0x00,
+            vec![],
+        );
         let actual = vec![40].try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_binary_root_node_2() {
-        let expected = Ok(ObjectIdentifier {
-            root: ObjectIdentifierRoot::JointIsoItuT,
-            first_node: 0x00,
-            child_nodes: vec![],
-        });
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::JointIsoItuT,
+            0x00,
+            vec![],
+        );
         let actual = vec![80].try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_binary_example_1() {
-        let expected = Ok(ObjectIdentifier {
-            root: ObjectIdentifierRoot::ItuT,
-            first_node: 0x01,
-            child_nodes: vec![1, 2, 3, 5, 8, 13, 21],
-        });
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::ItuT,
+            0x01,
+            vec![1, 2, 3, 5, 8, 13, 21],
+        );
         let actual = vec![0x01, 0x01, 0x02, 0x03, 0x05, 0x08, 0x0D, 0x15].try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_binary_example_2() {
-        let expected = Ok(ObjectIdentifier {
-            root: ObjectIdentifierRoot::JointIsoItuT,
-            first_node: 39,
-            child_nodes: vec![42, 2501, 65535, 2147483647, 1235, 2352],
-        });
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::JointIsoItuT,
+            39,
+            vec![42, 2501, 65535, 2147483647, 1235, 2352],
+        );
         let actual = vec![
             0x77, 0x2A, 0x93, 0x45, 0x83, 0xFF, 0x7F, 0x87, 0xFF, 0xFF, 0xFF, 0x7F, 0x89, 0x53,
             0x92, 0x30,
@@ -649,55 +688,55 @@ mod tests {
 
     #[test]
     fn parse_string_root_node_0() {
-        let expected = Ok(ObjectIdentifier {
-            root: ObjectIdentifierRoot::ItuT,
-            first_node: 0x00,
-            child_nodes: vec![],
-        });
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::ItuT,
+            0x00,
+            vec![],
+        );
         let actual = "0.0".try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_string_root_node_1() {
-        let expected = Ok(ObjectIdentifier {
-            root: ObjectIdentifierRoot::Iso,
-            first_node: 0x00,
-            child_nodes: vec![],
-        });
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::Iso,
+            0x00,
+            vec![],
+        );
         let actual = "1.0".try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_string_root_node_2() {
-        let expected = Ok(ObjectIdentifier {
-            root: ObjectIdentifierRoot::JointIsoItuT,
-            first_node: 0x00,
-            child_nodes: vec![],
-        });
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::JointIsoItuT,
+            0x00,
+            vec![],
+        );
         let actual = "2.0".try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_string_example_1() {
-        let expected = Ok(ObjectIdentifier {
-            root: ObjectIdentifierRoot::ItuT,
-            first_node: 0x01,
-            child_nodes: vec![1, 2, 3, 5, 8, 13, 21],
-        });
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::ItuT,
+            0x01,
+            vec![1, 2, 3, 5, 8, 13, 21],
+        );
         let actual = "0.1.1.2.3.5.8.13.21".try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_string_example_2() {
-        let expected = Ok(ObjectIdentifier {
-            root: ObjectIdentifierRoot::JointIsoItuT,
-            first_node: 39,
-            child_nodes: vec![42, 2501, 65535, 2147483647, 1235, 2352],
-        });
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::JointIsoItuT,
+            39,
+            vec![42, 2501, 65535, 2147483647, 1235, 2352],
+        );
         let actual = "2.39.42.2501.65535.2147483647.1235.2352".try_into();
         assert_eq!(expected, actual);
     }
@@ -717,7 +756,7 @@ mod tests {
         for i in 40..core::u8::MAX {
             let string_val = format!("{}.2.3.4", i);
             let mut nodes_iter = string_val.split(".");
-            let actual = parse_string_first_node(&mut nodes_iter);
+            let actual = parse_string_first_node(nodes_iter.next().unwrap());
             assert_eq!(expected, actual);
         }
     }
@@ -727,17 +766,7 @@ mod tests {
         let expected = Err(ObjectIdentifierError::IllegalFirstChildNode);
         let string_val = String::new();
         let mut nodes_iter = string_val.split(".");
-        let actual = parse_string_first_node(&mut nodes_iter);
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
-    fn illegal_first_node_none() {
-        let expected = Err(ObjectIdentifierError::IllegalFirstChildNode);
-        let string_val = String::new();
-        let mut nodes_iter = string_val.split(".");
-        let _ = nodes_iter.next();
-        let actual = parse_string_first_node(&mut nodes_iter);
+        let actual = parse_string_first_node(nodes_iter.next().unwrap());
         assert_eq!(expected, actual);
     }
 
@@ -746,7 +775,7 @@ mod tests {
         let expected = Err(ObjectIdentifierError::IllegalFirstChildNode);
         let string_val = String::from("40");
         let mut nodes_iter = string_val.split(".");
-        let actual = parse_string_first_node(&mut nodes_iter);
+        let actual = parse_string_first_node(nodes_iter.next().unwrap());
         assert_eq!(expected, actual);
     }
 
@@ -814,11 +843,11 @@ mod tests {
     #[test]
     fn encode_to_string() {
         let expected = String::from("1.2.3.4");
-        let actual: String = ObjectIdentifier {
-            root: ObjectIdentifierRoot::Iso,
-            first_node: 2,
-            child_nodes: vec![3, 4],
-        }
+        let actual: String = ObjectIdentifier::build(
+            ObjectIdentifierRoot::Iso,
+            2,
+            vec![3, 4],
+        ).unwrap()
         .into();
         assert_eq!(expected, actual);
     }
@@ -826,11 +855,11 @@ mod tests {
     #[test]
     fn encode_to_bytes() {
         let expected = vec![0x2A, 0x03, 0x04];
-        let actual: Vec<u8> = ObjectIdentifier {
-            root: ObjectIdentifierRoot::Iso,
-            first_node: 2,
-            child_nodes: vec![3, 4],
-        }
+        let actual: Vec<u8> = ObjectIdentifier::build(
+            ObjectIdentifierRoot::Iso,
+            2,
+            vec![3, 4],
+        ).unwrap()
         .into();
         assert_eq!(expected, actual);
     }

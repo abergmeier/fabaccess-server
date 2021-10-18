@@ -149,7 +149,7 @@ impl StateAccessor {
     }
 }
 
-#[cfg(test)]
+#[cfg(test_dis)]
 mod tests {
     use super::*;
 
