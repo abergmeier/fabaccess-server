@@ -94,8 +94,12 @@ impl<A: Adapter> fmt::Debug for DB<A> {
 }
 
 impl<A> DB<A> {
-    fn new(db: RawDB) -> Self {
+    pub unsafe fn new_unchecked(db: RawDB) -> Self {
         Self { db, phantom: PhantomData }
+    }
+
+    fn new(db: RawDB) -> Self {
+        unsafe { Self::new_unchecked(db) }
     }
 
     /// Open the underlying DB, creating it if necessary

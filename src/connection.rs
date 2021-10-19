@@ -11,12 +11,6 @@ use crate::error::Result;
 
 use capnp_rpc::{rpc_twoparty_capnp, twoparty};
 
-use crate::schema::connection_capnp;
-
-use crate::db::access::{AccessControl, PermRule, RoleIdentifier};
-use crate::db::user::UserId;
-use crate::db::Databases;
-use crate::network::Network;
 
 #[derive(Debug)]
 /// Connection context

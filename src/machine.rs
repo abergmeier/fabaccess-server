@@ -1,7 +1,6 @@
 use std::ops::Deref;
 use std::iter::FromIterator;
 use std::sync::Arc;
-use futures_util::lock::Mutex;
 use std::path::Path;
 use std::task::{Poll, Context};
 use std::pin::Pin;
@@ -26,7 +25,6 @@ use crate::db::access::{AccessControl, PrivilegesBuf, PermissionBuf};
 use crate::db::machine::{MachineIdentifier, MachineState, Status};
 use crate::db::user::{User, UserData, UserId};
 
-use crate::network::MachineMap;
 use crate::space;
 
 pub struct Machines {

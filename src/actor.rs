@@ -11,7 +11,6 @@ use futures_signals::signal::Signal;
 use crate::db::machine::MachineState;
 use crate::config::Config;
 use crate::error::Result;
-use crate::network::ActorMap;
 
 use paho_mqtt::AsyncClient;
 use slog::Logger;
