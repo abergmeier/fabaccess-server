@@ -14,7 +14,7 @@ pub use lmdb::{
     RwTransaction,
 };
 
-use rkyv::{Fallible, Serialize, ser::serializers::AllocSerializer, AlignedVec};
+use rkyv::{Fallible, Serialize, ser::serializers::AllocSerializer, AlignedVec, Archived};
 
 mod raw;
 use raw::RawDB;
@@ -60,14 +60,17 @@ pub use user::{
 };
 
 use lmdb::Error;
+use rkyv::Deserialize;
 use rkyv::ser::serializers::AlignedSerializer;
 use std::sync::Arc;
 use std::path::Path;
 use crate::db::user::User;
-use crate::db::resources::Resource;
 use std::collections::HashMap;
-use crate::state::State;
+use crate::state::{State, OwnedEntry};
 use std::iter::FromIterator;
+use std::ops::Deref;
+use crate::oid::{ArchivedObjectIdentifier, ObjectIdentifier};
+use crate::state::value::SerializeValue;
 
 #[derive(Debug)]
 pub enum DBError {
@@ -169,21 +172,62 @@ impl Databases {
     }
 }
 
-#[derive(Debug, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Serialize)]
 pub struct Dump {
     users: HashMap<String, User>,
     passwds: HashMap<String, String>,
-    resources: HashMap<String, Resource>,
     states: HashMap<String, (State, State)>,
 }
 
 impl Dump {
     pub fn new(dbs: &Databases) -> Result<Self> {
         let users = HashMap::from_iter(dbs.userdb.get_all()?.into_iter());
-        let passwds = HashMap::new();
-        let resources = HashMap::new();
-        let states = HashMap::new();
+        let passwds = HashMap::from_iter(dbs.passdb.get_all()?.into_iter());
+        let mut states = HashMap::new();
+        for (name, id) in  dbs.resourcedb.get_all()?.into_iter() {
+            let input = dbs.statedb.get_input(id)?.map(|input| {
+                let input: &Archived<State> = input.deref();
+                let hash: u64 = input.hash;
+                let inner: Vec<OwnedEntry> = input.inner.iter().map(|entry| {
 
-        Ok(Self { users, passwds, resources, states })
+                    let oid: &ArchivedObjectIdentifier = &entry.oid;
+                    let bytes: &[u8] = oid.deref();
+                    let mut vec = Vec::with_capacity(bytes.len());
+                    vec.copy_from_slice(bytes);
+                    let oid = ObjectIdentifier::new_unchecked(vec.into_boxed_slice());
+
+                    let val: Box<dyn SerializeValue> = entry.val
+                        .deserialize(&mut rkyv::Infallible).unwrap();
+
+                    OwnedEntry { oid, val }
+                }).collect();
+                State { hash, inner }
+            }).unwrap_or(State::build().finish());
+
+            let output = dbs.statedb.get_output(id)?.map(|output| {
+                let output: &Archived<State> = output.deref();
+                let hash: u64 = output.hash;
+                let inner: Vec<OwnedEntry> = output.inner.iter().map(|entry| {
+
+                    let oid: &ArchivedObjectIdentifier = &entry.oid;
+                    let bytes: &[u8] = oid.deref();
+                    let mut vec = Vec::with_capacity(bytes.len());
+                    vec.copy_from_slice(bytes);
+                    let oid = ObjectIdentifier::new_unchecked(vec.into_boxed_slice());
+
+                    let val: Box<dyn SerializeValue> = entry.val
+                        .deserialize(&mut rkyv::Infallible).unwrap();
+
+                    OwnedEntry { oid, val }
+                }).collect();
+
+                State { hash, inner }
+            }).unwrap_or(State::build().finish());
+
+            let old = states.insert(name, (input, output));
+            assert!(old.is_none());
+        }
+
+        Ok(Self { users, passwds, states })
     }
 }

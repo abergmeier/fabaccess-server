@@ -22,7 +22,7 @@ use rkyv::{
 
 pub mod value;
 use value::{SerializeValue, RegisteredImpl};
-use crate::state::value::{TypeOid, DynVal, DynOwnedVal};
+use crate::state::value::{TypeOid, DynVal, DynOwnedVal, };
 use crate::oid::ObjectIdentifier;
 use serde::ser::SerializeMap;
 use std::ops::Deref;
@@ -41,7 +41,7 @@ use serde::de::Error as _;
 /// 2. it is serializable and storable in the database
 /// 3. it is sendable and forwarded to all Actors and Notifys
 pub struct State {
-    hash: u64,
+    pub hash: u64,
     pub inner: Vec<OwnedEntry>,
 }
 
@@ -78,7 +78,6 @@ impl fmt::Debug for State {
         sf.finish()
     }
 }
-
 
 pub struct StateBuilder {
     hasher: DefaultHasher,

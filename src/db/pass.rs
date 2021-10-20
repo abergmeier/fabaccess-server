@@ -55,4 +55,19 @@ impl PassDB {
         txn.commit()?;
         Ok(())
     }
+
+    pub fn get_all(&self) -> Result<Vec<(String, String)>> {
+        let txn = self.env.begin_ro_txn()?;
+        let mut cursor = self.db.open_ro_cursor(&txn)?;
+        let iter = cursor.iter_start();
+        let mut out = Vec::new();
+        for pass in iter {
+            let (uid, pass) = pass?;
+            let uid = unsafe { std::str::from_utf8_unchecked(uid).to_string() };
+            let pass = unsafe { pass.as_str().to_string() };
+            out.push((uid, pass));
+        }
+
+        Ok(out)
+    }
 }

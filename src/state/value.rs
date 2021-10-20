@@ -8,9 +8,7 @@ use std::{
     str::FromStr,
 };
 
-use rkyv::{Archive, Archived, Serialize, Deserialize, out_field, Fallible, DeserializeUnsized,
-           ArchivePointee, ArchiveUnsized, ArchivedMetadata, SerializeUnsized,
-           };
+use rkyv::{Archive, Archived, Serialize, Deserialize, out_field, Fallible, DeserializeUnsized, ArchivePointee, ArchiveUnsized, ArchivedMetadata, SerializeUnsized, };
 use rkyv_dyn::{DynSerializer, DynError, DynDeserializer};
 use rkyv_typename::TypeName;
 use ptr_meta::{DynMetadata, Pointee};
@@ -263,7 +261,7 @@ impl ArchiveUnsized for dyn SerializeValue {
 
 #[derive(Debug)]
 pub struct ArchivedValueMetadata {
-    type_oid: Archived<ObjectIdentifier>,
+    pub type_oid: Archived<ObjectIdentifier>,
 }
 
 impl ArchivedValueMetadata {

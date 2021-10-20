@@ -485,6 +485,23 @@ mod serde_support {
             }
         }
     }
+    impl ser::Serialize for ArchivedObjectIdentifier {
+        fn serialize<S>(
+            &self,
+            serializer: S,
+        ) -> Result<S::Ok, S::Error>
+            where
+                S: ser::Serializer,
+        {
+            if serializer.is_human_readable() {
+                let encoded: String = convert_to_string(self.deref())
+                    .expect("Failed to convert valid OID to String");
+                serializer.serialize_str(&encoded)
+            } else {
+                serializer.serialize_bytes(self.deref())
+            }
+        }
+    }
 }
 
 #[cfg(test)]

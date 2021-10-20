@@ -3,7 +3,7 @@ use std::{
     path::Path,
 };
 
-use rkyv::Archived;
+use rkyv::{Archived};
 
 use super::{
     DB,

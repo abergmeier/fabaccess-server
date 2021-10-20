@@ -1,7 +1,6 @@
 use rkyv::{Archive, Serialize, Deserialize};
 
 use super::{
-    AllocAdapter,
     DB,
 };
 use crate::db::AlignedAdapter;
@@ -23,16 +22,16 @@ pub struct Resource {
 #[derive(Clone)]
 pub struct ResourceDB {
     env: Arc<Environment>,
-    db: DB<AllocAdapter<Resource>>,
+    //db: DB<AllocAdapter<Resource>>,
     id_index: DB<AlignedAdapter<u64>>,
 }
 
 impl ResourceDB {
     pub unsafe fn new(env: Arc<Environment>, db: RawDB, id_index: RawDB) -> Self {
-        let db = DB::new_unchecked(db);
+        //let db = DB::new_unchecked(db);
         let id_index = DB::new_unchecked(id_index);
 
-        Self { env, db, id_index }
+        Self { env, /*db,*/ id_index }
     }
 
     pub unsafe fn open(env: Arc<Environment>) -> Result<Self> {
@@ -54,5 +53,20 @@ impl ResourceDB {
             ok.map(|num| *num)
         })?;
         Ok(id)
+    }
+
+    pub fn get_all(&self) -> Result<Vec<(String, u64)>> {
+        let txn = self.env.begin_ro_txn()?;
+        let mut cursor = self.id_index.open_ro_cursor(&txn)?;
+        let iter = cursor.iter_start();
+        let mut out = Vec::new();
+
+        for id in iter {
+            let (name, id) = id?;
+            let name = unsafe { std::str::from_utf8_unchecked(name).to_string() };
+            out.push((name, *id));
+        }
+
+        Ok(out)
     }
 }

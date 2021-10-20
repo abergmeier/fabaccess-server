@@ -4,6 +4,7 @@ use std::{
 };
 
 use crate::db::Transaction;
+use std::fmt::{Debug, Formatter};
 
 /// Memory Fixpoint for a value in the DB
 ///
@@ -39,5 +40,19 @@ impl<'env, T, V> Deref for LMDBorrow<T, V>
         // As long as the transaction is kept alive (which it is, because it's in self) state is a
         // valid pointer so this is safe.
         unsafe { self.ptr.as_ref() }
+    }
+}
+
+impl<'env, T, V: Debug> Debug for LMDBorrow<T, V> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:?}", self.deref())
+    }
+}
+
+impl<'env, T, V: serde::Serialize> serde::Serialize for LMDBorrow<T, V> {
+    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where S: serde::Serializer
+    {
+        self.deref().serialize(serializer)
     }
 }
