@@ -16,7 +16,7 @@ mod space;
 mod resource;
 mod schema;
 mod state;
-mod db;
+pub mod db;
 mod network;
 pub mod oid;
 mod varint;

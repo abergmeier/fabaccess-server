@@ -70,8 +70,8 @@ async-trait = "0.1.51"
 
 lazy_static = "1.4.0"
 
-#rust-argon2 = "0.8.3"
-#rand = "0.8.4"
+rust-argon2 = "0.8.3"
+rand = "0.8.4"
 
 [build-dependencies]
 capnpc = "0.14.4"
@@ -82,7 +82,6 @@ walkdir = "2.3.2"
 futures-test = "0.3.16"
 tempfile = "3.2"
 bincode = "2.0.0-dev"
-rand = "0.8"
 
 [patch.crates-io]
 bincode = { git = "https://github.com/dequbed/bincode.git", branch = "feature/in_place_buffer" }

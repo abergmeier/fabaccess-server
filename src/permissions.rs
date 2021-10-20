@@ -95,7 +95,11 @@ impl RoleIdentifier {
 
 impl fmt::Display for RoleIdentifier {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}/{}", self.name, self.source)
+        if self.source != "" {
+            write!(f, "{}/{}", self.name, self.source)
+        } else {
+            write!(f, "{}", self.name)
+        }
     }
 }
 
@@ -106,7 +110,7 @@ impl std::str::FromStr for RoleIdentifier {
         if let Some((name, source)) = split_once(s, '/') {
             Ok(RoleIdentifier { name: name.to_string(), source: source.to_string() })
         } else {
-            Err(RoleFromStrError::Invalid)
+            Ok(RoleIdentifier { name: s.to_string(), source: String::new() })
         }
     }
 }

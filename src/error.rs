@@ -8,6 +8,7 @@ use rsasl::SaslError;
 use futures::task as futures_task;
 
 use paho_mqtt::errors as mqtt;
+use crate::db::DBError;
 
 //FIXME use crate::network;
 
@@ -18,7 +19,7 @@ pub enum Error {
     IO(io::Error),
     Boxed(Box<dyn std::error::Error>),
     Capnp(capnp::Error),
-    LMDB(lmdb::Error),
+    DB(DBError),
     FuturesSpawn(futures_task::SpawnError),
     MQTT(mqtt::Error),
     BadVersion((u32,u32)),
@@ -43,8 +44,8 @@ impl fmt::Display for Error {
             Error::Capnp(e) => {
                 write!(f, "Cap'n Proto Error: {}", e)
             },
-            Error::LMDB(e) => {
-                write!(f, "LMDB Error: {}", e)
+            Error::DB(e) => {
+                write!(f, "DB Error: {:?}", e)
             },
             Error::FuturesSpawn(e) => {
                 write!(f, "Future could not be spawned: {}", e)
@@ -92,9 +93,9 @@ impl From<capnp::Error> for Error {
     }
 }
 
-impl From<lmdb::Error> for Error {
-    fn from(e: lmdb::Error) -> Error {
-        Error::LMDB(e)
+impl From<DBError> for Error {
+    fn from(e: DBError) -> Error {
+        Error::DB(e)
     }
 }
 

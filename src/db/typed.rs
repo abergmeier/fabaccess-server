@@ -68,6 +68,7 @@ impl<const N: usize> OutputBuffer for AllocSerializer<N> {
     }
 }
 
+// TODO: This should be possible to autoimplement for Sized Serializers
 pub trait OutputWriter: Fallible {
     fn write_into(&mut self, buf: &mut [u8]) -> Result<(), Self::Error>;
 }
@@ -141,13 +142,13 @@ impl<A: Adapter> DB<A>
         }
     }
 
-    pub fn open_ro_cursor<'txn, T: Transaction>(&self, txn: &'txn T) 
-        -> Result<Cursor<lmdb::RoCursor<'txn>, A>, A::Error>
+    pub fn open_ro_cursor<'txn, T: Transaction>(&self, txn: &'txn T)
+        -> Result<TypedCursor<lmdb::RoCursor<'txn>, A>, A::Error>
     {
         let c = self.db.open_ro_cursor(txn)
             .map_err(A::from_db_err)?;
         // Safe because we are providing both Adapter and cursor and know it matches
-        Ok(unsafe { Cursor::new(c) })
+        Ok(unsafe { TypedCursor::new(c) })
     }
 }
 
@@ -190,12 +191,12 @@ impl<'a, A> DB<A>
     }
 }
 
-pub struct Cursor<C, A> {
+pub struct TypedCursor<C, A> {
     cursor: C,
     phantom: PhantomData<A>,
 }
 
-impl<'txn, C, A> Cursor<C, A>
+impl<'txn, C, A> TypedCursor<C, A>
     where C: lmdb::Cursor<'txn>,
           A: Adapter,
 {

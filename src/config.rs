@@ -106,8 +106,8 @@ impl<'de> serde::de::Visitor<'de> for ListenVisitor {
     type Value = Listen;
 
     fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-        write!(formatter, "A string encoding a valid IP or Hostname (e.g. 127.0.0.1 or [::1]) with\
-         or without a defined port")
+        write!(formatter, "A string encoding a valid IP or Hostname (e.g. 127.0.0.1 or [::1]) with \
+        or without a defined port")
     }
 
     fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>

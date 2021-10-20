@@ -18,7 +18,7 @@
   , "notahostandnoport"
   ]
 , machines = ./machines.dhall
-, db_path = "/tmp/bffh"
+, db_path = "/tmp/bffh/"
 , roles = ./roles.dhall
 , mqtt_url = "tcp://localhost:1883"
 }

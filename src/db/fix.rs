@@ -3,7 +3,7 @@ use std::{
     ops::Deref,
 };
 
-use lmdb::Transaction;
+use crate::db::Transaction;
 
 /// Memory Fixpoint for a value in the DB
 ///
@@ -22,11 +22,12 @@ pub struct LMDBorrow<T, V> {
 impl<'env, T, V> LMDBorrow<T, V>
     where T: Transaction,
 {
-    pub unsafe fn reborrow(ptr: &'_ V) -> NonNull<V> {
-        ptr.into()
-    }
     pub unsafe fn new(ptr: NonNull<V>, txn: T) -> Self {
-        Self { ptr: ptr.into(), txn, }
+        Self { ptr: ptr.into(), txn }
+    }
+
+    pub fn unwrap_txn(self) -> T {
+        self.txn
     }
 }
 

@@ -75,6 +75,15 @@ impl StateDB {
         Ok(Self::new(env, input, output))
     }
 
+    pub fn create<P: AsRef<Path>>(path: P) -> lmdb::Result<Self> {
+        let flags = DatabaseFlags::empty();
+        let env = Self::open_env(path)?;
+        let input = unsafe { DB::create(&env, Some("input"), flags)?  };
+        let output = unsafe { DB::create(&env, Some("output"), flags)?  };
+
+        Ok(Self::new(env, input, output))
+    }
+
     fn update_txn(&self, txn: &mut RwTransaction, key: u64, input: &State, output: &State)
         -> Result<(), DBError>
     {

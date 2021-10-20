@@ -6,6 +6,7 @@ use std::{
 use clap::{App, Arg, crate_version, crate_description, crate_name};
 use std::str::FromStr;
 use diflouroborane::{config, error::Error};
+use diflouroborane::db::{Databases, Dump};
 use std::net::ToSocketAddrs;
 
 fn main_res() -> Result<(), Error> {
@@ -88,66 +89,66 @@ fn main_res() -> Result<(), Error> {
 
     println!("Final listens: {:?}", sockaddrs);
 
-    /*
+    let dbs = Databases::create(config.db_path)?;
+
     if matches.is_present("dump") {
-        let db = db::Databases::new(&log, &config)?;
-        let v = db.access.dump_roles().unwrap();
-        for (id, role) in v.iter() {
-            tracing::info!("Role {}:\n{}", id, role);
-        }
+        let dump = Dump::new(&dbs)?;
+        let encoded = serde_json::to_vec(&dump).unwrap();
 
-        let v = db.userdb.list_users()?;
-        for user in v.iter() {
-            tracing::info!("User {}:\n{:?}", user.id, user.data);
-        }
-        Ok(())
-    } else if matches.is_present("load") {
-        let db = db::Databases::new(&log, &config)?;
-        let mut dir = PathBuf::from(matches.value_of_os("load").unwrap());
-
-        dir.push("users.toml");
-        let map = db::user::load_file(&dir)?;
-        for (uid,user) in map.iter() {
-            db.userdb.put_user(uid, user)?;
-        }
-        tracing::debug!("Loaded users: {:?}", map);
-        dir.pop();
-
-        Ok(())
-    } else {
-        let ex = smol::Executor::new();
-        let db = db::Databases::new(&log, &config)?;
-
-        let machines = machine::load(&config)?;
-        let (actor_map, actors) = actor::load(&log, &config)?;
-        let (init_map, initiators) = initiator::load(&log, &config, db.userdb.clone(), db.access.clone())?;
-
-        let mut network = network::Network::new(machines, actor_map, init_map);
-
-        for (a,b) in config.actor_connections.iter() {
-            if let Err(e) = network.connect_actor(a,b) {
-                tracing::error!("{}", e);
-            }
-            tracing::info!("[Actor] Connected {} to {}", a, b);
-        }
-
-        for (a,b) in config.init_connections.iter() {
-            if let Err(e) = network.connect_init(a,b) {
-                tracing::error!("{}", e);
-            }
-            tracing::info!("[Initi] Connected {} to {}", a, b);
-        }
-
-        for actor in actors.into_iter() {
-            ex.spawn(actor).detach();
-        }
-        for init in initiators.into_iter() {
-            ex.spawn(init).detach();
-        }
-
-        server::serve_api_connections(log.clone(), config, db, network, ex)
+        // Direct writing to fd 1 is faster but also prevents any print-formatting that could
+        // invalidate the generated TOML
+        let stdout = io::stdout();
+        let mut handle = stdout.lock();
+        handle.write_all(&encoded).unwrap();
     }
-     */
+        /*
+        } else if matches.is_present("load") {
+            let db = db::Databases::new(&log, &config)?;
+            let mut dir = PathBuf::from(matches.value_of_os("load").unwrap());
+
+            dir.push("users.toml");
+            let map = db::user::load_file(&dir)?;
+            for (uid,user) in map.iter() {
+                db.userdb.put_user(uid, user)?;
+            }
+            tracing::debug!("Loaded users: {:?}", map);
+            dir.pop();
+
+            Ok(())
+        } else {
+            let ex = smol::Executor::new();
+            let db = db::Databases::new(&log, &config)?;
+
+            let machines = machine::load(&config)?;
+            let (actor_map, actors) = actor::load(&log, &config)?;
+            let (init_map, initiators) = initiator::load(&log, &config, db.userdb.clone(), db.access.clone())?;
+
+            let mut network = network::Network::new(machines, actor_map, init_map);
+
+            for (a,b) in config.actor_connections.iter() {
+                if let Err(e) = network.connect_actor(a,b) {
+                    tracing::error!("{}", e);
+                }
+                tracing::info!("[Actor] Connected {} to {}", a, b);
+            }
+
+            for (a,b) in config.init_connections.iter() {
+                if let Err(e) = network.connect_init(a,b) {
+                    tracing::error!("{}", e);
+                }
+                tracing::info!("[Initi] Connected {} to {}", a, b);
+            }
+
+            for actor in actors.into_iter() {
+                ex.spawn(actor).detach();
+            }
+            for init in initiators.into_iter() {
+                ex.spawn(init).detach();
+            }
+
+            server::serve_api_connections(log.clone(), config, db, network, ex)
+        }
+         */
 
     Ok(())
 }

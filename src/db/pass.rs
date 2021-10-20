@@ -1,78 +1,58 @@
 use std::sync::Arc;
-use std::path::Path;
-use std::fs;
-use std::collections::HashMap;
+use super::Environment;
+use super::AllocAdapter;
+use super::DB;
+use super::raw::RawDB;
+use super::{DatabaseFlags, WriteFlags};
+use crate::db::Result;
+use super::Transaction;
 
 use argon2;
-use lmdb::{Environment, Transaction, RwTransaction};
-use slog::Logger;
 
-use crate::error::Result;
-
+type Adapter = AllocAdapter<String>;
+#[derive(Clone)]
 pub struct PassDB {
-    log: Logger,
     env: Arc<Environment>,
-    db: lmdb::Database,
+    db: DB<Adapter>,
 }
 
 impl PassDB {
-    pub fn new(log: Logger, env: Arc<Environment>, db: lmdb::Database) -> Self {
-        Self { log, env, db }
+    pub unsafe fn new(env: Arc<Environment>, db: RawDB) -> Self {
+        let db = DB::new_unchecked(db);
+        Self { env, db }
     }
 
-    pub fn init(log: Logger, env: Arc<Environment>) -> Result<Self> {
-        let mut flags = lmdb::DatabaseFlags::empty();
-        flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
-        let db = env.create_db(Some("pass"), flags)?;
-
-        Ok(Self::new(log, env, db))
+    pub unsafe fn open(env: Arc<Environment>) -> Result<Self> {
+        let db = RawDB::open(&env, Some("pass"))?;
+        Ok(Self::new(env, db))
     }
 
-    /// Check a password for a given authcid.
-    ///
-    /// `Ok(None)` means the given authcid is not stored in the database
-    pub fn check_with_txn<T: Transaction>(&self, txn: &T, authcid: &str, password: &[u8]) -> Result<Option<bool>> {
-        match txn.get(self.db, &authcid.as_bytes()) {
-            Ok(bytes) => {
-                let encoded = unsafe { std::str::from_utf8_unchecked(bytes) };
-                let res = argon2::verify_encoded(encoded, password)?;
-                Ok(Some(res))
-            },
-            Err(lmdb::Error::NotFound) => { Ok(None) },
-            Err(e) => { Err(e.into()) },
-        }
+    pub unsafe fn create(env: Arc<Environment>) -> Result<Self> {
+        let flags = DatabaseFlags::empty();
+        let db = RawDB::create(&env, Some("pass"), flags)?;
+        Ok(Self::new(env, db))
     }
-    pub fn check(&self, authcid: &str, password: &[u8]) -> Result<Option<bool>> {
+
+    pub fn check_pw<P: AsRef<[u8]>>(&self, uid: &str, inpass: P) -> Result<Option<bool>> {
         let txn = self.env.begin_ro_txn()?;
-        self.check_with_txn(&txn, authcid, password)
-    }
-
-    /// Store a password for a given authcid, potentially overwriting an existing password
-    pub fn store_with_txn(&self, txn: &mut RwTransaction, authcid: &str, password: &[u8]) -> Result<()> {
-        let config = argon2::Config::default();
-        let salt: [u8; 16] = rand::random();
-        let hash = argon2::hash_encoded(password, &salt, &config)?;
-        txn.put(self.db, &authcid.as_bytes(), &hash.as_bytes(), lmdb::WriteFlags::empty())
-            .map_err(Into::into)
-    }
-
-    pub fn insert_multiple(&self, vec: Vec<(String, String)>) -> Result<()> {
-        let mut txn = self.env.begin_rw_txn()?;
-        for (authcid, password) in vec.iter() {
-            self.store_with_txn(&mut txn, authcid.as_ref(), password.as_bytes())?;
+        if let Some(pass) = self.db.get(&txn, &uid.as_bytes())? {
+            Ok(argon2::verify_encoded(pass.as_str(), inpass.as_ref())
+                .ok())
+        } else {
+            Ok(None)
         }
-        txn.commit()?;
-
-        let v: Vec<&String> = vec.iter().map(|(a,_)| a).collect();
-        debug!(self.log, "Loaded passwords for: {:?}", v);
-
-        Ok(())
     }
 
-    pub fn load_file<P: AsRef<Path>>(&self, path: P) -> Result<()> {
-        let f = fs::read(path)?;
-        let mut map: HashMap<String, String> = toml::from_slice(&f)?;
+    pub fn set_password<P: AsRef<[u8]>>(&self, uid: &str, password: P) -> Result<()> {
+        let cfg = argon2::Config::default();
+        let salt: [u8; 10] = rand::random();
+        let enc = argon2::hash_encoded(password.as_ref(), &salt, &cfg)
+            .expect("Hashing password failed for static valid config");
 
-        self.insert_multiple(map.drain().collect())
+        let flags = WriteFlags::empty();
+        let mut txn = self.env.begin_rw_txn()?;
+        self.db.put(&mut txn, &uid.as_bytes(), &enc, flags)?;
+        txn.commit()?;
+        Ok(())
     }
 }
