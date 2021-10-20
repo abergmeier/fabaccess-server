@@ -7,7 +7,6 @@ use clap::{App, Arg, crate_version, crate_description, crate_name};
 use std::str::FromStr;
 use diflouroborane::{config, error::Error};
 use std::net::ToSocketAddrs;
-use std::error::Error as _;
 
 fn main_res() -> Result<(), Error> {
     // Argument parsing

@@ -108,9 +108,17 @@ macro_rules! impl_convert_from_to {
 }
 
 impl_convert_from_to!(u8, 2, VarU8);
+impl_convert_from_to!(u16, 3, VarU16);
 impl_convert_from_to!(u32, 5, VarU32);
 impl_convert_from_to!(u64, 10, VarU64);
 impl_convert_from_to!(u128, 19, VarU128);
+
+#[cfg(target_pointer_width = "64")]
+type VarUsize = VarU64;
+#[cfg(target_pointer_width = "32")]
+type VarUsize = VarU32;
+#[cfg(target_pointer_width = "16")]
+type VarUsize = VarU16;
 
 impl<T, const N: usize> From<&T> for VarUInt<N>
     where T: Copy,
