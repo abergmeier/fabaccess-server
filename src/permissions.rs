@@ -175,11 +175,13 @@ pub struct PermissionBuf {
     inner: String,
 }
 impl PermissionBuf {
+    #[inline(always)]
     /// Allocate an empty `PermissionBuf`
     pub fn new() -> Self {
         PermissionBuf { inner: String::new() }
     }
 
+    #[inline(always)]
     /// Allocate a `PermissionBuf` with the given capacity given to the internal [`String`]
     pub fn with_capacity(cap: usize) -> Self {
         PermissionBuf { inner: String::with_capacity(cap) }
@@ -203,18 +205,22 @@ impl PermissionBuf {
         self.inner.push_str(perm.as_str())
     }
 
+    #[inline(always)]
     pub const fn from_string_unchecked(inner: String) -> Self {
         Self { inner }
     }
 
+    #[inline]
     pub fn from_perm(perm: &Permission) -> Self {
-        Self { inner: perm.inner.to_string() }
+        Self { inner: perm.as_str().to_string() }
     }
 
+    #[inline(always)]
     pub fn into_string(self) -> String {
         self.inner
     }
 
+    #[inline(always)]
     pub fn is_empty(&self) -> bool {
         self.inner.is_empty()
     }
@@ -258,21 +264,24 @@ impl fmt::Display for PermissionBuf {
 /// This means that ```(bffh.perm) > (bffh.perm.sub) == true```
 /// but ```(bffh.perm) > (unrelated.but.more.specific.perm) == false```.
 /// This allows to check if PermRule a grants Perm b by checking `a > b`.
-pub struct Permission {
-    inner: str
-}
+pub struct Permission(str);
 impl Permission {
+    #[inline(always)]
+    // We can't make this `const` just yet because `str` is always a fat pointer meaning we can't
+    // just const cast it, and `CoerceUnsized` and friends are currently unstable.
     pub fn new<S: AsRef<str> + ?Sized>(s: &S) -> &Permission {
         // Safe because s is a valid reference
         unsafe { &*(s.as_ref() as *const str as *const Permission) }
     }
 
+    #[inline(always)]
     pub fn as_str(&self) -> &str {
-        &self.inner
+        &self.0
     }
 
+    #[inline(always)]
     pub fn iter(&self) -> std::str::Split<char>  {
-        self.inner.split('.')
+        self.0.split('.')
     }
 }
 
