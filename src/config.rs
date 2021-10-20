@@ -8,7 +8,7 @@ use crate::error::Result;
 use std::fmt::Formatter;
 use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
 use std::str::FromStr;
-use crate::db::access::PermRule;
+use crate::permissions::{PermRule, RoleIdentifier};
 use serde::de::Error;
 
 pub fn read(path: &Path) -> Result<Config> {
@@ -41,13 +41,13 @@ pub struct Config {
 
     pub db_path: PathBuf,
 
-    pub roles: HashMap<String, RoleConfig>,
+    pub roles: HashMap<RoleIdentifier, RoleConfig>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoleConfig {
     #[serde(default = "Vec::new")]
-    pub parents: Vec<String>,
+    pub parents: Vec<RoleIdentifier>,
     #[serde(default = "Vec::new")]
     pub permissions: Vec<PermRule>,
 }

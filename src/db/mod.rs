@@ -49,8 +49,6 @@ pub use resources::{
     ResourceDB,
 };
 
-pub mod access;
-
 use lmdb::Error;
 use rkyv::ser::serializers::AlignedSerializer;
 

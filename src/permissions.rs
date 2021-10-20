@@ -1,96 +1,9 @@
 //! Access control logic
 //!
 
-use slog::Logger;
-use std::sync::Arc;
-
 use std::fmt;
-use std::collections::HashMap;
 use std::cmp::Ordering;
 use std::convert::{TryFrom, Into};
-
-use serde::{Serialize, Deserialize};
-
-use crate::error::Result;
-
-use crate::config::Config;
-
-pub struct AccessControl {
-    internal: HashMap<RoleIdentifier, Role>,
-}
-
-pub fn init(_log: Logger, config: &Config, _env: Arc<lmdb::Environment>) 
-    -> std::result::Result<HashMap<RoleIdentifier, Role>, crate::error::Error> 
-{
-    Ok(config.roles.iter().map(|(name, cfg)| {
-        let id = RoleIdentifier::new(name, "internal");
-        let parents = cfg.parents.iter().map(|n| RoleIdentifier::new(n, "internal")).collect();
-        let role = Role::new(parents, cfg.permissions.clone());
-        (id, role)
-    }).collect())
-}
-
-pub const ADMINPERM: &'static str = "bffh.admin";
-pub fn admin_perm() -> &'static Permission {
-    Permission::new(ADMINPERM)
-}
-
-impl AccessControl {
-    pub fn new(internal: HashMap<RoleIdentifier, Role>) -> Self {
-        Self {
-            internal,
-        }
-    }
-
-    pub fn dump_roles(&self) -> Result<Vec<(RoleIdentifier, Role)>> {
-        Ok(self.internal.iter().map(|(k,v)| (k.clone(), v.clone())).collect())
-    }
-}
-
-impl fmt::Debug for AccessControl {
-    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        let mut b = f.debug_struct("AccessControl");
-        b.field("internal", &self.internal.get_type_name().to_string());
-        b.finish()
-    }
-}
-
-pub trait RoleDB {
-    fn get_type_name(&self) -> &'static str;
-
-    fn get_role(&self, role_id: &RoleIdentifier) -> Result<Option<Role>>;
-
-    /// Tally a role dependency tree into a set
-    ///
-    /// A Default implementation exists which adapter may overwrite with more efficient
-    /// implementations.
-    fn tally_role(&self, roles: &mut HashMap<RoleIdentifier, Role>, role_id: &RoleIdentifier) -> Result<()> {
-        if let Some(role) = self.get_role(role_id)? {
-            // Only check and tally parents of a role at the role itself if it's the first time we
-            // see it
-            if !roles.contains_key(&role_id) {
-                for parent in role.parents.iter() {
-                    self.tally_role(roles, parent)?;
-                }
-
-                roles.insert(role_id.clone(), role);
-            }
-        }
-
-        Ok(())
-    }
-
-}
-
-impl RoleDB for HashMap<RoleIdentifier, Role> {
-    fn get_type_name(&self) -> &'static str {
-        "Internal"
-    }
-
-    fn get_role(&self, role_id: &RoleIdentifier) -> Result<Option<Role>> {
-        Ok(self.get(role_id).cloned())
-    }
-}
 
 /// A "Role" from the Authorization perspective
 ///
@@ -104,7 +17,7 @@ impl RoleDB for HashMap<RoleIdentifier, Role> {
 /// of a machine; if later on a similar enough machine is put to use the administrator can just add
 /// the permission for that machine to an already existing role instead of manually having to
 /// assign to all users.
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 pub struct Role {
     // If a role doesn't define parents, default to an empty Vec.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -159,7 +72,7 @@ fn split_once(s: &str, split: char) -> Option<(&str, &str)> {
         .map(|idx| (&s[..idx], &s[(idx+1)..]))
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(try_from = "String")]
 #[serde(into = "String")]
 /// Universal (relative) id of a role
@@ -232,30 +145,11 @@ impl fmt::Display for RoleFromStrError {
     }
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
-/// An identifier for a permission
-// XXX: Does remote permissions ever make sense?
-// I mean we kinda get them for free so maybe?
-pub enum PermIdentifier {
-    Local(PermRule),
-    Remote(PermRule, String),
-}
-impl fmt::Display for PermIdentifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            PermIdentifier::Local(perm) 
-                => write!(f, "{}", perm),
-            PermIdentifier::Remote(perm, source) 
-                => write!(f, "{}@{}", perm, source),
-        }
-    }
-}
-
 fn is_sep_char(c: char) -> bool {
     c == '.'
 }
 
-#[derive(Debug, Clone, Eq, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Eq, PartialEq, serde::Serialize, serde::Deserialize)]
 /// A set of privileges to a thing
 pub struct PrivilegesBuf {
     /// Which permission is required to know about the existance of this thing
@@ -268,7 +162,7 @@ pub struct PrivilegesBuf {
     pub manage: PermissionBuf
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[repr(transparent)]
 #[serde(transparent)]
 /// An owned permission string
@@ -309,7 +203,7 @@ impl PermissionBuf {
         self.inner.push_str(perm.as_str())
     }
 
-    pub const fn from_string(inner: String) -> Self {
+    pub const fn from_string_unchecked(inner: String) -> Self {
         Self { inner }
     }
 
@@ -320,11 +214,21 @@ impl PermissionBuf {
     pub fn into_string(self) -> String {
         self.inner
     }
+
+    pub fn is_empty(&self) -> bool {
+        self.inner.is_empty()
+    }
+}
+impl AsRef<String> for PermissionBuf {
+    #[inline(always)]
+    fn as_ref(&self) -> &String {
+        &self.inner
+    }
 }
 impl AsRef<str> for PermissionBuf {
     #[inline(always)]
     fn as_ref(&self) -> &str {
-        &self.inner[..]
+        &self.inner.as_str()
     }
 }
 impl AsRef<Permission> for PermissionBuf {
@@ -345,19 +249,21 @@ impl fmt::Display for PermissionBuf {
     }
 }
 
-#[repr(transparent)]
 #[derive(PartialEq, Eq, Hash, Debug)]
+#[repr(transparent)]
 /// A borrowed permission string
 /// 
 /// Permissions have total equality and partial ordering.
 /// Specifically permissions on the same path in a tree can be compared for specificity.
 /// This means that ```(bffh.perm) > (bffh.perm.sub) == true```
-/// but ```(bffh.perm) > (unrelated.but.specific.perm) == false```
+/// but ```(bffh.perm) > (unrelated.but.more.specific.perm) == false```.
+/// This allows to check if PermRule a grants Perm b by checking `a > b`.
 pub struct Permission {
     inner: str
 }
 impl Permission {
     pub fn new<S: AsRef<str> + ?Sized>(s: &S) -> &Permission {
+        // Safe because s is a valid reference
         unsafe { &*(s.as_ref() as *const str as *const Permission) }
     }
 
@@ -390,7 +296,8 @@ impl PartialOrd for Permission {
             (None, None) => Some(Ordering::Equal),
             (Some(_), None) => Some(Ordering::Less),
             (None, Some(_)) => Some(Ordering::Greater),
-            (Some(_), Some(_)) => panic!("Broken contract in Permission::partial_cmp: sides should never be both Some!"),
+            (Some(_), Some(_)) => unreachable!("Broken contract in Permission::partial_cmp: sides \
+            should never be both Some!"),
         }
     }
 }
@@ -402,7 +309,7 @@ impl AsRef<Permission> for Permission {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
 #[serde(try_from = "String")]
 #[serde(into = "String")]
 pub enum PermRule {
@@ -420,8 +327,8 @@ pub enum PermRule {
     /// i.e. `Children("bffh.perm")` grants bffh.perm.sub, bffh.perm.sub.two and also bffh.perm
     /// itself.
     Subtree(PermissionBuf),
-    // This lacks what LDAP calls ONELEVEL: The ability to grant the exact children but not several
-    // levels deep, i.e. Onelevel("bffh.perm") grants bffh.perm.sub *BUT NOT* bffh.perm.sub.two or
+    // This lacks what LDAP calls "ONELEVEL": The ability to grant the exact children but not several
+    // levels deep, i.e. `Onelevel("bffh.perm")` grants bffh.perm.sub *BUT NOT* bffh.perm.sub.two or
     // bffh.perm itself.
     // I can't think of a reason to use that so I'm skipping it for now.
 }
@@ -478,13 +385,13 @@ impl TryFrom<String> for PermRule {
             match &input[len-2..len] {
                 ".+" => {
                     input.truncate(len-2);
-                    Ok(PermRule::Children(PermissionBuf::from_string(input)))
+                    Ok(PermRule::Children(PermissionBuf::from_string_unchecked(input)))
                 },
                 ".*" => {
                     input.truncate(len-2);
-                    Ok(PermRule::Subtree(PermissionBuf::from_string(input)))
+                    Ok(PermRule::Subtree(PermissionBuf::from_string_unchecked(input)))
                 },
-                _ => Ok(PermRule::Base(PermissionBuf::from_string(input))),
+                _ => Ok(PermRule::Base(PermissionBuf::from_string_unchecked(input))),
             }
         }
     }
@@ -496,25 +403,43 @@ mod tests {
 
     #[test]
     fn permission_ord_test() {
-        assert!(PermissionBuf::from_string("bffh.perm".to_string()) 
-            > PermissionBuf::from_string("bffh.perm.sub".to_string()));
+        assert!(PermissionBuf::from_string_unchecked("bffh.perm".to_string())
+            > PermissionBuf::from_string_unchecked("bffh.perm.sub".to_string()));
     }
 
     #[test]
     fn permission_simple_check_test() {
-        let perm = PermissionBuf::from_string("test.perm".to_string());
+        let perm = PermissionBuf::from_string_unchecked("test.perm".to_string());
         let rule = PermRule::Base(perm.clone());
 
         assert!(rule.match_perm(&perm));
     }
 
     #[test]
-    #[should_panic]
     fn permission_children_checks_only_children() {
-        let perm = PermissionBuf::from_string("test.perm".to_string());
+        let perm = PermissionBuf::from_string_unchecked("test.perm".to_string());
         let rule = PermRule::Children(perm.clone());
 
+        assert_eq!(rule.match_perm(&perm), false);
+
+        let perm2 = PermissionBuf::from_string_unchecked("test.perm.child".to_string());
+        let perm3 = PermissionBuf::from_string_unchecked("test.perm.child.deeper".to_string());
+        assert!(rule.match_perm(&perm2));
+        assert!(rule.match_perm(&perm3));
+    }
+
+    #[test]
+    fn permission_subtree_checks_base() {
+        let perm = PermissionBuf::from_string_unchecked("test.perm".to_string());
+        let rule = PermRule::Subtree(perm.clone());
+
         assert!(rule.match_perm(&perm));
+
+        let perm2 = PermissionBuf::from_string_unchecked("test.perm.child".to_string());
+        let perm3 = PermissionBuf::from_string_unchecked("test.perm.child.deeper".to_string());
+
+        assert!(rule.match_perm(&perm2));
+        assert!(rule.match_perm(&perm3));
     }
 
     #[test]
@@ -542,63 +467,19 @@ mod tests {
         }
     }
 
-    #[test]
-    fn load_examples_roles_test() {
-        let mut roles = Role::load_file("examples/roles.toml")
-            .expect("Couldn't load the example role defs. Does `examples/roles.toml` exist?");
-
-        let expected = vec![
-            (RoleIdentifier { name: "anotherrole".to_string(), source: "lmdb".to_string() },
-            Role {
-                parents: vec![],
-                permissions: vec![],
-            }),
-            (RoleIdentifier { name: "testrole".to_string(), source: "lmdb".to_string() },
-            Role {
-                parents: vec![],
-                permissions: vec![
-                    PermRule::Subtree(PermissionBuf::from_string("lab.test".to_string()))
-                ],
-            }),
-            (RoleIdentifier { name: "somerole".to_string(), source: "lmdb".to_string() },
-            Role {
-                parents: vec![
-                    RoleIdentifier::local_from_str("lmdb".to_string(), "testparent".to_string()),
-                ],
-                permissions: vec![
-                    PermRule::Base(PermissionBuf::from_string("lab.some.admin".to_string()))
-                ],
-            }),
-            (RoleIdentifier { name: "testparent".to_string(), source: "lmdb".to_string() },
-            Role {
-                parents: vec![],
-                permissions: vec![
-                    PermRule::Base(PermissionBuf::from_string("lab.some.write".to_string())),
-                    PermRule::Base(PermissionBuf::from_string("lab.some.read".to_string())),
-                    PermRule::Base(PermissionBuf::from_string("lab.some.disclose".to_string())),
-                ],
-            }),
-        ];
-
-        for (id, role) in expected {
-            assert_eq!(roles.remove(&id).unwrap(), role);
-        }
-
-        assert!(roles.is_empty())
-    }
 
     #[test]
     fn rules_from_string_test() {
         assert_eq!(
-            PermRule::Base(PermissionBuf::from_string("bffh.perm".to_string())),
+            PermRule::Base(PermissionBuf::from_string_unchecked("bffh.perm".to_string())),
             PermRule::try_from("bffh.perm".to_string()).unwrap()
         );
         assert_eq!(
-            PermRule::Children(PermissionBuf::from_string("bffh.perm".to_string())),
+            PermRule::Children(PermissionBuf::from_string_unchecked("bffh.perm".to_string())),
             PermRule::try_from("bffh.perm.+".to_string()).unwrap()
         );
         assert_eq!(
-            PermRule::Subtree(PermissionBuf::from_string("bffh.perm".to_string())),
+            PermRule::Subtree(PermissionBuf::from_string_unchecked("bffh.perm".to_string())),
             PermRule::try_from("bffh.perm.*".to_string()).unwrap()
         );
     }

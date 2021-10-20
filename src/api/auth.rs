@@ -1,6 +1,6 @@
 //! Authentication subsystem
 //!
-//! Authorization is over in `access.rs`
+//! Authorization is over in `permissions`
 //! Authentication using SASL
 
 use std::sync::Arc;

@@ -22,6 +22,7 @@ pub mod oid;
 mod varint;
 pub mod error;
 pub mod config;
+mod permissions;
 
 /*
 
