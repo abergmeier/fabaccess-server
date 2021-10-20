@@ -3,8 +3,6 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 
-use flexbuffers;
-
 use slog::Logger;
 use lmdb::{Environment, Transaction, RwTransaction, Cursor};
 
@@ -12,7 +10,6 @@ use crate::config::Config;
 use crate::error::Result;
 
 use crate::db::access::{Permission, Role, RoleIdentifier, RoleDB};
-use crate::db::user::UserData;
 
 #[derive(Clone, Debug)]
 pub struct Internal {
@@ -31,28 +28,28 @@ impl Internal {
     pub fn _check<T: Transaction, P: AsRef<Permission>>(&self, txn: &T, user: &UserData, perm: &P)
         -> Result<bool>
     {
-        debug!(self.log, "Checking user {:?} for permission {:?}", user, perm.as_ref());
+        tracing::debug!("Checking user {:?} for permission {:?}", user, perm.as_ref());
         // Tally all roles. Makes dependent roles easier
         let mut roles = HashMap::new();
         for role_id in user.roles.iter() {
-            debug!(self.log, "Tallying role {} for its parents", role_id);
+            tracing::debug!("Tallying role {} for its parents", role_id);
             self._tally_role(txn, &mut roles, role_id)?;
         }
 
         // Iter all unique role->permissions we've found and early return on match. 
         // TODO: Change this for negative permissions?
         for (roleid, role) in roles.iter() {
-            debug!(self.log, "  checking role {}", roleid);
+            tracing::debug!("  checking role {}", roleid);
             for perm_rule in role.permissions.iter() {
                 if perm_rule.match_perm(perm) {
-                    debug!(self.log, "  matches permission rule {}", perm_rule);
+                    tracing::debug!("  matches permission rule {}", perm_rule);
                     return Ok(true);
                 }
-                trace!(self.log, "  rejecting permission rule {}", perm_rule);
+                tracing::trace!("  rejecting permission rule {}", perm_rule);
             }
         }
 
-        debug!(self.log, "Checked all roles, rejecting access");
+        tracing::debug!("Checked all roles, rejecting access");
 
         return Ok(false);
     }
@@ -69,14 +66,14 @@ impl Internal {
                 roles.insert(role_id.clone(), role);
             }
         } else {
-            warn!(self.log, "Did not find role {} while trying to tally", role_id);
+            tracing::warn!("Did not find role {} while trying to tally", role_id);
         }
 
         Ok(())
     }
 
     pub fn _get_role<'txn, T: Transaction>(&self, txn: &'txn T, role_id: &RoleIdentifier) -> Result<Option<Role>> {
-        debug!(self.log, "Reading role '{}'", role_id.name);
+        tracing::debug!("Reading role '{}'", role_id.name);
         match txn.get(self.roledb, &role_id.name.as_bytes()) {
             Ok(bytes) => {
                 Ok(Some(flexbuffers::from_slice(bytes)?))
@@ -109,7 +106,8 @@ impl Internal {
                     let role_id = RoleIdentifier::local_from_str("lmdb".to_string(), role_name_str.to_string());
                     match flexbuffers::from_slice(v) {
                         Ok(role) => vec.push((role_id, role)),
-                        Err(e) => error!(self.log, "Bad format for roleid {}: {}", role_id, e),
+                        Err(e) => tracing::error!("Bad format for roleid {}: {}", role_id,
+                            e),
                     }
                 },
                 Err(e) => return Err(e.into()),
@@ -134,7 +132,7 @@ impl Internal {
             self.put_role(txn, k, v.clone())?;
         }
 
-        debug!(self.log, "Loaded roles: {:?}", roles);
+        tracing::debug!("Loaded roles: {:?}", roles);
 
         Ok(())
     }
@@ -154,20 +152,4 @@ impl RoleDB for Internal {
         let txn = self.env.begin_ro_txn()?;
         self._tally_role(&txn, roles, role_id)
     }
-}
-
-
-
-/// Initialize the access db by loading all the lmdb databases
-pub fn init(log: Logger, _config: &Config, env: Arc<lmdb::Environment>) 
-    -> std::result::Result<Internal, crate::error::Error> 
-{
-    let mut flags = lmdb::DatabaseFlags::empty();
-    flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
-    let roledb = env.create_db(Some("role"), flags)?;
-    debug!(&log, "Opened access database '{}' successfully.", "role");
-    //let permdb = env.create_db(Some("perm"), flags)?;
-    //debug!(&log, "Opened access database '{}' successfully.", "perm");
-
-    Ok(Internal::new(log, env, roledb))
 }

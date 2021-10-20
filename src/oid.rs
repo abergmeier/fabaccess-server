@@ -297,7 +297,7 @@ fn parse_string_child_node(
     node_str: &str,
     out: &mut Vec<u8>
 ) -> Result<(), ObjectIdentifierError> {
-    let mut node: Node = node_str.parse()
+    let node: Node = node_str.parse()
         .map_err(|_| ObjectIdentifierError::IllegalChildNodeValue)?;
     // TODO bench against !*node &= 0x80, compiler may already optimize better
     if node <= 127 {

@@ -7,20 +7,13 @@ use std::sync::Arc;
 use std::fmt;
 use std::collections::HashMap;
 use std::cmp::Ordering;
-use std::path::Path;
-use std::fs;
-use std::iter::FromIterator;
 use std::convert::{TryFrom, Into};
 
 use serde::{Serialize, Deserialize};
 
 use crate::error::Result;
 
-pub mod internal;
-
 use crate::config::Config;
-use crate::db::user::UserData;
-pub use internal::Internal;
 
 pub struct AccessControl {
     internal: HashMap<RoleIdentifier, Role>,
@@ -47,25 +40,6 @@ impl AccessControl {
         Self {
             internal,
         }
-    }
-
-    pub fn check<P: AsRef<Permission>>(&self, user: &UserData, perm: P) -> Result<bool> {
-        let mut roles = HashMap::new();
-        // Check all user roles by..
-        Ok(user.roles.iter().any(|role| {
-            // 1. Getting the whole tree down to a list of Roles applied
-            self.internal.tally_role(&mut roles, role)?;
-
-            // 2. Checking if any of the roles the user has give any permission granting the
-            //    requested one.
-            roles.drain().any(|(rid, role)| {
-                role.permissions.iter().any(|rule| rule.match_perm(perm))
-            })
-        }))
-    }
-
-    pub fn collect_permrules(&self, user: &UserData) -> Result<Vec<PermRule>> {
-        self.internal.collect_permrules(user)
     }
 
     pub fn dump_roles(&self) -> Result<Vec<(RoleIdentifier, Role)>> {
@@ -106,21 +80,6 @@ pub trait RoleDB {
         Ok(())
     }
 
-    fn collect_permrules(&self, user: &UserData) -> Result<Vec<PermRule>> {
-        let mut roleset = HashMap::new();
-        for role_id in user.roles.iter() {
-            self.tally_role(&mut roleset, role_id)?;
-        }
-
-        let mut output = Vec::new();
-
-        // Iter all unique role->permissions we've found and early return on match. 
-        for (_roleid, role) in roleset.iter() {
-            output.extend(role.permissions.iter().cloned())
-        }
-
-        return Ok(output);
-    }
 }
 
 impl RoleDB for HashMap<RoleIdentifier, Role> {
@@ -162,15 +121,6 @@ pub struct Role {
 }
 
 impl Role {
-    fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<RoleIdentifier, Role>> {
-        let content = fs::read(path)?;
-        let file_roles: HashMap<String, Role> = toml::from_slice(&content[..])?;
-
-        Ok(HashMap::from_iter(file_roles.into_iter().map(|(key, value)| {
-            (RoleIdentifier::local_from_str("lmdb".to_string(), key), value)
-        })))
-    }
-
     pub fn new(parents: Vec<RoleIdentifier>, permissions: Vec<PermRule>) -> Self {
         Self { parents, permissions }
     }

@@ -2,12 +2,14 @@ use std::{
     io,
     io::Write,
     path::PathBuf,
-    sync::Arc,
 };
 use clap::{App, Arg, crate_version, crate_description, crate_name};
 use std::str::FromStr;
+use diflouroborane::{config, error::Error};
+use std::net::ToSocketAddrs;
+use std::error::Error as _;
 
-fn main_res() -> Result<(), dyn std::error::Error> {
+fn main_res() -> Result<(), Error> {
     // Argument parsing
     // values for the name, description and version are pulled from `Cargo.toml`.
     let matches = App::new(crate_name!())
@@ -56,7 +58,7 @@ fn main_res() -> Result<(), dyn std::error::Error> {
     } else if matches.is_present("check config") {
         let configpath = matches.value_of("config").unwrap_or("/etc/diflouroborane.dhall");
         match config::read(&PathBuf::from_str(configpath).unwrap()) {
-            Ok(cfg) => {
+            Ok(_) => {
                 //TODO: print a normalized version of the supplied config
                 println!("config is valid");
                 std::process::exit(0);
@@ -71,8 +73,23 @@ fn main_res() -> Result<(), dyn std::error::Error> {
     // If no `config` option is given use a preset default.
     let configpath = matches.value_of("config").unwrap_or("/etc/diflouroborane.dhall");
     let config = config::read(&PathBuf::from_str(configpath).unwrap())?;
-    tracing::debug!("Loaded Config: {:?}", config);
+    println!("{:#?}", config);
 
+    let mut sockaddrs = Vec::new();
+    for listen in config.listens {
+        match listen.to_socket_addrs() {
+            Ok(addrs) => {
+                sockaddrs.extend(addrs)
+            },
+            Err(e) => {
+                tracing::error!("Invalid listen \"{}\" {}", listen, e);
+            }
+        }
+    }
+
+    println!("Final listens: {:?}", sockaddrs);
+
+    /*
     if matches.is_present("dump") {
         let db = db::Databases::new(&log, &config)?;
         let v = db.access.dump_roles().unwrap();
@@ -131,6 +148,9 @@ fn main_res() -> Result<(), dyn std::error::Error> {
 
         server::serve_api_connections(log.clone(), config, db, network, ex)
     }
+     */
+
+    Ok(())
 }
 
 fn main() {

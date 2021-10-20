@@ -20,7 +20,8 @@ mod db;
 mod network;
 pub mod oid;
 mod varint;
-mod error;
+pub mod error;
+pub mod config;
 
 /*
 

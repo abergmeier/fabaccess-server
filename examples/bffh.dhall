@@ -9,9 +9,13 @@
 , init_connections = [] : List { _1 : Text, _2 : Text }
 , initiators = ./initiators.dhall
 , listens =
-  [ { address = "127.0.0.1", port = Some 59661 }
-  , { address = "::1", port = Some 59661 }
-  , { address = "192.168.0.114", port = Some 59661 }
+  [ "127.0.0.1"
+  , "::1"
+  , "[::1]:1235"
+  , "localhost:1234"
+  , "localhost"
+  , "notahost:541"
+  , "notahostandnoport"
   ]
 , machines = ./machines.dhall
 , db_path = "/tmp/bffh"
