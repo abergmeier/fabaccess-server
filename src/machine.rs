@@ -65,7 +65,7 @@ pub struct Machine {
 }
 
 impl Machine {
-    pub fn new(inner: Inner, desc: MachineDescription, ) -> Self {
+    pub fn new(inner: Inner, desc: MachineDescription) -> Self {
         Self { 
             id: uuid::Uuid::default(),
             inner: Arc::new(Mutex::new(inner)),
@@ -225,6 +225,10 @@ pub struct MachineDescription {
     pub name: String,
     /// An optional description of the Machine.
     pub description: Option<String>,
+
+    #[serde(default)]
+    #[serde(flatten)]
+    pub wiki: Option<String>,
 
     /// The permission required
     #[serde(flatten)]

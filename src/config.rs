@@ -80,6 +80,7 @@ impl Default for Config {
         machines.insert("Testmachine".to_string(), MachineDescription {
             name: "Testmachine".to_string(),
             description: Some("A test machine".to_string()),
+            wiki: None,
             privs: PrivilegesBuf {
                 disclose: PermissionBuf::from_string("lab.test.read".to_string()),
                 read: PermissionBuf::from_string("lab.test.read".to_string()),
