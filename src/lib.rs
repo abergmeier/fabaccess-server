@@ -24,23 +24,26 @@ pub mod error;
 pub mod config;
 mod permissions;
 
-/*
 
-use clap::{App, Arg};
+mod runtime {
+    use bastion::prelude::*;
 
-use std::io;
-use std::io::Write;
-use std::path::PathBuf;
-use std::str::FromStr;
+    pub fn startup() {
+        let config = Config::new().hide_backtraces();
 
-use std::sync::Arc;
+        Bastion::init_with(config);
 
-use smol::Executor;
+        Bastion::start();
 
-use error::Error;
+        let sup = Bastion::supervisor(|sp| {
+            sp  .with_strategy(SupervisionStrategy::OneForAll)
+                .children(|children| {
+                    children
+                })
+        }).expect("Failed to create supervisor");
+    }
 
-use slog::Logger;
-
-use paho_mqtt::AsyncClient;
-use crate::config::Config;
-*/
+    pub fn run() {
+        Bastion::block_until_stopped()
+    }
+}
