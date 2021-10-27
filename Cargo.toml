@@ -8,6 +8,7 @@ authors = [ "dequbed <me@dequbed.space>"
           ]
 license = "LGPL-3.0"
 edition = "2021"
+publish = false
 
 [profile.release]
 opt-level = 3
