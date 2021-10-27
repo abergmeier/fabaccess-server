@@ -505,9 +505,20 @@ mod serde_support {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::convert::TryInto;
+
+    pub(crate) fn gen_random() -> ObjectIdentifier {
+        let amt: u8 = rand::random::<u8>() % 10 + 1;
+        let mut children = Vec::new();
+        for i in 0..amt {
+            children.push(rand::random());
+        }
+
+        ObjectIdentifier::build(ObjectIdentifierRoot::JointIsoItuT, 25, children)
+            .unwrap()
+    }
 
     #[test]
     fn bincode_serde_roundtrip() {

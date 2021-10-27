@@ -54,17 +54,17 @@ impl<K, A: Adapter> Adapter for HashAdapter<K, A>
     where K: Archive,
           Entry<K, A::Value>: Serialize<A::Serializer>,
 {
-    type Value = Entry<K, A::Value>;
     type Serializer = A::Serializer;
+    type Value = Entry<K, A::Value>;
 
     fn new_serializer() -> Self::Serializer
         { A::new_serializer() }
 
-    fn from_db_err(e: lmdb::Error) -> <A as Fallible>::Error
-        { A::from_db_err(e) }
-
     fn from_ser_err(e: <Self::Serializer as Fallible>::Error) -> <A as Fallible>::Error
         { A::from_ser_err(e) }
+
+    fn from_db_err(e: lmdb::Error) -> <A as Fallible>::Error
+        { A::from_db_err(e) }
 }
 
 

@@ -4,7 +4,6 @@ use serde_dhall;
 
 use rsasl::SaslError;
 
-use paho_mqtt::errors as mqtt;
 use crate::db::DBError;
 
 //FIXME use crate::network;
@@ -17,7 +16,6 @@ pub enum Error {
     Boxed(Box<dyn std::error::Error>),
     Capnp(capnp::Error),
     DB(DBError),
-    MQTT(mqtt::Error),
     Denied,
 }
 
@@ -41,9 +39,6 @@ impl fmt::Display for Error {
             },
             Error::DB(e) => {
                 write!(f, "DB Error: {:?}", e)
-            },
-            Error::MQTT(e) => {
-                write!(f, "Paho MQTT encountered an error: {}", e)
             },
             Error::Denied => {
                 write!(f, "You do not have the permission required to do that.")
@@ -85,12 +80,6 @@ impl From<capnp::Error> for Error {
 impl From<DBError> for Error {
     fn from(e: DBError) -> Error {
         Error::DB(e)
-    }
-}
-
-impl From<mqtt::Error> for Error {
-    fn from(e: mqtt::Error) -> Error {
-        Error::MQTT(e)
     }
 }
 

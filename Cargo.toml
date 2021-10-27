@@ -9,9 +9,6 @@ authors = [ "dequbed <me@dequbed.space>"
 license = "LGPL-3.0"
 edition = "2018"
 
-[profile.dev]
-lto = "thin"
-
 [profile.release]
 opt-level = 3
 debug = true
@@ -40,6 +37,7 @@ ptr_meta = "0.1"
 rkyv_typename = "0.7"
 rkyv_dyn = "0.7"
 inventory = "0.1"
+chrono = { version = "0.4", features = ["serde"] }
 
 # Password hashing for internal users
 rust-argon2 = "0.8.3"
@@ -68,9 +66,6 @@ serde = { version = "1.0.130", features = ["derive"] }
 erased-serde = "0.3"
 serde_dhall = { version = "0.10.1", default-features = false }
 serde_json = "1.0"
-
-# Shelly support
-paho-mqtt = { git = "https://github.com/dequbed/paho.mqtt.rust.git", branch = "master", features = ["build_bindgen"] }
 
 [build-dependencies]
 capnpc = "0.14.4"

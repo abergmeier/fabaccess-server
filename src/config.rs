@@ -37,8 +37,8 @@ pub struct Config {
 
     pub mqtt_url: String,
 
-    pub actor_connections: Box<[(String, String)]>,
-    pub init_connections: Box<[(String, String)]>,
+    pub actor_connections: Vec<(String, String)>,
+    pub init_connections: Vec<(String, String)>,
 
     pub db_path: PathBuf,
 
@@ -174,12 +174,12 @@ impl Default for Config {
             actors,
             initiators,
             mqtt_url: "tcp://localhost:1883".to_string(),
-            actor_connections: Box::new([
+            actor_connections: vec![
                 ("Testmachine".to_string(), "Actor".to_string()),
-            ]),
-            init_connections: Box::new([
+            ],
+            init_connections: vec![
                 ("Initiator".to_string(), "Testmachine".to_string()),
-            ]),
+            ],
 
             db_path: PathBuf::from("/run/bffh/database"),
             roles: HashMap::new(),

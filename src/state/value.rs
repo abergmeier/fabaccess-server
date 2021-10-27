@@ -30,7 +30,7 @@ use std::mem::MaybeUninit;
 /// 2. Implement rkyv's [`Serialize`](rkyv::Serialize).
 /// 3. Implement TypeOid on your Archived type (i.e. `<T as Archive>::Archived`)
 /// 4. Implement this
-pub trait Value: Any + fmt::Debug + erased_serde::Serialize {
+pub trait Value: Any + fmt::Debug + erased_serde::Serialize  + Sync {
     /// Initialize `&mut self` from `deserializer`
     ///
     /// At the point this is called &mut self is of undefined value but guaranteed to be well
@@ -41,13 +41,23 @@ pub trait Value: Any + fmt::Debug + erased_serde::Serialize {
     /// implementations this is important to keep in mind.
     fn deserialize_init<'de>(&mut self, deserializer: &mut dyn erased_serde::Deserializer<'de>)
                                      -> Result<(), erased_serde::Error>;
+
+    /// Implement `PartialEq` dynamically.
+    ///
+    /// This should return `true` iff the Value is of the same type and `self` == `other` for
+    /// non-dynamic types would return `true`.
+    /// It is safe to always return `false`.
+    fn dyn_eq(&self, other: &dyn Value) -> bool;
+
+    fn as_value(&self) -> &dyn Value;
+    fn as_any(&self) -> &dyn Any;
 }
 erased_serde::serialize_trait_object!(Value);
 erased_serde::serialize_trait_object!(SerializeValue);
 erased_serde::serialize_trait_object!(DeserializeValue);
 
 impl<T> Value for T
-    where T: Any + fmt::Debug
+    where T: Any + fmt::Debug + PartialEq + Sync
            + erased_serde::Serialize
            + for<'de> serde::Deserialize<'de>
 {
@@ -56,6 +66,24 @@ impl<T> Value for T
     {
         *self = erased_serde::deserialize(deserializer)?;
         Ok(())
+    }
+
+    fn dyn_eq(&self, other: &dyn Value) -> bool {
+        other.as_any().downcast_ref().map_or(false, |other: &T| other == self)
+    }
+
+    fn as_any(&self) -> &dyn Any {
+        self
+    }
+
+    fn as_value(&self) -> &dyn Value {
+        self
+    }
+}
+
+impl PartialEq for dyn Value {
+    fn eq(&self, other: &Self) -> bool {
+        self.dyn_eq(other)
     }
 }
 
@@ -216,12 +244,30 @@ pub trait DeserializeDynOid {
 }
 
 #[ptr_meta::pointee]
-pub trait SerializeValue: Value + SerializeDynOid {}
+pub trait SerializeValue: Value + SerializeDynOid {
+    fn dyn_clone(&self) -> Box<dyn SerializeValue>;
+}
 
-impl<T: Archive + Value + SerializeDynOid> SerializeValue for T
+impl<T: Archive + Value + SerializeDynOid + Clone> SerializeValue for T
     where
         T::Archived: RegisteredImpl
-{}
+{
+    fn dyn_clone(&self) -> Box<dyn SerializeValue> {
+        Box::new(self.clone())
+    }
+}
+
+impl PartialEq for dyn SerializeValue {
+    fn eq(&self, other: &Self) -> bool {
+        self.dyn_eq(other.as_value())
+    }
+}
+
+impl Clone for Box<dyn SerializeValue> {
+    fn clone(&self) -> Self {
+        self.dyn_clone()
+    }
+}
 
 #[ptr_meta::pointee]
 pub trait DeserializeValue: Value + DeserializeDynOid {}
@@ -519,10 +565,27 @@ oidvalue!(OID_I128, i128);
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-#[archive_attr(derive(TypeName, Debug, serde::Serialize, serde::Deserialize))]
+#[archive_attr(derive(TypeName, Debug, PartialEq, serde::Serialize, serde::Deserialize))]
 pub struct Vec3u8 {
     pub a: u8,
     pub b: u8,
     pub c: u8,
 }
 oidvalue!(OID_VEC3U8, Vec3u8, ArchivedVec3u8);
+
+#[cfg(test)]
+mod tests {
+    use rand::Rng;
+    use rand::distributions::Standard;
+    use rand::prelude::Distribution;
+    use crate::state::value::Vec3u8;
+
+    impl Distribution<Vec3u8> for Standard {
+        fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec3u8 {
+            let a = self.sample(rng);
+            let b = self.sample(rng);
+            let c = self.sample(rng);
+            Vec3u8 { a, b, c }
+        }
+    }
+}

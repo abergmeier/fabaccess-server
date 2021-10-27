@@ -33,6 +33,7 @@ use serde::de::Error as _;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Archive, Serialize, Deserialize)]
+#[derive(Clone, PartialEq)]
 #[archive_attr(derive(Debug))]
 /// State object of a resource
 ///
@@ -51,12 +52,6 @@ impl State {
     }
     pub fn hash(&self) -> u64 {
         self.hash
-    }
-}
-
-impl PartialEq for State {
-    fn eq(&self, other: &Self) -> bool {
-        self.hash == other.hash
     }
 }
 
@@ -122,11 +117,17 @@ pub struct Entry<'a> {
     pub val: &'a dyn SerializeValue,
 }
 
-#[derive(Debug, Archive, Serialize, Deserialize)]
+#[derive(Debug, Clone, Archive, Serialize, Deserialize)]
 #[archive_attr(derive(Debug))]
 pub struct OwnedEntry {
     pub oid: ObjectIdentifier,
     pub val: Box<dyn SerializeValue>,
+}
+
+impl PartialEq for OwnedEntry {
+    fn eq(&self, other: &Self) -> bool {
+        self.oid == other.oid && self.val.dyn_eq(other.val.as_value())
+    }
 }
 
 impl<'a> serde::Serialize for Entry<'a> {
@@ -170,5 +171,77 @@ impl<'de> serde::de::Visitor<'de> for OwnedEntryVisitor {
             .ok_or(A::Error::missing_field("oid"))?;
         let val: DynOwnedVal = map.next_value()?;
         Ok(OwnedEntry { oid, val: val.0 })
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use super::*;
+    use crate::state::value::*;
+
+    pub(crate) fn gen_random() -> State {
+        let amt: u8 = rand::random::<u8>() % 20;
+
+        let mut sb = State::build();
+        for _ in 0..amt {
+            let oid = crate::oid::tests::gen_random();
+            sb = match rand::random::<u32>()%12 {
+                0 => sb.add(oid, Box::new(rand::random::<bool>())),
+                1 => sb.add(oid, Box::new(rand::random::<u8>())),
+                2 => sb.add(oid, Box::new(rand::random::<u16>())),
+                3 => sb.add(oid, Box::new(rand::random::<u32>())),
+                4 => sb.add(oid, Box::new(rand::random::<u64>())),
+                5 => sb.add(oid, Box::new(rand::random::<u128>())),
+                6 => sb.add(oid, Box::new(rand::random::<i8>())),
+                7 => sb.add(oid, Box::new(rand::random::<i16>())),
+                8 => sb.add(oid, Box::new(rand::random::<i32>())),
+                9 => sb.add(oid, Box::new(rand::random::<i64>())),
+                10 => sb.add(oid, Box::new(rand::random::<i128>())),
+                11 => sb.add(oid, Box::new(rand::random::<Vec3u8>())),
+                _ => unreachable!(),
+            }
+        }
+        sb.finish()
+    }
+
+    #[test]
+    fn test_equal_state_is_eq() {
+        let stateA = State::build()
+            .add(OID_POWERED.clone(), Box::new(false))
+            .add(OID_INTENSITY.clone(), Box::new(1024))
+            .finish();
+
+        let stateB = State::build()
+            .add(OID_POWERED.clone(), Box::new(false))
+            .add(OID_INTENSITY.clone(), Box::new(1024))
+            .finish();
+
+        assert_eq!(stateA, stateB);
+    }
+
+    #[test]
+    fn test_unequal_state_is_ne() {
+        let stateA = State::build()
+            .add(OID_POWERED.clone(), Box::new(true))
+            .add(OID_INTENSITY.clone(), Box::new(512))
+            .finish();
+
+        let stateB = State::build()
+            .add(OID_POWERED.clone(), Box::new(false))
+            .add(OID_INTENSITY.clone(), Box::new(1024))
+            .finish();
+
+        assert_ne!(stateA, stateB);
+    }
+
+    #[test]
+    fn test_state_is_clone() {
+        let stateA = gen_random();
+
+        let stateB = stateA.clone();
+        let stateC = stateB.clone();
+        drop(stateA);
+
+        assert_eq!(stateC, stateB);
     }
 }

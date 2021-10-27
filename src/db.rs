@@ -66,7 +66,7 @@ use std::sync::Arc;
 use std::path::Path;
 use crate::db::user::User;
 use std::collections::HashMap;
-use crate::state::{State, OwnedEntry};
+use crate::state::{OwnedEntry, State};
 use std::iter::FromIterator;
 use std::ops::Deref;
 use crate::oid::{ArchivedObjectIdentifier, ObjectIdentifier};
@@ -188,7 +188,8 @@ impl Dump {
             let input = dbs.statedb.get_input(id)?.map(|input| {
                 let input: &Archived<State> = input.deref();
                 let hash: u64 = input.hash;
-                let inner: Vec<OwnedEntry> = input.inner.iter().map(|entry| {
+                let inner = input.inner.iter()
+                    .map(|entry| {
 
                     let oid: &ArchivedObjectIdentifier = &entry.oid;
                     let bytes: &[u8] = oid.deref();
@@ -207,7 +208,7 @@ impl Dump {
             let output = dbs.statedb.get_output(id)?.map(|output| {
                 let output: &Archived<State> = output.deref();
                 let hash: u64 = output.hash;
-                let inner: Vec<OwnedEntry> = output.inner.iter().map(|entry| {
+                let inner = output.inner.iter().map(|entry| {
 
                     let oid: &ArchivedObjectIdentifier = &entry.oid;
                     let bytes: &[u8] = oid.deref();

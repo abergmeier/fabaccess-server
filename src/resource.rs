@@ -7,7 +7,6 @@ use async_channel::Receiver;
 use crate::state::State;
 use crate::db::{
     state::StateAccessor,
-    DBError,
 };
 
 /// A resource in BFFH has to contain several different parts;
@@ -41,12 +40,31 @@ use crate::db::{
 pub trait Resource {
     /// Run whatever internal logic this resource has for the given State update, and return the
     /// new output state that this update produces.
-    async fn update(&mut self, input: &State /*, internal: &State*/) -> Result<State, DBError>;
+    async fn on_update(&mut self, input: &State) -> Result<State, Error>;
+    async fn shutdown(&mut self);
 }
 
+pub struct Passthrough;
+#[async_trait]
+impl Resource for Passthrough {
+    async fn on_update(&mut self, input: &State) -> Result<State, Error> {
+        Ok(input.clone())
+    }
+
+    async fn shutdown(&mut self) {}
+}
+
+/// Error type a resource implementation can produce
+#[derive(Debug)]
+pub enum Error {
+    Internal(Box<dyn std::error::Error>),
+    Denied,
+}
+
+// TODO: more message context
 pub struct Update {
     pub state: State,
-    pub errchan: Sender<DBError>,
+    pub errchan: Sender<Error>,
 }
 
 pub struct ResourceDriver {
@@ -68,7 +86,7 @@ impl ResourceDriver {
             let state = update.state;
             let mut errchan = update.errchan;
 
-            match self.res.update(&state).await {
+            match self.res.on_update(&state).await {
                 Ok(outstate) => {
                     // FIXME: Send any error here to some global error collector. A failed write to
                     // the DB is not necessarily fatal, but it means that BFFH is now in an
@@ -87,5 +105,34 @@ impl ResourceDriver {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::pin::Pin;
+    use std::task::Poll;
+    use std::future::Future;
+    use super::*;
+
+    #[futures_test::test]
+    async fn test_passthrough_is_id() {
+        let inp = crate::state::tests::gen_random();
+
+        let mut res = Passthrough;
+        let out = res.on_update(&inp).await.unwrap();
+        assert_eq!(inp, out);
+    }
+
+    #[test]
+    fn test_passthrough_is_always_ready() {
+        let inp = State::build().finish();
+
+        let mut res = Passthrough;
+        let mut cx = futures_test::task::panic_context();
+        if let Poll::Ready(_) = Pin::new(&mut res.on_update(&inp)).poll(&mut cx) {
+            return;
+        }
+        panic!("Passthrough returned Poll::Pending")
     }
 }
