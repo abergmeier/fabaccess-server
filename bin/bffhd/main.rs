@@ -75,7 +75,8 @@ fn main() -> Result<(), Error> {
 
     // If no `config` option is given use a preset default.
     let configpath = matches.value_of("config").unwrap_or("/etc/diflouroborane.dhall");
-    let config = config::read(&PathBuf::from_str(configpath).unwrap())?;
+    let config = config::read(&PathBuf::from_str(configpath).unwrap())
+        .expect("Failed to parse config");
     println!("{:#?}", config);
 
     let mut sockaddrs = Vec::new();

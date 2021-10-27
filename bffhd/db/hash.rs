@@ -6,7 +6,10 @@ use std::{
         BuildHasher,
     },
     collections::hash_map::RandomState,
+    fmt,
+    fmt::Debug,
 };
+use std::fmt::Formatter;
 
 use rkyv::{
     Archive,
@@ -31,7 +34,7 @@ use super::{
 };
 
 
-#[derive(Archive, Serialize, Deserialize)]
+#[derive(Archive, Serialize, Deserialize, Debug)]
 /// The entry as it is stored inside the database.
 pub struct Entry<K: Archive, V: Archive> {
     pub key: K,
@@ -46,6 +49,12 @@ pub struct HashAdapter<K, A> {
 impl<K, A> HashAdapter<K, A> {
     pub fn new() -> Self {
         Self { k: PhantomData, a: PhantomData }
+    }
+}
+impl<K, A> Debug for HashAdapter<K, A> {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        use core::any::type_name;
+        write!(f, "HashAdapter<{}, {}>", type_name::<K>(), type_name::<A>())
     }
 }
 
@@ -75,6 +84,16 @@ pub struct HashDB<A, K, H = RandomState>
 {
     db: DB<HashAdapter<K, A>>,
     hash_builder: H,
+}
+
+impl<A: Adapter, K, H: Debug> fmt::Debug for HashDB<A, K, H> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let adapter = HashAdapter::<A,K>::new();
+        f.debug_struct("HashDB")
+         .field("db", &adapter)
+         .field("hasher", &self.hash_builder)
+         .finish()
+    }
 }
 
 impl<A, K> HashDB<A, K>

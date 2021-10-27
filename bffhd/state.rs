@@ -73,6 +73,7 @@ impl fmt::Debug for State {
     }
 }
 
+#[derive(Debug)]
 pub struct StateBuilder {
     hasher: DefaultHasher,
     inner: Vec<OwnedEntry>

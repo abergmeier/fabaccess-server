@@ -10,7 +10,7 @@ use super::Transaction;
 use argon2;
 
 type Adapter = AllocAdapter<String>;
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct PassDB {
     env: Arc<Environment>,
     db: DB<Adapter>,

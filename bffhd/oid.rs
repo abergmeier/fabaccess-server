@@ -293,23 +293,6 @@ fn parse_string_first_node(first_child_node: &str) -> Result<u8, ObjectIdentifie
     Ok(first_child_node)
 }
 
-fn parse_string_child_node(
-    node_str: &str,
-    out: &mut Vec<u8>
-) -> Result<(), ObjectIdentifierError> {
-    let node: Node = node_str.parse()
-        .map_err(|_| ObjectIdentifierError::IllegalChildNodeValue)?;
-    // TODO bench against !*node &= 0x80, compiler may already optimize better
-    if node <= 127 {
-        out.push(node as u8);
-    } else {
-        let vi: VarNode = node.into();
-        out.extend_from_slice(vi.as_bytes());
-    }
-
-    Ok(())
-}
-
 impl ObjectIdentifier {
     fn from_string<S>(value: S) -> Result<ObjectIdentifier, ObjectIdentifierError>
     where
@@ -512,7 +495,7 @@ pub(crate) mod tests {
     pub(crate) fn gen_random() -> ObjectIdentifier {
         let amt: u8 = rand::random::<u8>() % 10 + 1;
         let mut children = Vec::new();
-        for i in 0..amt {
+        for _ in 0..amt {
             children.push(rand::random());
         }
 
@@ -865,6 +848,31 @@ pub(crate) mod tests {
         let expected: Result<ObjectIdentifier, ObjectIdentifierError> =
             Err(ObjectIdentifierError::IllegalFirstChildNode);
         let actual = "1.40.1.2.3".try_into();
+        assert_eq!(expected, actual);
+    }
+
+    #[test]
+    fn parse_string_large_children_ok() {
+        let expected =
+            ObjectIdentifier::build(ObjectIdentifierRoot::JointIsoItuT,
+                                    25,
+                                    vec![190754093376743485973207716749546715206,
+                                                  255822649272987943607843257596365752308,
+                                                  15843412533224453995377625663329542022,
+                                                  6457999595881951503805148772927347934,
+                                                  19545192863105095042881850060069531734,
+                                                  195548685662657784196186957311035194990,
+                                                  233020488258340943072303499291936117654,
+                                                  193307160423854019916786016773068715190,
+                                    ]).unwrap();
+        let actual = "2.25.190754093376743485973207716749546715206.\
+                           255822649272987943607843257596365752308.\
+                           15843412533224453995377625663329542022.\
+                           6457999595881951503805148772927347934.\
+                           19545192863105095042881850060069531734.\
+                           195548685662657784196186957311035194990.\
+                           233020488258340943072303499291936117654.\
+                           193307160423854019916786016773068715190".try_into().unwrap();
         assert_eq!(expected, actual);
     }
 

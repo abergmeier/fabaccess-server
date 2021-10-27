@@ -27,7 +27,6 @@ pub use typed::{
 
     Adapter,
     OutputBuffer,
-    OutputWriter,
 };
 
 mod hash;
@@ -112,7 +111,7 @@ impl<V: Serialize<Ser>> Adapter for AllocAdapter<V> {
     }
 }
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 pub struct AlignedAdapter<V> {
     phantom: PhantomData<V>,
 }
@@ -136,6 +135,7 @@ impl<V: Serialize<AlignedSerializer<AlignedVec>>> Adapter for AlignedAdapter<V> 
     }
 }
 
+#[derive(Debug)]
 pub struct Databases {
     pub userdb: UserDB,
     pub passdb: PassDB,

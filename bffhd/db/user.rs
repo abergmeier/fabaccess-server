@@ -6,7 +6,7 @@ use crate::db::{DatabaseFlags, LMDBorrow, RoTransaction, WriteFlags, };
 use rkyv::{Archive, Serialize, Deserialize, Archived};
 
 type Adapter = AllocAdapter<User>;
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct UserDB {
     env: Arc<Environment>,
     db: DB<Adapter>,

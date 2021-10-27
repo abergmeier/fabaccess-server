@@ -1,6 +1,5 @@
 use std::io;
 use std::fmt;
-use serde_dhall;
 
 use rsasl::SaslError;
 
@@ -9,8 +8,8 @@ use crate::db::DBError;
 //FIXME use crate::network;
 
 #[derive(Debug)]
+/// Shared error type
 pub enum Error {
-    Dhall(serde_dhall::Error),
     SASL(SaslError),
     IO(io::Error),
     Boxed(Box<dyn std::error::Error>),
@@ -22,9 +21,6 @@ pub enum Error {
 impl fmt::Display for Error {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         match self {
-            Error::Dhall(e) => {
-                write!(f, "Dhall coding error: {}", e)
-            },
             Error::SASL(e) => {
                 write!(f, "SASL Error: {}", e)
             },
@@ -59,12 +55,6 @@ impl From<io::Error> for Error {
     }
 }
 
-impl From<serde_dhall::Error> for Error {
-    fn from(e: serde_dhall::Error) -> Error {
-        Error::Dhall(e)
-    }
-}
-
 impl From<Box<dyn std::error::Error>> for Error {
     fn from(e: Box<dyn std::error::Error>) -> Error {
         Error::Boxed(e)
@@ -82,5 +72,3 @@ impl From<DBError> for Error {
         Error::DB(e)
     }
 }
-
-pub(crate) type Result<T> = std::result::Result<T, Error>;

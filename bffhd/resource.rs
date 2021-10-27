@@ -64,6 +64,7 @@ pub enum Error {
 }
 
 // TODO: more message context
+#[derive(Debug)]
 pub struct Update {
     pub state: State,
     pub errchan: Sender<Error>,

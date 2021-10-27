@@ -1,6 +1,7 @@
 use std::default::Default;
 use std::ops::{Deref};
 
+#[derive(Debug)]
 pub struct VarUInt<const N: usize> {
     offset: usize,
     bytes: [u8; N],

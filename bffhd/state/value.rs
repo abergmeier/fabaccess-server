@@ -380,6 +380,7 @@ impl ImplData<'_> {
     }
 }
 
+#[derive(Debug)]
 pub struct ImplEntry<'a> {
     id: ImplId<'a>,
     data: ImplData<'a>,

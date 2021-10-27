@@ -19,7 +19,7 @@ pub struct Resource {
     description_idx: u64,
 }
 
-#[derive(Clone)]
+#[derive(Debug, Clone)]
 pub struct ResourceDB {
     env: Arc<Environment>,
     db: DB<AllocAdapter<Resource>>,
