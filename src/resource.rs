@@ -1,9 +1,8 @@
 use async_trait::async_trait;
 
 use futures_signals::signal::Mutable;
-use async_oneshot::{Sender };
-
-use smol::channel::Receiver;
+use async_oneshot::Sender;
+use async_channel::Receiver;
 
 use crate::state::State;
 use crate::db::{

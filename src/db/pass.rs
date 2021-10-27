@@ -64,7 +64,7 @@ impl PassDB {
         for pass in iter {
             let (uid, pass) = pass?;
             let uid = unsafe { std::str::from_utf8_unchecked(uid).to_string() };
-            let pass = unsafe { pass.as_str().to_string() };
+            let pass = pass.as_str().to_string();
             out.push((uid, pass));
         }
 

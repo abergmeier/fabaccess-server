@@ -23,27 +23,3 @@ mod varint;
 pub mod error;
 pub mod config;
 mod permissions;
-
-
-mod runtime {
-    use bastion::prelude::*;
-
-    pub fn startup() {
-        let config = Config::new().hide_backtraces();
-
-        Bastion::init_with(config);
-
-        Bastion::start();
-
-        let sup = Bastion::supervisor(|sp| {
-            sp  .with_strategy(SupervisionStrategy::OneForAll)
-                .children(|children| {
-                    children
-                })
-        }).expect("Failed to create supervisor");
-    }
-
-    pub fn run() {
-        Bastion::block_until_stopped()
-    }
-}

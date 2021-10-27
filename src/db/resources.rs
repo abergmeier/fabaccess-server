@@ -3,7 +3,7 @@ use rkyv::{Archive, Serialize, Deserialize};
 use super::{
     DB,
 };
-use crate::db::AlignedAdapter;
+use crate::db::{AlignedAdapter, AllocAdapter};
 use crate::db::raw::RawDB;
 use std::sync::Arc;
 use crate::db::{Environment, DatabaseFlags};
@@ -22,16 +22,16 @@ pub struct Resource {
 #[derive(Clone)]
 pub struct ResourceDB {
     env: Arc<Environment>,
-    //db: DB<AllocAdapter<Resource>>,
+    db: DB<AllocAdapter<Resource>>,
     id_index: DB<AlignedAdapter<u64>>,
 }
 
 impl ResourceDB {
     pub unsafe fn new(env: Arc<Environment>, db: RawDB, id_index: RawDB) -> Self {
-        //let db = DB::new_unchecked(db);
+        let db = DB::new_unchecked(db);
         let id_index = DB::new_unchecked(id_index);
 
-        Self { env, /*db,*/ id_index }
+        Self { env, db, id_index }
     }
 
     pub unsafe fn open(env: Arc<Environment>) -> Result<Self> {
