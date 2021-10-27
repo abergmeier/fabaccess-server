@@ -20,10 +20,10 @@ use std::collections::HashMap;
 use std::alloc::Layout;
 use serde::ser::SerializeMap;
 use std::fmt::Formatter;
-use serde::de::Error as _;
+use serde::de::Error as SerdeError;
 use std::mem::MaybeUninit;
 
-/// Adding a custom type to BFFH state managenment:
+/// Adding a custom type to BFFH state management:
 ///
 /// 1. Implement `serde`'s [`Serialize`](serde::Serialize) and [`Deserialize`](serde::Deserialize)
 ///     - `derive()`d instances work just fine, but keep stability over releases in mind.
@@ -72,11 +72,11 @@ impl<T> Value for T
         other.as_any().downcast_ref().map_or(false, |other: &T| other == self)
     }
 
-    fn as_any(&self) -> &dyn Any {
+    fn as_value(&self) -> &dyn Value {
         self
     }
 
-    fn as_value(&self) -> &dyn Value {
+    fn as_any(&self) -> &dyn Any {
         self
     }
 }
@@ -122,7 +122,7 @@ impl<'de> serde::de::Visitor<'de> for DynValVisitor {
     {
         // Bad magic code. Problem we have to solve: We only know how to parse whatever comes
         // after the OID after having looked at the OID. We have zero static type info available
-        // during deserialization. Soooooo:
+        // during deserialization. So:
 
         // Get OID first. That's easy, we know it's the key, we know how to read it.
         let oid: ObjectIdentifier = map.next_key()?
@@ -193,9 +193,9 @@ impl<'de> serde::de::DeserializeSeed<'de> for InitIntoSelf {
 }
 
 pub trait TypeOid {
-    fn get_type_oid() -> &'static ObjectIdentifier;
-    fn get_type_name() -> &'static str;
-    fn get_type_desc() -> &'static str;
+    fn type_oid() -> &'static ObjectIdentifier;
+    fn type_name() -> &'static str;
+    fn type_desc() -> &'static str;
 }
 
 impl<S: ScratchSpace + Serializer + ?Sized> SerializeUnsized<S> for dyn SerializeValue {
@@ -312,7 +312,8 @@ pub struct ArchivedValueMetadata {
 
 impl ArchivedValueMetadata {
     pub unsafe fn emplace(type_oid: Archived<ObjectIdentifier>, out: *mut Self) {
-        ptr::addr_of_mut!((*out).type_oid).write(type_oid);
+        let p = ptr::addr_of_mut!((*out).type_oid);
+        ptr::write(p, type_oid);
     }
 
     pub fn vtable(&self) -> usize {
@@ -343,7 +344,7 @@ impl<'a> ImplId<'a> {
 impl ImplId<'static> {
     fn new<T: TypeOid>() -> Self {
         Self {
-            type_oid: &T::get_type_oid()
+            type_oid: &T::type_oid()
         }
     }
 }
@@ -392,8 +393,8 @@ impl ImplEntry<'_> {
             id: ImplId::new::<T>(),
             data: ImplData {
                 vtable: <T as RegisteredImpl>::vtable(),
-                name: <T as TypeOid>::get_type_name(),
-                desc: <T as TypeOid>::get_type_desc(),
+                name: <T as TypeOid>::type_name(),
+                desc: <T as TypeOid>::type_desc(),
                 info: <T as RegisteredImpl>::debug_info(),
             },
         }

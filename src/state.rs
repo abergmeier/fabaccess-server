@@ -28,8 +28,7 @@ use serde::ser::SerializeMap;
 use std::ops::Deref;
 use std::fmt::Formatter;
 use serde::Deserializer;
-use serde::de::MapAccess;
-use serde::de::Error as _;
+use serde::de::{Error, MapAccess};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Archive, Serialize, Deserialize)]
