@@ -11,15 +11,14 @@
 //mod server;
 //mod actor;
 //mod initiator;
-mod space;
 
+mod config;
+mod db;
+mod error;
+mod network;
+mod oid;
+mod permissions;
 mod resource;
 mod schema;
 mod state;
-pub mod db;
-mod network;
-pub mod oid;
 mod varint;
-pub mod error;
-pub mod config;
-mod permissions;
