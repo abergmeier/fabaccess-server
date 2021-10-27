@@ -8,14 +8,8 @@ fn is_hidden(entry: &DirEntry) -> bool {
 }
 
 fn main() {
-    // Tell cargo to only run this script if the schema files or this script have changed
-    println!("cargo:rerun-if-changed=schema");
-
     let mut compile_command = ::capnpc::CompilerCommand::new();
-
-    // Set parent module of all generated schema files.
-    // i.e. a file "user.capnp" will result in module "schema::user"
-    compile_command.default_parent_module(vec!["schema".into()]);
+    compile_command.src_prefix("schema");
 
     for entry in WalkDir::new("schema")
         .max_depth(2)

@@ -5,9 +5,11 @@ use std::{
 };
 use clap::{App, Arg, crate_version, crate_description, crate_name};
 use std::str::FromStr;
-use diflouroborane::{config, error::Error};
+use diflouroborane::{error::Error};
 use diflouroborane::db::{Databases, Dump};
 use std::net::ToSocketAddrs;
+
+mod config;
 
 fn main() -> Result<(), Error> {
     tracing_subscriber::fmt::init();

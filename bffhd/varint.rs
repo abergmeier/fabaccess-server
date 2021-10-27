@@ -113,6 +113,7 @@ impl_convert_from_to!(u32, 5, VarU32);
 impl_convert_from_to!(u64, 10, VarU64);
 impl_convert_from_to!(u128, 19, VarU128);
 
+#[allow(dead_code)]
 #[cfg(target_pointer_width = "64")]
 type VarUsize = VarU64;
 #[cfg(target_pointer_width = "32")]

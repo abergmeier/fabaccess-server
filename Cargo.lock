@@ -71,6 +71,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "api"
+version = "0.1.0"
+dependencies = [
+ "capnp",
+ "capnpc",
+ "walkdir",
+]
+
+[[package]]
 name = "arrayref"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -602,15 +611,14 @@ dependencies = [
 name = "diflouroborane"
 version = "0.3.0"
 dependencies = [
+ "api",
  "async-channel",
  "async-native-tls",
  "async-oneshot",
  "async-trait",
  "bincode",
  "capnp",
- "capnp-futures",
  "capnp-rpc",
- "capnpc",
  "chrono",
  "clap",
  "erased-serde",
@@ -637,7 +645,6 @@ dependencies = [
  "tracing",
  "tracing-subscriber",
  "uuid",
- "walkdir",
 ]
 
 [[package]]

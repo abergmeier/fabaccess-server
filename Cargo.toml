@@ -57,10 +57,9 @@ tracing = "0.1.28"
 tracing-subscriber = "0.2.25"
 
 # API
-capnp = "0.14.3"
-capnpc = "0.14.4"
+api = { path = "api" }
+capnp = "0.14"
 capnp-rpc = "0.14.1"
-capnp-futures = "0.14.1"
 
 # API Authentication
 rsasl = "1.4.0" # TODO update this if bindgen breaks (again)
@@ -75,11 +74,6 @@ serde = { version = "1.0.130", features = ["derive"] }
 erased-serde = "0.3"
 serde_dhall = { version = "0.10.1", default-features = false }
 serde_json = "1.0"
-
-[build-dependencies]
-capnpc = "0.14.4"
-# Used in build.rs to iterate over all files in schema/
-walkdir = "2.3.2"
 
 [dev-dependencies]
 futures-test = "0.3.16"

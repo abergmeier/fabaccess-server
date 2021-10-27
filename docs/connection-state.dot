@@ -1,6 +1,11 @@
 strict digraph connection {
     Establish [label="TCP/SCTP connection established"];
     Closed [label="TCP/SCTP connection closed"];
+    Open;
+    SASL;
+    Authenticated;
+    STARTTLS;
+    Encrypted;
 
     Establish -> Open [label=open];
 

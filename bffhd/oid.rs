@@ -1,4 +1,4 @@
-//! oid crate by https://github.com/UnnecessaryEngineering/oid turned into vendore'd module
+//! oid crate by <https://github.com/UnnecessaryEngineering/oid> turned into vendore'd module
 //!
 //! [Object Identifiers] are a standard of the [ITU] used to reference objects, things, and
 //! concepts in a globally unique way. This crate provides for data structures and methods
