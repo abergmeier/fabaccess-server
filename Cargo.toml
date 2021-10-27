@@ -6,14 +6,16 @@ authors = [ "dequbed <me@dequbed.space>"
           , "Joseph Langosch <thejoklla@gmail.com>"
           , "Jannis Rieger <omniskopus@gmail.com>"
           ]
-license = "GPL-3.0"
+license = "LGPL-3.0"
 edition = "2018"
 
-[features]
-default = ["lmdb"]
+[profile.dev]
+lto = "thin"
 
-# Use LMDB for internal kv-stores
-lmdb = []
+[profile.release]
+opt-level = 3
+debug = true
+lto = "thin"
 
 [dependencies]
 libc = "0.2.101"
