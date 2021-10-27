@@ -7,12 +7,19 @@ authors = [ "dequbed <me@dequbed.space>"
           , "Jannis Rieger <omniskopus@gmail.com>"
           ]
 license = "LGPL-3.0"
-edition = "2018"
+edition = "2021"
 
 [profile.release]
 opt-level = 3
 debug = true
 lto = "thin"
+
+[lib]
+path = "bffhd/lib.rs"
+
+[[bin]]
+name = "bffhd"
+path = "bin/bffhd/main.rs"
 
 [dependencies]
 libc = "0.2.101"
@@ -20,6 +27,7 @@ lazy_static = "1.4.0"
 uuid = { version = "0.8.2", features = ["serde", "v4"] }
 async-trait = "0.1.51"
 async-native-tls = "0.3"
+intmap = "0.7"
 
 # Runtime
 smol = "1.2.5"
@@ -76,3 +84,6 @@ walkdir = "2.3.2"
 futures-test = "0.3.16"
 tempfile = "3.2"
 bincode = "1.3"
+
+[workspace]
+members = ["modules/*"]

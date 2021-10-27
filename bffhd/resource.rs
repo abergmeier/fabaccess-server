@@ -1,3 +1,4 @@
+use std::fmt::Debug;
 use async_trait::async_trait;
 
 use futures_signals::signal::Mutable;
@@ -37,13 +38,14 @@ use crate::db::{
 ///   - Validating updates semantically i.e. are the types correct
 ///   - Check authorization of updates i.e. is this user allowed to do that
 #[async_trait]
-pub trait Resource {
+pub trait Resource: Debug {
     /// Run whatever internal logic this resource has for the given State update, and return the
     /// new output state that this update produces.
     async fn on_update(&mut self, input: &State) -> Result<State, Error>;
     async fn shutdown(&mut self);
 }
 
+#[derive(Debug)]
 pub struct Passthrough;
 #[async_trait]
 impl Resource for Passthrough {
@@ -67,6 +69,7 @@ pub struct Update {
     pub errchan: Sender<Error>,
 }
 
+#[derive(Debug)]
 pub struct ResourceDriver {
     // putput
     res: Box<dyn Resource>,

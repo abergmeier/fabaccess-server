@@ -616,6 +616,7 @@ dependencies = [
  "erased-serde",
  "futures-signals",
  "futures-test",
+ "intmap",
  "inventory",
  "lazy_static",
  "libc",
@@ -1024,6 +1025,12 @@ checksum = "7a5bbe824c507c5da5956355e86a746d82e0e1464f65d862cc5e71da70e94b2c"
 dependencies = [
  "cfg-if 1.0.0",
 ]
+
+[[package]]
+name = "intmap"
+version = "0.7.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "e50930385956f6c4a0b99f3dd654adcc40788456c36e17c5b20e1d1ceb523ec6"
 
 [[package]]
 name = "inventory"
@@ -1691,6 +1698,10 @@ dependencies = [
  "lazy_static",
  "winapi",
 ]
+
+[[package]]
+name = "sdk"
+version = "0.1.0"
 
 [[package]]
 name = "seahash"

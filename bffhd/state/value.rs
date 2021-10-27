@@ -226,7 +226,7 @@ impl<T> SerializeDynOid for T
     }
 
     fn archived_type_oid(&self) -> &'static ObjectIdentifier {
-        Archived::<T>::get_type_oid()
+        Archived::<T>::type_oid()
     }
 }
 
@@ -475,15 +475,15 @@ macro_rules! oidvalue {
         oiddeser! {$z, $y}
 
         impl TypeOid for $z {
-            fn get_type_oid() -> &'static ObjectIdentifier {
+            fn type_oid() -> &'static ObjectIdentifier {
                 &$x
             }
 
-            fn get_type_name() -> &'static str {
+            fn type_name() -> &'static str {
                 stringify!($y)
             }
 
-            fn get_type_desc() -> &'static str {
+            fn type_desc() -> &'static str {
                 "builtin"
             }
         }
