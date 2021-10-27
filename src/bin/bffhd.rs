@@ -9,7 +9,8 @@ use diflouroborane::{config, error::Error};
 use diflouroborane::db::{Databases, Dump};
 use std::net::ToSocketAddrs;
 
-fn main_res() -> Result<(), Error> {
+fn main() -> Result<(), Error> {
+    tracing_subscriber::fmt::init();
     // Argument parsing
     // values for the name, description and version are pulled from `Cargo.toml`.
     let matches = App::new(crate_name!())
@@ -151,20 +152,4 @@ fn main_res() -> Result<(), Error> {
          */
 
     Ok(())
-}
-
-fn main() {
-    let retval;
-    // Scope to drop everything before exiting.
-    {
-        tracing_subscriber::fmt::init();
-        match main_res() {
-            Ok(_) => retval = 0,
-            Err(e) => {
-                tracing::error!("{}", e);
-                retval = -1;
-            }
-        }
-    }
-    std::process::exit(retval);
 }

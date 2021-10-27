@@ -4,12 +4,13 @@ use std::collections::HashMap;
 
 use serde::{Serialize, Deserialize, Deserializer, Serializer};
 
-use crate::error::Result;
 use std::fmt::Formatter;
 use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
 use std::str::FromStr;
 use crate::permissions::{PermRule, RoleIdentifier};
 use serde::de::Error;
+
+type Result<T> = std::result::Result<T, serde_dhall::Error>;
 
 pub fn read(path: &Path) -> Result<Config> {
     serde_dhall::from_file(path)

@@ -1,7 +1,7 @@
 use async_trait::async_trait;
 
-use futures::channel::oneshot;
 use futures_signals::signal::Mutable;
+use async_oneshot::{Sender };
 
 use smol::channel::Receiver;
 
@@ -47,7 +47,7 @@ pub trait Resource {
 
 pub struct Update {
     pub state: State,
-    pub errchan: oneshot::Sender<DBError>,
+    pub errchan: Sender<DBError>,
 }
 
 pub struct ResourceDriver {
@@ -67,7 +67,7 @@ impl ResourceDriver {
     pub async fn drive_to_end(&mut self) {
         while let Ok(update) = self.rx.recv().await {
             let state = update.state;
-            let errchan = update.errchan;
+            let mut errchan = update.errchan;
 
             match self.res.update(&state).await {
                 Ok(outstate) => {

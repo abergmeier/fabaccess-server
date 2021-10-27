@@ -4,9 +4,6 @@ use serde_dhall;
 
 use rsasl::SaslError;
 
-// SpawnError is a somewhat ambigous name, `use as` to make it futures::SpawnError instead.
-use futures::task as futures_task;
-
 use paho_mqtt::errors as mqtt;
 use crate::db::DBError;
 
@@ -20,9 +17,7 @@ pub enum Error {
     Boxed(Box<dyn std::error::Error>),
     Capnp(capnp::Error),
     DB(DBError),
-    FuturesSpawn(futures_task::SpawnError),
     MQTT(mqtt::Error),
-    BadVersion((u32,u32)),
     Denied,
 }
 
@@ -47,15 +42,9 @@ impl fmt::Display for Error {
             Error::DB(e) => {
                 write!(f, "DB Error: {:?}", e)
             },
-            Error::FuturesSpawn(e) => {
-                write!(f, "Future could not be spawned: {}", e)
-            },
             Error::MQTT(e) => {
                 write!(f, "Paho MQTT encountered an error: {}", e)
             },
-            Error::BadVersion((major,minor)) => {
-                write!(f, "Peer uses API version {}.{} which is incompatible!", major, minor)
-            }
             Error::Denied => {
                 write!(f, "You do not have the permission required to do that.")
             }
@@ -99,22 +88,10 @@ impl From<DBError> for Error {
     }
 }
 
-impl From<futures_task::SpawnError> for Error {
-    fn from(e: futures_task::SpawnError) -> Error {
-        Error::FuturesSpawn(e)
-    }
-}
-
 impl From<mqtt::Error> for Error {
     fn from(e: mqtt::Error) -> Error {
         Error::MQTT(e)
     }
 }
-
-/*impl From<network::Error> for Error {
-    fn from(e: network::Error) -> Error {
-        Error::EventNetwork(e)
-    }
-}*/
 
 pub(crate) type Result<T> = std::result::Result<T, Error>;
