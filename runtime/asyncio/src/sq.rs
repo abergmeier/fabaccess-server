@@ -1,13 +1,17 @@
-use std::cell::UnsafeCell;
+use std::cell::{Cell, UnsafeCell};
 use std::fmt::{Debug, Formatter};
 use std::io;
 use std::mem::ManuallyDrop;
 use std::os::unix::prelude::RawFd;
+use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::atomic::{AtomicU32, compiler_fence, fence, Ordering};
+use std::task::{Context, Poll, Waker};
+use crossbeam_queue::SegQueue;
 use nix::sys::mman::munmap;
+use crate::completion::Completion;
 use crate::ctypes::{IORING_ENTER, IORING_SQ, io_uring_sqe, SQOffsets};
-use crate::sqe::SQEs;
+use crate::sqe::{SQE, SQEs};
 use crate::syscall;
 
 pub struct SQ {
@@ -46,6 +50,10 @@ pub struct SQ {
     sq_ptr: NonNull<()>,
     sq_map_size: usize,
     sqes_map_size: usize,
+
+    /// Queue of tasks waiting for a submission, either because they need free slots or because
+    waiters: SegQueue<Waker>,
+    submitter: Cell<Option<Waker>>,
 }
 
 static_assertions::assert_not_impl_any!(SQ: Send, Sync);
@@ -125,6 +133,8 @@ impl SQ {
             sq_ptr,
             sq_map_size,
             sqes_map_size,
+            waiters: SegQueue::new(),
+            submitter: Cell::new(None),
         }
     }
 
@@ -169,9 +179,50 @@ impl SQ {
         self.num_entries - self.used()
     }
 
+    #[inline(always)]
+    fn to_submit(&self) -> u32 {
+        let shared_tail = self.array_tail.load(Ordering::Relaxed);
+        let cached_tail = *self.cached_tail();
+        cached_tail.wrapping_sub(shared_tail)
+    }
+
+    pub fn submit_wait(&self, fd: RawFd) -> io::Result<u32> {
+        // Ensure that the writes into the array are not moved after the write of the tail.
+        // Otherwise kernelside may read completely wrong indices from array.
+        compiler_fence(Ordering::Release);
+        self.array_tail.store(*self.cached_tail(), Ordering::Release);
+
+        let retval = syscall::enter(
+            fd,
+            self.num_entries,
+            1,
+            IORING_ENTER::GETEVENTS,
+            std::ptr::null(),
+            0,
+        )? as u32;
+        // Return SQE into circulation that we successfully submitted to the kernel.
+        self.increment_head(retval);
+        self.notify();
+        Ok(retval)
+    }
+
     /// Submit all prepared entries to the kernel. This function will return the number of
     /// entries successfully submitted to the kernel.
-    pub fn submit(&self, fd: RawFd) -> io::Result<u32> {
+    pub fn submit(&self, fd: RawFd, waker: Option<&Waker>) -> io::Result<u32> {
+        if let Some(waker) = waker {
+            let new = if let Some(old) = self.submitter.take() {
+                if old.will_wake(waker) { old } else { waker.clone() }
+            } else {
+                waker.clone()
+            };
+            self.submitter.set(Some(new));
+        }
+
+        // Ensure that the writes into the array are not moved after the write of the tail.
+        // Otherwise kernelside may read completely wrong indices from array.
+        compiler_fence(Ordering::Release);
+        self.array_tail.store(*self.cached_tail(), Ordering::Release);
+
         let retval = syscall::enter(
             fd,
             self.num_entries,
@@ -182,6 +233,7 @@ impl SQ {
         )? as u32;
         // Return SQE into circulation that we successfully submitted to the kernel.
         self.increment_head(retval);
+        self.notify();
         Ok(retval)
     }
 
@@ -204,7 +256,7 @@ impl SQ {
     /// point to `count` entries in `self.sqes` starting at `start`. This allows actions to be
     /// submitted to the kernel even when there are still reserved SQE in between that weren't yet
     /// filled.
-    fn prepare(&self, start: u32, count: u32) {
+    pub fn prepare(&self, start: u32, count: u32) {
         // Load the tail of the array (i.e. where we will start filling)
         let tail = self.cached_tail();
         let mut head = start;
@@ -221,10 +273,59 @@ impl SQ {
             head = head.wrapping_add(1);
             *tail = (*tail).wrapping_add(1);
         }
-        // Ensure that the writes into the array are not moved after the write of the tail.
-        // Otherwise kernelside may read completely wrong indices from array.
-        compiler_fence(Ordering::Release);
-        self.array_tail.store(*tail, Ordering::Release);
+
+        // FIXME: This should really be done by epoll
+        if let Some(waker) = self.submitter.take() {
+            waker.wake_by_ref();
+            self.submitter.set(Some(waker));
+        }
+    }
+
+    pub fn poll_prepare<'cx>(
+        self: Pin<&mut Self>,
+        ctx: &mut Context<'cx>,
+        count: u32,
+        prepare: impl for<'sq> FnOnce(SQEs<'sq>, &mut Context<'cx>) -> Completion
+    ) -> Poll<Completion> {
+        if let Some(sqes) = self.try_reserve(count) {
+            let start = sqes.start();
+            let completion = prepare(sqes, ctx);
+            self.prepare(start, count);
+            Poll::Ready(completion)
+        } else {
+            self.waiters.push(ctx.waker().clone());
+            Poll::Pending
+        }
+    }
+
+    /// Suggest to submit pending events to the kernel. Returns `Ready` when the relevant event
+    /// was submitted to the kernel, i.e. when kernelside `head` >= the given `head`.
+    pub fn poll_submit(self: Pin<&mut Self>, ctx: &mut Context<'_>, fd: RawFd, head: u32)
+        -> Poll<()>
+    {
+        let shared_tail = self.array_tail.load(Ordering::Relaxed);
+        let cached_tail = *self.cached_tail();
+        let to_submit = cached_tail.wrapping_sub(shared_tail);
+
+        // TODO: Do some smart cookie thinking here and batch submissions in a sensible way
+        if to_submit > 4 {
+            self.submit(fd, None);
+        }
+
+        if *self.sqes_head() < head {
+            self.waiters.push(ctx.waker().clone());
+            Poll::Pending
+        } else {
+            Poll::Ready(())
+        }
+    }
+
+    pub fn notify(&self) {
+        if self.waiters.len() > 0 && self.available() > 0 {
+            while let Some(waker) = self.waiters.pop() {
+                waker.wake()
+            }
+        }
     }
 
     pub fn try_reserve(&self, count: u32) -> Option<SQEs<'_>> {
@@ -273,7 +374,9 @@ mod tests {
                 sqes,
                 sq_ptr: NonNull::dangling(),
                 sq_map_size: 0,
-                sqes_map_size: 0
+                sqes_map_size: 0,
+                waiters: SegQueue::new(),
+                submitter: Cell::new(None),
             })
         }
     }

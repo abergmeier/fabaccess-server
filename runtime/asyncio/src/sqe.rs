@@ -1,7 +1,8 @@
 use std::cell::UnsafeCell;
 use std::ops::{Deref, DerefMut};
+use std::os::unix::prelude::RawFd;
 use std::slice::IterMut;
-use crate::ctypes::{IORING_OP, IOSQE, io_uring_sqe};
+use crate::ctypes::{IORING_OP, IOSQE, io_uring_sqe, SQEOpFlags};
 
 #[derive(Debug)]
 pub struct SQE<'iou> {
@@ -36,6 +37,26 @@ impl<'iou> SQE<'iou> {
     #[inline(always)]
     pub fn set_len(&mut self, len: i32) {
         self.sqe.len = len;
+    }
+
+    #[inline(always)]
+    pub fn set_fd(&mut self, fd: RawFd) {
+        self.sqe.fd = fd;
+    }
+
+    #[inline(always)]
+    pub fn set_offset(&mut self, offset: u64) {
+        self.sqe.offset = offset;
+    }
+
+    #[inline(always)]
+    pub fn set_op_flags(&mut self, op_flags: SQEOpFlags) {
+        self.sqe.op_flags = op_flags;
+    }
+
+    pub fn prepare_cancel(&mut self, user_data: u64) {
+        self.set_opcode(IORING_OP::ASYNC_CANCEL);
+        self.set_address(user_data);
     }
 }
 
@@ -88,6 +109,10 @@ impl<'iou> SQEs<'iou> {
 
     pub fn capacity(&self) -> u32 {
         self.capacity
+    }
+
+    pub fn used(&self) -> u32 {
+        self.count
     }
 
     fn consume(&mut self) -> Option<SQE<'iou>> {

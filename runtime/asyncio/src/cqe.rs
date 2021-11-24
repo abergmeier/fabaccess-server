@@ -9,7 +9,7 @@ use crate::io_uring::{IoUring};
 /// Completion Queue Event
 pub struct CQE {
     pub user_data: u64,
-    res: i32,
+    pub(crate) res: i32,
     pub flags: IOCQE,
 }
 
