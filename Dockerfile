@@ -15,10 +15,11 @@ FROM debian:buster-slim
 RUN apt-get update && apt-get upgrade -yqq
 RUN apt-get install -yqq libgsasl7 && rm -rf /var/lib/apt/lists/*
 COPY --from=builder /usr/local/cargo/bin/diflouroborane /usr/local/bin/diflouroborane
+COPY ./docker/startup.sh /startup.sh
 #COPY --from=builder /usr/src/bffh/examples/bffh.dhall /etc/diflouroborane.dhall
 # RUN diflouroborane --print-default > /etc/diflouroborane.toml
 VOLUME /etc/bffh/
 VOLUME /var/lib/bffh/
 VOLUME /usr/local/lib/bffh/adapters/
 EXPOSE 59661
-ENTRYPOINT ["sh", "-c", "diflouroborane -c /etc/bffh/bffh.dhall --load=/etc/bffh; diflouroborane -c /etc/bffh/bffh.dhall"]
+ENTRYPOINT ["/bin/bash", "/startup.sh"]
