@@ -78,6 +78,10 @@ impl machines::Server for Machines {
                     if let Some(ref desc) = machine.desc.description {
                         builder.set_description(desc);
                     }
+                    if let Some(ref wiki) = machine.desc.wiki {
+                        builder.set_wiki(wiki);
+                    }
+                    builder.set_urn(&format!("urn:fabaccess:resource:{}", &name));
 
                     let machineapi = Machine::new(user.clone(), perms, machine.clone());
 
