@@ -8,6 +8,7 @@ use crate::state::*;
 use std::alloc::{self, Layout};
 use std::cell::Cell;
 use std::future::Future;
+use std::marker::PhantomData;
 use std::mem::{self, ManuallyDrop};
 use std::panic::AssertUnwindSafe;
 use std::pin::Pin;
@@ -17,18 +18,21 @@ use std::sync::atomic::Ordering;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 
 /// Raw pointers to the fields of a proc.
-pub(crate) struct RawProc<F, R, S> {
+pub(crate) struct RawProc<'a, F, R, S> {
     pub(crate) pdata: *const ProcData,
     pub(crate) schedule: *const S,
     pub(crate) future: *mut F,
     pub(crate) output: *mut R,
+
+    // Make the lifetime 'a of the future invariant
+    _marker: PhantomData<&'a ()>,
 }
 
-impl<F, R, S> RawProc<F, R, S>
+impl<'a, F, R, S> RawProc<'a, F, R, S>
 where
-    F: Future<Output = R> + 'static,
-    R: 'static,
-    S: Fn(LightProc) + 'static,
+    F: Future<Output = R> + 'a,
+    R: 'a,
+    S: Fn(LightProc) + 'a,
 {
     /// Allocates a proc with the given `future` and `schedule` function.
     ///
@@ -46,10 +50,11 @@ where
 
             let raw = Self::from_ptr(raw_proc.as_ptr());
 
+            let state = AtomicState::new(State::new(SCHEDULED | HANDLE, 1));
 
             // Write the pdata as the first field of the proc.
             (raw.pdata as *mut ProcData).write(ProcData {
-                state: AtomicState::new(SCHEDULED | HANDLE | REFERENCE),
+                state,
                 awaiter: Cell::new(None),
                 vtable: &ProcVTable {
                     raw_waker: RawWakerVTable::new(
@@ -115,6 +120,7 @@ where
                 schedule: p.add(proc_layout.offset_schedule) as *const S,
                 future: p.add(proc_layout.offset_future) as *mut F,
                 output: p.add(proc_layout.offset_output) as *mut R,
+                _marker: PhantomData,
             }
         }
     }
@@ -127,7 +133,7 @@ where
 
         loop {
             // If the proc is completed or closed, it can't be woken.
-            if state.intersects(COMPLETED | CLOSED) {
+            if state.get_flags().intersects(COMPLETED | CLOSED) {
                 // Drop the waker.
                 Self::decrement(ptr);
                 break;
@@ -138,8 +144,8 @@ where
             if state.is_scheduled() {
                 // Update the state without actually modifying it.
                 match (*raw.pdata).state.compare_exchange_weak(
-                    state.into(),
-                    state.into(),
+                    state,
+                    state,
                     Ordering::AcqRel,
                     Ordering::Acquire,
                 ) {
@@ -151,10 +157,12 @@ where
                     Err(s) => state = s,
                 }
             } else {
+                let (flags, references) = state.parts();
+                let new = State::new(flags | SCHEDULED, references);
                 // Mark the proc as scheduled.
                 match (*raw.pdata).state.compare_exchange_weak(
                     state,
-                    state | SCHEDULED,
+                    new,
                     Ordering::AcqRel,
                     Ordering::Acquire,
                 ) {
@@ -188,7 +196,7 @@ where
 
         loop {
             // If the proc is completed or closed, it can't be woken.
-            if state.intersects(COMPLETED | CLOSED) {
+            if state.get_flags().intersects(COMPLETED | CLOSED) {
                 break;
             }
 
@@ -206,11 +214,12 @@ where
                     Err(s) => state = s,
                 }
             } else {
+                let (flags, references) = state.parts();
                 // If the proc is not scheduled nor running, we'll need to schedule after waking.
-                let new = if !state.intersects(SCHEDULED | RUNNING) {
-                    (state | SCHEDULED) + 1
+                let new = if !state.get_flags().intersects(SCHEDULED | RUNNING) {
+                    State::new(flags | SCHEDULED, references + 1)
                 } else {
-                    state | SCHEDULED
+                    State::new(flags | SCHEDULED, references)
                 };
 
                 // Mark the proc as scheduled.
@@ -222,7 +231,7 @@ where
                 ) {
                     Ok(_) => {
                         // If the proc is not scheduled nor running, now is the time to schedule.
-                        if !state.intersects(SCHEDULED | RUNNING) {
+                        if !state.get_flags().intersects(SCHEDULED | RUNNING) {
                             // Schedule the proc.
                             let proc = LightProc {
                                 raw_proc: NonNull::new_unchecked(ptr as *mut ()),
@@ -248,7 +257,7 @@ where
         let state = (*raw.pdata).state.fetch_add(1, Ordering::Relaxed);
 
         // If the reference count overflowed, abort.
-        if state.bits() > i64::MAX as u64 {
+        if state.get_refcount() > i32::MAX as u32 {
             std::process::abort();
         }
 
@@ -264,10 +273,10 @@ where
         let raw = Self::from_ptr(ptr);
 
         // Decrement the reference count.
-        let mut new = (*raw.pdata)
+        let new = (*raw.pdata)
             .state
             .fetch_sub(1, Ordering::AcqRel);
-        new.set_refcount(new.get_refcount().saturating_sub(1));
+        let new = new.set_refcount(new.get_refcount().saturating_sub(1));
 
         // If this was the last reference to the proc and the `ProcHandle` has been dropped as
         // well, then destroy the proc.
@@ -353,16 +362,17 @@ where
                 return;
             }
 
+            let (flags, references) = state.parts();
             // Mark the proc as unscheduled and running.
             match (*raw.pdata).state.compare_exchange_weak(
                 state,
-                (state & !SCHEDULED) | RUNNING,
+                State::new((flags & !SCHEDULED) | RUNNING, references),
                 Ordering::AcqRel,
                 Ordering::Acquire,
             ) {
                 Ok(_) => {
-                    // Update the state because we're continuing with polling the future.
-                    state = (state & !SCHEDULED) | RUNNING;
+                    // Update our local state because we're continuing with polling the future.
+                    state = State::new((flags & !SCHEDULED) | RUNNING, references);
                     break;
                 }
                 Err(s) => state = s,
@@ -387,12 +397,14 @@ where
 
                 // The proc is now completed.
                 loop {
+                    let (flags, references) = state.parts();
                     // If the handle is dropped, we'll need to close it and drop the output.
-                    let new = if !state.is_handle() {
-                        (state & !RUNNING & !SCHEDULED) | COMPLETED | CLOSED
+                    let new_flags = if !state.is_handle() {
+                        (flags & !(RUNNING & SCHEDULED)) | COMPLETED | CLOSED
                     } else {
-                        (state & !RUNNING & !SCHEDULED) | COMPLETED
+                        (flags & !(RUNNING & SCHEDULED)) | COMPLETED
                     };
+                    let new = State::new(new_flags, references);
 
                     // Mark the proc as not running and completed.
                     match (*raw.pdata).state.compare_exchange_weak(
@@ -430,11 +442,14 @@ where
                 loop {
                     // If the proc was closed while running, we'll need to unschedule in case it
                     // was woken and then clean up its resources.
-                    let new = if state.is_closed() {
-                        state & !( RUNNING | SCHEDULED )
+                    let (flags, references) = state.parts();
+                    let flags = if state.is_closed() {
+                        flags & !( RUNNING | SCHEDULED )
                     } else {
-                        state & !RUNNING
+                        flags & !RUNNING
                     };
+                    let new = State::new(flags, references);
+
 
                     // Mark the proc as not running.
                     match (*raw.pdata).state.compare_exchange_weak(
@@ -472,30 +487,31 @@ where
     }
 }
 
-impl<F, R, S> Clone for RawProc<F, R, S> {
+impl<'a, F, R, S> Clone for RawProc<'a, F, R, S> {
     fn clone(&self) -> Self {
         Self {
             pdata: self.pdata,
             schedule: self.schedule,
             future: self.future,
             output: self.output,
+            _marker: PhantomData,
         }
     }
 }
-impl<F, R, S> Copy for RawProc<F, R, S> {}
+impl<'a, F, R, S> Copy for RawProc<'a, F, R, S> {}
 
 /// A guard that closes the proc if polling its future panics.
-struct Guard<F, R, S>(RawProc<F, R, S>)
+struct Guard<'a, F, R, S>(RawProc<'a, F, R, S>)
     where
-        F: Future<Output = R> + 'static,
-        R: 'static,
-        S: Fn(LightProc) + 'static;
+        F: Future<Output = R> + 'a,
+        R: 'a,
+        S: Fn(LightProc) + 'a;
 
-impl<F, R, S> Drop for Guard<F, R, S>
+impl<'a, F, R, S> Drop for Guard<'a, F, R, S>
 where
-    F: Future<Output = R> + 'static,
-    R: 'static,
-    S: Fn(LightProc) + 'static,
+    F: Future<Output = R> + 'a,
+    R: 'a,
+    S: Fn(LightProc) + 'a,
 {
     fn drop(&mut self) {
         let raw = self.0;
@@ -522,9 +538,11 @@ where
                 }
 
                 // Mark the proc as not running, not scheduled, and closed.
+                let (flags, references) = state.parts();
+                let new = State::new((flags & !(RUNNING & SCHEDULED)) | CLOSED, references);
                 match (*raw.pdata).state.compare_exchange_weak(
                     state,
-                    (state & !RUNNING & !SCHEDULED) | CLOSED,
+                    new,
                     Ordering::AcqRel,
                     Ordering::Acquire,
                 ) {

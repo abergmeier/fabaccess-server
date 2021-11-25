@@ -7,217 +7,217 @@
 //! [`spawn`]: crate::pool::spawn
 //! [`Worker`]: crate::run_queue::Worker
 
-use crate::thread_manager::{DynamicPoolManager, DynamicRunner};
-use crate::worker;
-use crossbeam_channel::{unbounded, Receiver, Sender};
-use lazy_static::lazy_static;
+use std::cell::Cell;
+use crate::thread_manager::{ThreadManager, DynamicRunner};
 use lightproc::lightproc::LightProc;
 use lightproc::recoverable_handle::RecoverableHandle;
-use once_cell::sync::{Lazy, OnceCell};
 use std::future::Future;
 use std::iter::Iterator;
+use std::marker::PhantomData;
+use std::mem::MaybeUninit;
+use std::sync::Arc;
 use std::time::Duration;
-use std::{env, thread};
-use tracing::trace;
+use crossbeam_deque::{Injector, Stealer};
+use crate::run::block;
+use crate::worker::{Sleeper, WorkerThread};
 
-///
-/// Spawn a process (which contains future + process stack) onto the executor from the global level.
-///
-/// # Example
-/// ```rust
-/// use executor::prelude::*;
-///
-/// # #[cfg(feature = "tokio-runtime")]
-/// # #[tokio::main]
-/// # async fn main() {
-/// #    start();    
-/// # }
-/// #
-/// # #[cfg(not(feature = "tokio-runtime"))]
-/// # fn main() {
-/// #    start();    
-/// # }
-/// #
-/// # fn start() {
-///
-/// let handle = spawn(
-///     async {
-///         panic!("test");
-///     },
-/// );
-///
-/// run(
-///     async {
-///         handle.await;
-///     },
-///     ProcStack { },
-/// );
-/// # }
-/// ```
-pub fn spawn<F, R>(future: F) -> RecoverableHandle<R>
-where
-    F: Future<Output = R> + Send + 'static,
-    R: Send + 'static,
-{
-    let (task, handle) = LightProc::recoverable(future, worker::schedule);
-    task.schedule();
-    handle
+#[derive(Debug)]
+struct Spooler<'a> {
+    pub spool: Arc<Injector<LightProc>>,
+    threads: &'a ThreadManager<AsyncRunner>,
+    _marker: PhantomData<&'a ()>,
 }
 
-/// Spawns a blocking task.
-///
-/// The task will be spawned onto a thread pool specifically dedicated to blocking tasks.
-pub fn spawn_blocking<F, R>(future: F) -> RecoverableHandle<R>
-where
-    F: Future<Output = R> + Send + 'static,
-    R: Send + 'static,
-{
-    let (task, handle) = LightProc::recoverable(future, schedule);
-    task.schedule();
-    handle
+impl Spooler<'_> {
+    pub fn new() -> Self {
+        let spool = Arc::new(Injector::new());
+        let threads = Box::leak(Box::new(
+            ThreadManager::new(2, AsyncRunner, spool.clone())));
+        threads.initialize();
+        Self { spool, threads, _marker: PhantomData }
+    }
 }
 
-///
-/// Acquire the static Pool reference
-#[inline]
-pub fn get() -> &'static Pool {
-    &*POOL
+#[derive(Clone, Debug)]
+pub struct Executor<'a> {
+    spooler: Arc<Spooler<'a>>,
 }
 
-pub fn get_manager() -> Option<&'static DynamicPoolManager<AsyncRunner>> {
-    DYNAMIC_POOL_MANAGER.get()
-}
+impl<'a, 'executor: 'a> Executor<'executor> {
+    pub fn new() -> Self {
+        Executor {
+            spooler: Arc::new(Spooler::new()),
+        }
+    }
 
-impl Pool {
+    fn schedule(&self) -> impl Fn(LightProc) + 'a {
+        let task_queue = self.spooler.spool.clone();
+        move |lightproc: LightProc| {
+            task_queue.push(lightproc)
+        }
+    }
+
     ///
-    /// Spawn a process (which contains future + process stack) onto the executor via [Pool] interface.
+    /// Spawn a process (which contains future + process stack) onto the executor from the global level.
+    ///
+    /// # Example
+    /// ```rust
+    /// use executor::prelude::*;
+    ///
+    /// # #[cfg(feature = "tokio-runtime")]
+    /// # #[tokio::main]
+    /// # async fn main() {
+    /// #    start();
+    /// # }
+    /// #
+    /// # #[cfg(not(feature = "tokio-runtime"))]
+    /// # fn main() {
+    /// #    start();
+    /// # }
+    /// #
+    /// # fn start() {
+    ///
+    /// let executor = Spooler::new();
+    ///
+    /// let handle = executor.spawn(
+    ///     async {
+    ///         panic!("test");
+    ///     },
+    /// );
+    ///
+    /// executor.run(
+    ///     async {
+    ///         handle.await;
+    ///     }
+    /// );
+    /// # }
+    /// ```
     pub fn spawn<F, R>(&self, future: F) -> RecoverableHandle<R>
-    where
-        F: Future<Output = R> + Send + 'static,
-        R: Send + 'static,
+        where
+            F: Future<Output = R> + Send + 'a,
+            R: Send + 'a,
     {
-        let (task, handle) = LightProc::recoverable(future, worker::schedule);
+        let (task, handle) =
+            LightProc::recoverable(future, self.schedule());
         task.schedule();
         handle
     }
-}
 
-/// Enqueues work, attempting to send to the thread pool in a
-/// nonblocking way and spinning up needed amount of threads
-/// based on the previous statistics without relying on
-/// if there is not a thread ready to accept the work or not.
-pub(crate) fn schedule(t: LightProc) {
-    if let Err(err) = POOL.sender.try_send(t) {
-        // We were not able to send to the channel without
-        // blocking.
-        POOL.sender.send(err.into_inner()).unwrap();
-    }
-    // Add up for every incoming scheduled task
-    DYNAMIC_POOL_MANAGER.get().unwrap().increment_frequency();
-}
-
-///
-/// Low watermark value, defines the bare minimum of the pool.
-/// Spawns initial thread set.
-/// Can be configurable with env var `BASTION_BLOCKING_THREADS` at runtime.
-#[inline]
-fn low_watermark() -> &'static u64 {
-    lazy_static! {
-        static ref LOW_WATERMARK: u64 = {
-            env::var_os("BASTION_BLOCKING_THREADS")
-                .map(|x| x.to_str().unwrap().parse::<u64>().unwrap())
-                .unwrap_or(DEFAULT_LOW_WATERMARK)
-        };
+    pub fn spawn_local<F, R>(&self, future: F) -> RecoverableHandle<R>
+        where
+            F: Future<Output = R> + 'a,
+            R: Send + 'a,
+    {
+        let (task, handle) =
+            LightProc::recoverable(future, schedule_local());
+        task.schedule();
+        handle
     }
 
-    &*LOW_WATERMARK
+    /// Block the calling thread until the given future completes.
+    ///
+    /// # Example
+    /// ```rust
+    /// use executor::prelude::*;
+    /// use lightproc::prelude::*;
+    ///
+    /// let executor = Spooler::new();
+    ///
+    /// let mut sum = 0;
+    ///
+    /// executor.run(
+    ///     async {
+    ///         (0..10_000_000).for_each(|_| {
+    ///             sum += 1;
+    ///         });
+    ///     }
+    /// );
+    /// ```
+    pub fn run<F, R>(&self, future: F) -> R
+        where
+            F: Future<Output = R>,
+    {
+        unsafe {
+            // An explicitly uninitialized `R`. Until `assume_init` is called this will not call any
+            // drop code for R
+            let mut out = MaybeUninit::uninit();
+
+            // Wrap the future into one that stores the result into `out`.
+            let future = {
+                let out = out.as_mut_ptr();
+
+                async move {
+                    *out = future.await;
+                }
+            };
+
+            // Pin the future onto the stack.
+            pin_utils::pin_mut!(future);
+
+            // Block on the future and and wait for it to complete.
+            block(future);
+
+            // Assume that if the future completed and didn't panic it fully initialized its output
+            out.assume_init()
+        }
+    }
 }
 
-/// If low watermark isn't configured this is the default scaler value.
-/// This value is used for the heuristics of the scaler
-const DEFAULT_LOW_WATERMARK: u64 = 2;
-
-/// Pool interface between the scheduler and thread pool
 #[derive(Debug)]
-pub struct Pool {
-    sender: Sender<LightProc>,
-    receiver: Receiver<LightProc>,
-}
-
-#[derive(Debug)]
-pub struct AsyncRunner {
-
-}
+struct AsyncRunner;
 
 impl DynamicRunner for AsyncRunner {
-    fn run_static(&self, park_timeout: Duration) -> ! {
-        loop {
-            for task in &POOL.receiver {
-                trace!("static: running task");
-                self.run(task);
-            }
+    fn setup(task_queue: Arc<Injector<LightProc>>) -> Sleeper<LightProc> {
+        let (worker, sleeper) = WorkerThread::new(task_queue);
+        install_worker(worker);
 
-            trace!("static: empty queue, parking with timeout");
-            thread::park_timeout(park_timeout);
-        }
+        sleeper
     }
-    fn run_dynamic(&self, parker: impl Fn()) -> ! {
-        loop {
-            while let Ok(task) = POOL.receiver.try_recv() {
-                trace!("dynamic thread: running task");
-                self.run(task);
-            }
-            trace!(
-                "dynamic thread: parking - {:?}",
-                std::thread::current().id()
-            );
-            parker();
-        }
+
+    fn run_static<'b>(fences: impl Iterator<Item=&'b Stealer<LightProc>>, park_timeout: Duration) -> ! {
+        let worker = get_worker();
+        worker.run_timeout(fences, park_timeout)
     }
-    fn run_standalone(&self) {
-        while let Ok(task) = POOL.receiver.try_recv() {
-            self.run(task);
-        }
-        trace!("standalone thread: quitting.");
+
+    fn run_dynamic<'b>(fences: impl Iterator<Item=&'b Stealer<LightProc>>) -> ! {
+        let worker = get_worker();
+        worker.run(fences)
+    }
+
+    fn run_standalone<'b>(fences: impl Iterator<Item=&'b Stealer<LightProc>>) {
+        let worker = get_worker();
+        worker.run_once(fences)
     }
 }
 
-impl AsyncRunner {
-    fn run(&self, task: LightProc) {
-        task.run();
-    }
+thread_local! {
+    static WORKER: Cell<Option<WorkerThread<'static, LightProc>>> = Cell::new(None);
 }
 
-static DYNAMIC_POOL_MANAGER: OnceCell<DynamicPoolManager<AsyncRunner>> = OnceCell::new();
-
-static POOL: Lazy<Pool> = Lazy::new(|| {
-    #[cfg(feature = "tokio-runtime")]
-    {
-        let runner = AsyncRunner {
-            // We use current() here instead of try_current()
-            // because we want bastion to crash as soon as possible
-            // if there is no available runtime.
-            runtime_handle: tokio::runtime::Handle::current(),
+fn get_worker() -> &'static WorkerThread<'static, LightProc> {
+    WORKER.with(|cell| {
+        let worker = unsafe {
+            &*cell.as_ptr() as &'static Option<WorkerThread<_>>
         };
+        worker.as_ref()
+            .expect("AsyncRunner running outside Executor context")
+    })
+}
 
-        DYNAMIC_POOL_MANAGER
-            .set(DynamicPoolManager::new(*low_watermark() as usize, runner))
-            .expect("couldn't create dynamic pool manager");
+fn install_worker(worker_thread: WorkerThread<'static, LightProc>) {
+    WORKER.with(|cell| {
+        cell.replace(Some(worker_thread));
+    });
+}
+
+fn schedule_local() -> impl Fn(LightProc) {
+    let worker = get_worker();
+    let unparker = worker.unparker().clone();
+    move |lightproc| {
+        // This is safe because we never replace the value in that Cell and thus never drop the
+        // SharedWorker pointed to.
+        worker.schedule_local(lightproc);
+        // We have to unpark the worker thread for our task to be run.
+        unparker.unpark();
     }
-    #[cfg(not(feature = "tokio-runtime"))]
-    {
-        let runner = AsyncRunner {};
-
-        DYNAMIC_POOL_MANAGER
-            .set(DynamicPoolManager::new(*low_watermark() as usize, runner))
-            .expect("couldn't create dynamic pool manager");
-    }
-
-    DYNAMIC_POOL_MANAGER
-        .get()
-        .expect("couldn't get static pool manager")
-        .initialize();
-
-    let (sender, receiver) = unbounded();
-    Pool { sender, receiver }
-});
+}

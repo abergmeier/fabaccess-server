@@ -1,10 +1,7 @@
-#![feature(test)]
-
-extern crate test;
-use bastion_executor::load_balancer::{core_count, get_cores, stats, SmpStats};
-use bastion_executor::placement;
+use executor::load_balancer::{core_count, get_cores, stats, SmpStats};
+use executor::placement;
 use std::thread;
-use test::Bencher;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn stress_stats<S: SmpStats + Sync + Send>(stats: &'static S) {
     let mut handles = Vec::with_capacity(*core_count());
@@ -29,15 +26,13 @@ fn stress_stats<S: SmpStats + Sync + Send>(stats: &'static S) {
 // previous lock based stats benchmark 1,352,791 ns/iter (+/- 2,682,013)
 
 // 158,278 ns/iter (+/- 117,103)
-#[bench]
-fn lockless_stats_bench(b: &mut Bencher) {
-    b.iter(|| {
+fn lockless_stats_bench(b: &mut Criterion) {
+    b.bench_function("stress_stats", |b| b.iter(|| {
         stress_stats(stats());
-    });
+    }));
 }
 
-#[bench]
-fn lockless_stats_bad_load(b: &mut Bencher) {
+fn lockless_stats_bad_load(b: &mut Criterion) {
     let stats = stats();
     const MAX_CORE: usize = 256;
     for i in 0..MAX_CORE {
@@ -50,13 +45,12 @@ fn lockless_stats_bad_load(b: &mut Bencher) {
         }
     }
 
-    b.iter(|| {
+    b.bench_function("get_sorted_load", |b| b.iter(|| {
         let _sorted_load = stats.get_sorted_load();
-    });
+    }));
 }
 
-#[bench]
-fn lockless_stats_good_load(b: &mut Bencher) {
+fn lockless_stats_good_load(b: &mut Criterion) {
     let stats = stats();
     const MAX_CORE: usize = 256;
     for i in 0..MAX_CORE {
@@ -65,7 +59,11 @@ fn lockless_stats_good_load(b: &mut Bencher) {
         stats.store_load(i, i);
     }
 
-    b.iter(|| {
+    b.bench_function("get_sorted_load", |b| b.iter(|| {
         let _sorted_load = stats.get_sorted_load();
-    });
+    }));
 }
+
+criterion_group!(stats_bench, lockless_stats_bench, lockless_stats_bad_load,
+    lockless_stats_good_load);
+criterion_main!(stats_bench);

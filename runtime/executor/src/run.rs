@@ -1,73 +1,15 @@
 //!
 //! Blocking run of the async processes
 //!
-//!
-use crate::worker;
+
 use crossbeam_utils::sync::{Parker, Unparker};
 use std::cell::Cell;
 use std::future::Future;
-use std::mem;
-use std::mem::{ManuallyDrop, MaybeUninit};
-use std::pin::Pin;
+use std::mem::ManuallyDrop;
+use std::ops::Deref;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
-use crate::proc_stack::ProcStack;
 
-///
-/// This method blocks the current thread until passed future is resolved with an output.
-///
-/// It is called `block_on` or `blocking` in some executors.
-///
-/// # Example
-/// ```rust
-/// use executor::prelude::*;
-/// use lightproc::prelude::*;
-/// let mut sum = 0;
-///
-/// run(
-///     async {
-///         (0..10_000_000).for_each(|_| {
-///             sum += 1;
-///         });
-///     },
-///     ProcStack::default(),
-/// );
-/// ```
-pub fn run<F, T>(future: F, stack: ProcStack) -> T
-where
-    F: Future<Output = T>,
-{
-    unsafe {
-        // An explicitly uninitialized `T`. Until `assume_init` is called this will not call any
-        // drop code for T
-        let mut out = MaybeUninit::uninit();
-
-        // Wrap the future into one that stores the result into `out`.
-        let future = {
-            let out = out.as_mut_ptr();
-
-            async move {
-                *out = future.await;
-            }
-        };
-
-        // Pin the future onto the stack.
-        pin_utils::pin_mut!(future);
-
-        // Extend the lifetime of the future to 'static.
-        let future = mem::transmute::<
-            Pin<&'_ mut dyn Future<Output = ()>>,
-            Pin<&'static mut dyn Future<Output = ()>>,
-        >(future);
-
-        // Block on the future and and wait for it to complete.
-        worker::set_stack(&stack, || block(future));
-
-        // Assume that if the future completed and didn't panic it fully initialized its output
-        out.assume_init()
-    }
-}
-
-fn block<F, T>(f: F) -> T
+pub(crate) fn block<F, T>(f: F) -> T
 where
     F: Future<Output = T>,
 {
@@ -116,9 +58,10 @@ fn vtable() -> &'static RawWakerVTable {
     /// original RawWaker.
     unsafe fn clone_raw(ptr: *const ()) -> RawWaker {
         // [`Unparker`] implements `Clone` and upholds the contract stated above. The current
-        // Implementation is simply an Arc over the actual inner values.
-        let unparker = Unparker::from_raw(ptr).clone();
-        RawWaker::new(Unparker::into_raw(unparker), vtable())
+        // Implementation is simply an Arc over the actual inner values. However clone takes the
+        // original value by reference so we need to make sure to not drop it.
+        let unparker = ManuallyDrop::new(Unparker::from_raw(ptr));
+        RawWaker::new(Unparker::into_raw(unparker.deref().clone()), vtable())
     }
 
     /// This function will be called when wake is called on the Waker. It must wake up the task

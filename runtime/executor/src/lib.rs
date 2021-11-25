@@ -20,9 +20,6 @@
 //! [lightproc]: https://docs.rs/lightproc
 //!
 
-#![doc(
-    html_logo_url = "https://raw.githubusercontent.com/bastion-rs/bastion/master/img/bastion-logo.png"
-)]
 // Force missing implementations
 #![warn(missing_docs)]
 #![warn(missing_debug_implementations)]
@@ -30,21 +27,15 @@
 #![forbid(unused_must_use)]
 #![forbid(unused_import_braces)]
 
-pub mod blocking;
 pub mod load_balancer;
 pub mod placement;
 pub mod pool;
 pub mod run;
-pub mod sleepers;
 mod thread_manager;
-pub mod worker;
-mod proc_stack;
+mod worker;
 
 ///
 /// Prelude of Bastion Executor
 pub mod prelude {
-    pub use crate::blocking::*;
     pub use crate::pool::*;
-    pub use crate::run::*;
-    pub use crate::proc_stack::*;
 }

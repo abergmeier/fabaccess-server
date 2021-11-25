@@ -1,23 +1,16 @@
-#![feature(test)]
-
-extern crate test;
-
-use bastion_executor::load_balancer;
-use bastion_executor::prelude::spawn;
+use executor::load_balancer;
+use executor::prelude::*;
 use futures_timer::Delay;
-use lightproc::proc_stack::ProcStack;
 use std::time::Duration;
-use test::Bencher;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 #[cfg(feature = "tokio-runtime")]
-mod tokio_benchs {
+mod benches {
     use super::*;
-    #[bench]
-    fn spawn_lot(b: &mut Bencher) {
+    pub fn spawn_lot(b: &mut Bencher) {
         tokio_test::block_on(async { _spawn_lot(b) });
     }
-    #[bench]
-    fn spawn_single(b: &mut Bencher) {
+    pub fn spawn_single(b: &mut Bencher) {
         tokio_test::block_on(async {
             _spawn_single(b);
         });
@@ -25,46 +18,47 @@ mod tokio_benchs {
 }
 
 #[cfg(not(feature = "tokio-runtime"))]
-mod no_tokio_benchs {
+mod benches {
     use super::*;
-    #[bench]
-    fn spawn_lot(b: &mut Bencher) {
+
+    pub fn spawn_lot(b: &mut Criterion) {
         _spawn_lot(b);
     }
-    #[bench]
-    fn spawn_single(b: &mut Bencher) {
+    pub fn spawn_single(b: &mut Criterion) {
         _spawn_single(b);
     }
+
 }
 
+criterion_group!(spawn, benches::spawn_lot, benches::spawn_single);
+criterion_main!(spawn);
+
 // Benchmark for a 10K burst task spawn
-fn _spawn_lot(b: &mut Bencher) {
-    let proc_stack = ProcStack::default();
-    b.iter(|| {
+fn _spawn_lot(b: &mut Criterion) {
+    let executor = Executor::new();
+    b.bench_function("spawn_lot", |b| b.iter(|| {
         let _ = (0..10_000)
             .map(|_| {
-                spawn(
+                executor.spawn(
                     async {
                         let duration = Duration::from_millis(1);
                         Delay::new(duration).await;
                     },
-                    proc_stack.clone(),
                 )
             })
             .collect::<Vec<_>>();
-    });
+    }));
 }
 
 // Benchmark for a single task spawn
-fn _spawn_single(b: &mut Bencher) {
-    let proc_stack = ProcStack::default();
-    b.iter(|| {
-        spawn(
+fn _spawn_single(b: &mut Criterion) {
+    let executor = Executor::new();
+    b.bench_function("spawn single", |b| b.iter(|| {
+        executor.spawn(
             async {
                 let duration = Duration::from_millis(1);
                 Delay::new(duration).await;
             },
-            proc_stack.clone(),
         );
-    });
+    }));
 }

@@ -22,23 +22,3 @@ pub mod resource;
 pub mod state;
 /// Varints
 pub mod varint;
-
-use intmap::IntMap;
-use resource::ResourceDriver;
-
-#[derive(Debug)]
-struct InitiatorDriver;
-#[derive(Debug)]
-struct ActorDriver;
-
-#[derive(Debug)]
-struct System {
-    resources: IntMap<ResourceDriver>,
-    initiators: IntMap<InitiatorDriver>,
-    actors: IntMap<ActorDriver>,
-}
-
-#[derive(Debug)]
-struct Accountant {
-
-}

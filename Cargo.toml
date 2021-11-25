@@ -1,6 +1,6 @@
 [package]
 name = "diflouroborane"
-version = "0.3.0"
+version = "0.4.0"
 authors = [ "dequbed <me@dequbed.space>"
           , "Kai Jan Kriegel <kai@kjkriegel.de>"
           , "Joseph Langosch <thejoklla@gmail.com>"
@@ -9,6 +9,7 @@ authors = [ "dequbed <me@dequbed.space>"
 license = "LGPL-3.0"
 edition = "2021"
 publish = false
+readme = "README.md"
 
 [profile.release]
 opt-level = 3
@@ -29,8 +30,10 @@ uuid = { version = "0.8.2", features = ["serde", "v4"] }
 async-trait = "0.1.51"
 async-native-tls = "0.3"
 intmap = "0.7"
+pin-utils = "0.1.0"
 
 # Runtime
+executor = { path = "runtime/executor" }
 smol = "1.2.5"
 
 # Catch&Handle POSIX process signals

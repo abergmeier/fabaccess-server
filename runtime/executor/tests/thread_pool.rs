@@ -1,11 +1,11 @@
-use bastion_executor::blocking;
-use bastion_executor::run::run;
-use futures::future::join_all;
-use lightproc::proc_stack::ProcStack;
+use executor::blocking;
+use executor::run::run;
+use futures_util::future::join_all;
 use lightproc::recoverable_handle::RecoverableHandle;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
+use executor::prelude::ProcStack;
 
 // Test for slow joins without task bursts during joins.
 #[test]
@@ -22,12 +22,11 @@ fn slow_join() {
                     let duration = Duration::from_millis(1);
                     thread::sleep(duration);
                 },
-                ProcStack::default(),
             )
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 
-    run(join_all(handles), ProcStack::default());
+    run(join_all(handles), ProcStack {});
 
     // Let them join to see how it behaves under different workloads.
     let duration = Duration::from_millis(thread_join_time_max);
@@ -41,12 +40,11 @@ fn slow_join() {
                     let duration = Duration::from_millis(100);
                     thread::sleep(duration);
                 },
-                ProcStack::default(),
             )
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 
-    run(join_all(handles), ProcStack::default());
+    run(join_all(handles), ProcStack {});
 
     // Slow joins shouldn't cause internal slow down
     let elapsed = start.elapsed().as_millis() - thread_join_time_max as u128;
@@ -70,12 +68,11 @@ fn slow_join_interrupted() {
                     let duration = Duration::from_millis(1);
                     thread::sleep(duration);
                 },
-                ProcStack::default(),
             )
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 
-    run(join_all(handles), ProcStack::default());
+    run(join_all(handles), ProcStack {});
 
     // Let them join to see how it behaves under different workloads.
     // This time join under the time window.
@@ -90,12 +87,11 @@ fn slow_join_interrupted() {
                     let duration = Duration::from_millis(100);
                     thread::sleep(duration);
                 },
-                ProcStack::default(),
             )
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 
-    run(join_all(handles), ProcStack::default());
+    run(join_all(handles), ProcStack {});
 
     // Slow joins shouldn't cause internal slow down
     let elapsed = start.elapsed().as_millis() - thread_join_time_max as u128;
@@ -120,7 +116,6 @@ fn longhauling_task_join() {
                     let duration = Duration::from_millis(1000);
                     thread::sleep(duration);
                 },
-                ProcStack::default(),
             )
         })
         .collect::<Vec<RecoverableHandle<()>>>();
@@ -137,12 +132,11 @@ fn longhauling_task_join() {
                     let duration = Duration::from_millis(100);
                     thread::sleep(duration);
                 },
-                ProcStack::default(),
             )
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 
-    run(join_all(handles), ProcStack::default());
+    run(join_all(handles), ProcStack {});
 
     // Slow joins shouldn't cause internal slow down
     let elapsed = start.elapsed().as_millis() - thread_join_time_max as u128;

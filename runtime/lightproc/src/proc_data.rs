@@ -37,14 +37,16 @@ impl ProcData {
 
         loop {
             // If the proc has been completed or closed, it can't be cancelled.
-            if state.intersects(COMPLETED | CLOSED) {
+            if state.get_flags().intersects(COMPLETED | CLOSED) {
                 break;
             }
 
+            let (flags, references) = state.parts();
+            let new = State::new(flags | CLOSED, references);
             // Mark the proc as closed.
             match self.state.compare_exchange_weak(
-                state.into(),
-                (state | CLOSED).into(),
+                state,
+                new,
                 Ordering::AcqRel,
                 Ordering::Acquire,
             ) {
@@ -96,9 +98,9 @@ impl ProcData {
         loop {
             // Acquire the lock. If we're storing an awaiter, then also set the awaiter flag.
             let state = if new_is_none {
-                self.state.fetch_or(LOCKED.into(), Ordering::Acquire)
+                self.state.fetch_or(LOCKED, Ordering::Acquire)
             } else {
-                self.state.fetch_or((LOCKED | AWAITER).into(), Ordering::Acquire)
+                self.state.fetch_or(LOCKED | AWAITER, Ordering::Acquire)
             };
 
             // If the lock was acquired, break from the loop.

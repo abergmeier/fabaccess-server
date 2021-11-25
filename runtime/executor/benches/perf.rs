@@ -1,25 +1,22 @@
-#![feature(test)]
+use executor::prelude::*;
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
-extern crate test;
-
-use bastion_executor::prelude::*;
-use lightproc::proc_stack::ProcStack;
-use test::{black_box, Bencher};
-
-#[bench]
-fn increment(b: &mut Bencher) {
+fn increment(b: &mut Criterion) {
     let mut sum = 0;
+    let executor = Executor::new();
 
-    b.iter(|| {
-        run(
+    b.bench_function("Executor::run", |b| b.iter(|| {
+        executor.run(
             async {
                 (0..10_000_000).for_each(|_| {
                     sum += 1;
                 });
             },
-            ProcStack::default(),
         );
-    });
+    }));
 
     black_box(sum);
 }
+
+criterion_group!(perf, increment);
+criterion_main!(perf);

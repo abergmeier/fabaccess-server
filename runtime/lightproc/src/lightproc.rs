@@ -76,10 +76,10 @@ impl LightProc {
     ///     println!("future panicked!: {}", &reason);
     /// });
     /// ```
-    pub fn recoverable<F, R, S>(future: F, schedule: S) -> (Self, RecoverableHandle<R>)
-        where F: Future<Output=R> + 'static,
-              R: 'static,
-              S: Fn(LightProc) + 'static,
+    pub fn recoverable<'a, F, R, S>(future: F, schedule: S) -> (Self, RecoverableHandle<R>)
+        where F: Future<Output=R> + 'a,
+              R: 'a,
+              S: Fn(LightProc) + 'a,
     {
         let recovery_future = AssertUnwindSafe(future).catch_unwind();
         let (proc, handle) = Self::build(recovery_future, schedule);
@@ -114,10 +114,10 @@ impl LightProc {
     ///     schedule_function,
     /// );
     /// ```
-    pub fn build<F, R, S>(future: F, schedule: S) -> (Self, ProcHandle<R>)
-        where F: Future<Output=R> + 'static,
-              R: 'static,
-              S: Fn(LightProc) + 'static,
+    pub fn build<'a, F, R, S>(future: F, schedule: S) -> (Self, ProcHandle<R>)
+        where F: Future<Output=R> + 'a,
+              R: 'a,
+              S: Fn(LightProc) + 'a,
     {
         let raw_proc = RawProc::allocate(future, schedule);
         let proc = LightProc { raw_proc };

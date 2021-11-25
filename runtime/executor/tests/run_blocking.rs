@@ -1,8 +1,8 @@
-use bastion_executor::blocking;
-use bastion_executor::run::run;
-use lightproc::proc_stack::ProcStack;
+use std::io::Write;
+use executor::run::run;
 use std::thread;
 use std::time::Duration;
+use executor::prelude::{ProcStack, spawn};
 
 #[cfg(feature = "tokio-runtime")]
 mod tokio_tests {
@@ -21,18 +21,18 @@ mod no_tokio_tests {
 }
 
 fn run_test() {
-    let output = run(
-        blocking::spawn_blocking(
-            async {
-                let duration = Duration::from_millis(1);
-                thread::sleep(duration);
-                42
-            },
-            ProcStack::default(),
-        ),
-        ProcStack::default(),
-    )
-    .unwrap();
+    let handle = spawn(
+        async {
+            let duration = Duration::from_millis(1);
+            thread::sleep(duration);
+            //42
+        },
+    );
 
-    assert_eq!(42, output);
+    let output = run(handle, ProcStack {});
+
+    println!("{:?}", output);
+    std::io::stdout().flush();
+    assert!(output.is_some());
+    std::thread::sleep(Duration::from_millis(200));
 }

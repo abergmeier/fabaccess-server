@@ -52,15 +52,16 @@ impl<R> ProcHandle<R> {
 
             loop {
                 // If the proc has been completed or closed, it can't be cancelled.
-                if state.intersects(COMPLETED | CLOSED) {
+                if state.get_flags().intersects(COMPLETED | CLOSED) {
                     break;
                 }
 
                 // If the proc is not scheduled nor running, we'll need to schedule it.
-                let new = if state.intersects(SCHEDULED | RUNNING) {
-                    (state | SCHEDULED | CLOSED) + 1
+                let (flags, references) = state.parts();
+                let new = if flags.intersects(SCHEDULED | RUNNING) {
+                    State::new(flags | SCHEDULED | CLOSED, references + 1)
                 } else {
-                    state | CLOSED
+                    State::new(flags | CLOSED, references)
                 };
 
                 // Mark the proc as closed.
@@ -73,7 +74,7 @@ impl<R> ProcHandle<R> {
                     Ok(_) => {
                         // If the proc is not scheduled nor running, schedule it so that its future
                         // gets dropped by the executor.
-                        if !state.intersects(SCHEDULED | RUNNING) {
+                        if !state.get_flags().intersects(SCHEDULED | RUNNING) {
                             ((*pdata).vtable.schedule)(ptr);
                         }
 
@@ -142,9 +143,11 @@ impl<R> Future for ProcHandle<R> {
                 }
 
                 // Since the proc is now completed, mark it as closed in order to grab its output.
+                let (flags, references) = state.parts();
+                let new = State::new(flags | CLOSED, references);
                 match (*pdata).state.compare_exchange(
                     state,
-                    state | CLOSED,
+                    new,
                     Ordering::AcqRel,
                     Ordering::Acquire,
                 ) {
@@ -190,8 +193,8 @@ impl<R> Drop for ProcHandle<R> {
             // proc. This is a common case so if the handle is not used, the overhead of it is only
             // one compare-exchange operation.
             if let Err(mut state) = (*pdata).state.compare_exchange_weak(
-                SCHEDULED | HANDLE | REFERENCE,
-                SCHEDULED | REFERENCE,
+                State::new(SCHEDULED | HANDLE, 1),
+                State::new(SCHEDULED, 1),
                 Ordering::AcqRel,
                 Ordering::Acquire,
             ) {
@@ -200,9 +203,10 @@ impl<R> Drop for ProcHandle<R> {
                     // must be dropped.
                     if state.is_completed() && !state.is_closed() {
                         // Mark the proc as closed in order to grab its output.
+                        let (flags, references) = state.parts();
                         match (*pdata).state.compare_exchange_weak(
                             state,
-                            state | CLOSED,
+                            State::new(flags | CLOSED, references),
                             Ordering::AcqRel,
                             Ordering::Acquire,
                         ) {
@@ -211,7 +215,7 @@ impl<R> Drop for ProcHandle<R> {
                                 output = Some((((*pdata).vtable.get_output)(ptr) as *mut R).read());
 
                                 // Update the state variable because we're continuing the loop.
-                                state |= CLOSED;
+                                state = State::new(flags | CLOSED, references);
                             }
                             Err(s) => state = s,
                         }
@@ -220,9 +224,10 @@ impl<R> Drop for ProcHandle<R> {
                         // close it and schedule one more time so that its future gets dropped by
                         // the executor.
                         let new = if state.get_refcount() == 0 && !state.is_closed() {
-                            SCHEDULED | CLOSED | REFERENCE
+                            State::new(SCHEDULED | CLOSED, 1)
                         } else {
-                            state & !HANDLE
+                            let (flags, references) = state.parts();
+                            State::new(flags & !HANDLE, references)
                         };
 
                         // Unset the handle flag.
