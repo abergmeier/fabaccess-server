@@ -63,17 +63,15 @@ impl info::Server for Machine {
     fn get_machine_info_extended(
         &mut self,
         _: info::GetMachineInfoExtendedParams,
-        _results: info::GetMachineInfoExtendedResults,
+        mut results: info::GetMachineInfoExtendedResults,
     ) -> Promise<(), capnp::Error> {
-        /*if self.perms.manage {
+        if self.perms.manage {
             let mut builder = results.get();
             let mut extinfo = builder.init_machine_info_extended();
             let mut current = extinfo.init_current_user();
-            // FIXME fill user
+            current.set_username(&self.userid.uid);
         }
-        Promise::ok(())*/
-
-        Promise::err(capnp::Error::unimplemented("Extended Infos are unavailable".to_string()))
+        Promise::ok(())
     }
 
     fn get_reservation_list(
