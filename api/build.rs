@@ -9,7 +9,9 @@ fn is_hidden(entry: &DirEntry) -> bool {
 
 fn main() {
     let mut compile_command = ::capnpc::CompilerCommand::new();
-    compile_command.src_prefix("schema");
+    compile_command
+        .src_prefix("schema")
+        .default_parent_module(vec!["schema".to_string()]);
 
     for entry in WalkDir::new("schema")
         .max_depth(2)
@@ -25,7 +27,8 @@ fn main() {
         )
     {
         println!("Collecting schema file {}", entry.path().display());
-        compile_command.file(entry.path());
+        compile_command
+            .file(entry.path());
     }
 
     println!("Compiling schemas...");

@@ -65,11 +65,11 @@ use std::sync::Arc;
 use std::path::Path;
 use crate::db::user::User;
 use std::collections::HashMap;
-use crate::state::{OwnedEntry, State};
+use crate::resource::state::{OwnedEntry, State};
 use std::iter::FromIterator;
 use std::ops::Deref;
-use crate::oid::{ArchivedObjectIdentifier, ObjectIdentifier};
-use crate::state::value::SerializeValue;
+use crate::utils::oid::{ArchivedObjectIdentifier, ObjectIdentifier};
+use crate::resource::state::value::SerializeValue;
 
 #[derive(Debug)]
 pub enum DBError {

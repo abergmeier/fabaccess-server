@@ -1,4 +1,4 @@
-//! oid crate by <https://github.com/UnnecessaryEngineering/oid> turned into vendore'd module
+//! oid crate by <https://github.com/UnnecessaryEngineering/oid> turned into vendored module
 //!
 //! [Object Identifiers] are a standard of the [ITU] used to reference objects, things, and
 //! concepts in a globally unique way. This crate provides for data structures and methods
@@ -61,7 +61,7 @@ use std::fmt;
 use std::fmt::Formatter;
 use rkyv::ser::Serializer;
 use std::str::FromStr;
-use crate::varint::VarU128;
+use crate::utils::varint::VarU128;
 use std::convert::TryInto;
 
 type Node = u128;

@@ -1,41 +1,56 @@
-pub use capnpc::schema_capnp;
 
-#[allow(dead_code)]
-pub mod auth_capnp {
-    include!(concat!(env!("OUT_DIR"), "/auth_capnp.rs"));
+//! FabAccess generated API bindings
+//!
+//! This crate contains slightly nicer and better documented bindings for the FabAccess API.
+
+
+mod schema;
+
+/// Authentication subsystem
+pub mod auth {
+    /// Session authentication
+    ///
+    /// Authentication uses a SASL exchange. To bootstrap a connection you will need to call
+    /// `step` until you get a successful result
+    pub mod authentication {
+        pub use crate::schema::auth_capnp::authentication::*;
+    }
+
+    pub mod response {
+        pub use crate::schema::auth_capnp::response::*;
+    }
 }
 
-#[allow(dead_code)]
-pub mod main_capnp {
-    include!(concat!(env!("OUT_DIR"), "/main_capnp.rs"));
+pub mod resource {
+    pub use crate::schema::resource_capnp::*;
 }
 
-#[allow(dead_code)]
-pub mod utils_capnp {
-    include!(concat!(env!("OUT_DIR"), "/utils_capnp.rs"));
+pub mod resources {
+    pub use crate::schema::resources_capnp::*;
 }
 
-#[allow(dead_code)]
-pub mod resource_capnp {
-    include!(concat!(env!("OUT_DIR"), "/resource_capnp.rs"));
+pub mod role {
+    pub use crate::schema::role_capnp::*;
 }
 
-#[allow(dead_code)]
-pub mod resources_capnp {
-    include!(concat!(env!("OUT_DIR"), "/resources_capnp.rs"));
+pub mod user {
+    pub use crate::schema::user_capnp::*;
 }
 
-#[allow(dead_code)]
-pub mod role_capnp {
-    include!(concat!(env!("OUT_DIR"), "/role_capnp.rs"));
+pub mod users {
+    pub use crate::schema::users_capnp::*;
 }
 
-#[allow(dead_code)]
-pub mod user_capnp {
-    include!(concat!(env!("OUT_DIR"), "/user_capnp.rs"));
-}
+pub mod utils {
+    pub mod uuid {
+        pub use crate::schema::utils_capnp::u_u_i_d::*;
+    }
 
-#[allow(dead_code)]
-pub mod users_capnp {
-    include!(concat!(env!("OUT_DIR"), "/users_capnp.rs"));
+    /// Localization String
+    ///
+    /// This is a specialized string that allows to access the string contents in different
+    /// languages
+    pub mod l10n_string {
+        pub use crate::schema::utils_capnp::l10_n_string::*;
+    }
 }

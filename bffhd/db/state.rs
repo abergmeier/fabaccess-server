@@ -24,7 +24,7 @@ use super::{
     LMDBorrow,
 };
 
-use crate::state::State;
+use crate::resource::state::State;
 
 type StateAdapter = AllocAdapter<State>;
 
@@ -162,8 +162,8 @@ impl StateAccessor {
 mod tests {
     use super::*;
 
-    use crate::state::value::Vec3u8;
-    use crate::state::value::{OID_COLOUR, OID_POWERED, OID_INTENSITY};
+    use crate::resource::state::value::Vec3u8;
+    use crate::resource::state::value::{OID_COLOUR, OID_POWERED, OID_INTENSITY};
     use std::ops::Deref;
 
     #[test]

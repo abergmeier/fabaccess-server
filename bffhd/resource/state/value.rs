@@ -14,7 +14,7 @@ use rkyv_typename::TypeName;
 use ptr_meta::{DynMetadata, Pointee};
 
 use inventory;
-use crate::oid::{ObjectIdentifier};
+use crate::utils::oid::{ObjectIdentifier};
 use rkyv::ser::{Serializer, ScratchSpace};
 use std::collections::HashMap;
 use std::alloc::Layout;
@@ -577,10 +577,10 @@ oidvalue!(OID_VEC3U8, Vec3u8, ArchivedVec3u8);
 
 #[cfg(test)]
 mod tests {
+    use super::*;
     use rand::Rng;
     use rand::distributions::Standard;
     use rand::prelude::Distribution;
-    use crate::state::value::Vec3u8;
 
     impl Distribution<Vec3u8> for Standard {
         fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec3u8 {

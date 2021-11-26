@@ -1,34 +1,31 @@
 use std::{
+    collections::hash_map::DefaultHasher,
     fmt,
-
-    collections::{
-        hash_map::DefaultHasher
-    },
     hash::{
         Hash,
         Hasher
     },
 };
+use std::fmt::Formatter;
+use std::ops::Deref;
 
 use rkyv::{
     Archive,
     Archived,
-
-    Serialize,
     Deserialize,
-
     out_field,
+    Serialize,
 };
+use serde::de::{Error, MapAccess};
+use serde::Deserializer;
+use serde::ser::SerializeMap;
+
+use value::{RegisteredImpl, SerializeValue};
+
+use crate::utils::oid::ObjectIdentifier;
+use crate::resource::state::value::{DynOwnedVal, DynVal, TypeOid, };
 
 pub mod value;
-use value::{SerializeValue, RegisteredImpl};
-use crate::state::value::{TypeOid, DynVal, DynOwnedVal, };
-use crate::oid::ObjectIdentifier;
-use serde::ser::SerializeMap;
-use std::ops::Deref;
-use std::fmt::Formatter;
-use serde::Deserializer;
-use serde::de::{Error, MapAccess};
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Archive, Serialize, Deserialize)]
@@ -177,14 +174,14 @@ impl<'de> serde::de::Visitor<'de> for OwnedEntryVisitor {
 #[cfg(test)]
 pub mod tests {
     use super::*;
-    use crate::state::value::*;
+    use super::value::*;
 
     pub(crate) fn gen_random() -> State {
         let amt: u8 = rand::random::<u8>() % 20;
 
         let mut sb = State::build();
         for _ in 0..amt {
-            let oid = crate::oid::tests::gen_random();
+            let oid = crate::utils::oid::tests::gen_random();
             sb = match rand::random::<u32>()%12 {
                 0 => sb.add(oid, Box::new(rand::random::<bool>())),
                 1 => sb.add(oid, Box::new(rand::random::<u8>())),

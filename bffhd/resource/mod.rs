@@ -5,10 +5,13 @@ use futures_signals::signal::Mutable;
 use async_oneshot::Sender;
 use async_channel::Receiver;
 
-use crate::state::State;
+use state::State;
 use crate::db::{
     state::StateAccessor,
 };
+
+pub mod state;
+pub mod claim;
 
 /// A resource in BFFH has to contain several different parts;
 /// - Currently set state
@@ -121,7 +124,7 @@ mod tests {
 
     #[futures_test::test]
     async fn test_passthrough_is_id() {
-        let inp = crate::state::tests::gen_random();
+        let inp = state::tests::gen_random();
 
         let mut res = Passthrough;
         let out = res.on_update(&inp).await.unwrap();
