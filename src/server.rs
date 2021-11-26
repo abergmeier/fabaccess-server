@@ -27,11 +27,15 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
     -> Result<(), Error> 
 {
     let signal = Box::pin(async {
+        use signal_hook::consts::signal::*;
         let (tx, mut rx) = UnixStream::pair()?;
         // Initialize signal handler.
         // We currently only care about Ctrl-C so SIGINT it is.
         // TODO: Make this do SIGHUP and a few others too. (By cloning the tx end of the pipe)
-        sigpipe::register(signal_hook::consts::SIGINT, tx.as_raw_fd())?;
+        let fd = tx.as_raw_fd();
+        sigpipe::register(SIGINT, fd)?;
+        sigpipe::register(SIGQUIT, fd)?;
+        sigpipe::register(SIGTERM, fd)?;
         // When a signal is received this future can complete and read a byte from the underlying
         // socket — the actual data is discarded but the act of being able to receive data tells us
         // that we received a SIGINT.

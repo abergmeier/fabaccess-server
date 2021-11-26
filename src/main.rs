@@ -115,7 +115,8 @@ fn main() {
         // on.
         // TODO: Now would be a really good time to close stdin/out and move logging to syslog
         // Log is in an Arc so we can do very cheap clones in closures.
-        let log = Arc::new(log::init());
+        let (log, guard) = log::init();
+        let log = Arc::new(log);
         info!(log, "Starting");
 
         match maybe(matches, log.clone()) {
@@ -125,9 +126,8 @@ fn main() {
                 retval = -1;
             }
         }
+        drop(guard);
     }
-
-    std::process::exit(retval);
 }
 
 // Returning a `Result` from `main` allows us to use the `?` shorthand.
