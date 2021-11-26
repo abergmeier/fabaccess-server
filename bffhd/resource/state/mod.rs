@@ -26,6 +26,7 @@ use crate::utils::oid::ObjectIdentifier;
 use crate::resource::state::value::{DynOwnedVal, DynVal, TypeOid, };
 
 pub mod value;
+pub mod db;
 
 #[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Archive, Serialize, Deserialize)]

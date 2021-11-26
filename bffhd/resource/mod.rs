@@ -6,12 +6,11 @@ use async_oneshot::Sender;
 use async_channel::Receiver;
 
 use state::State;
-use crate::db::{
-    state::StateAccessor,
-};
+use state::db::StateAccessor;
 
 pub mod state;
 pub mod claim;
+
 
 /// A resource in BFFH has to contain several different parts;
 /// - Currently set state

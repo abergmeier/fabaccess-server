@@ -17,7 +17,7 @@ pub use lmdb::{
 use rkyv::{Fallible, Serialize, ser::serializers::AllocSerializer, AlignedVec, Archived};
 
 mod raw;
-use raw::RawDB;
+pub use raw::RawDB;
 
 mod typed;
 // re-exports
@@ -38,11 +38,6 @@ pub use hash::{
 mod fix;
 pub use fix::LMDBorrow;
 
-pub mod state;
-pub use state::{
-    StateDB,
-};
-
 mod resources;
 pub use resources::{
     ResourceDB,
@@ -53,19 +48,14 @@ pub use pass::{
     PassDB,
 };
 
-mod user;
-pub use user::{
-    UserDB,
-};
-
 use lmdb::Error;
 use rkyv::Deserialize;
 use rkyv::ser::serializers::AlignedSerializer;
 use std::sync::Arc;
 use std::path::Path;
-use crate::db::user::User;
+use crate::users::db::{User, UserDB};
 use std::collections::HashMap;
-use crate::resource::state::{OwnedEntry, State};
+use crate::resource::state::{OwnedEntry, State, db::StateDB};
 use std::iter::FromIterator;
 use std::ops::Deref;
 use crate::utils::oid::{ArchivedObjectIdentifier, ObjectIdentifier};
@@ -87,7 +77,7 @@ impl From<lmdb::Error> for DBError {
 
 type Ser = AllocSerializer<1024>;
 #[derive(Clone)]
-struct AllocAdapter<V> {
+pub struct AllocAdapter<V> {
     phantom: PhantomData<V>,
 }
 

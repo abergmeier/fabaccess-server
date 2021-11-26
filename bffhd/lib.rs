@@ -18,8 +18,12 @@ pub mod error;
 /// Policy decision engine
 pub mod permissions;
 
+pub mod users;
+
 /// Resources
 pub mod resource;
 pub mod resources;
+
+pub mod server;
 
 pub mod utils;

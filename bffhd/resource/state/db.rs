@@ -5,7 +5,7 @@ use std::{
 
 use rkyv::{Archived};
 
-use super::{
+use crate::db::{
     DB,
     Environment,
 

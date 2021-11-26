@@ -1,6 +1,5 @@
 use std::sync::Arc;
-use super::{DB, AllocAdapter, Environment, Result};
-use crate::db::raw::RawDB;
+use crate::db::{RawDB, DB, AllocAdapter, Environment, Result};
 use crate::db::{DatabaseFlags, LMDBorrow, RoTransaction, WriteFlags, };
 
 use rkyv::{Archive, Serialize, Deserialize, Archived};
