@@ -4,7 +4,7 @@
 //! This crate contains slightly nicer and better documented bindings for the FabAccess API.
 
 
-mod schema;
+pub mod schema;
 
 /// Authentication subsystem
 pub mod auth {
@@ -34,7 +34,7 @@ pub mod role {
 }
 
 pub mod user {
-    pub use crate::schema::user_capnp::*;
+    pub use crate::schema::user_capnp::user::*;
 }
 
 pub mod users {
@@ -53,4 +53,12 @@ pub mod utils {
     pub mod l10n_string {
         pub use crate::schema::utils_capnp::l10_n_string::*;
     }
+}
+
+pub mod bootstrap {
+    pub use crate::schema::main_capnp::bootstrap::*;
+}
+
+pub mod session {
+    pub use crate::schema::main_capnp::session::*;
 }

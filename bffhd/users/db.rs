@@ -1,21 +1,15 @@
 use std::sync::Arc;
 use crate::db::{RawDB, DB, AllocAdapter, Environment, Result};
 use crate::db::{DatabaseFlags, LMDBorrow, RoTransaction, WriteFlags, };
+use super::User;
 
-use rkyv::{Archive, Serialize, Deserialize, Archived};
+use rkyv::{Deserialize, Archived};
 
 type Adapter = AllocAdapter<User>;
 #[derive(Clone, Debug)]
 pub struct UserDB {
     env: Arc<Environment>,
     db: DB<Adapter>,
-}
-
-#[derive(Debug, Clone, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize)]
-pub struct User {
-    id: u128,
-    username: String,
-    roles: Vec<String>,
 }
 
 impl UserDB {
