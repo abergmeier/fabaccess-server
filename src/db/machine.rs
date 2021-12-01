@@ -75,7 +75,7 @@ impl MachineState {
 
 pub fn init(log: Logger, _config: &Config, env: Arc<lmdb::Environment>) -> Result<Internal> {
     let mut flags = lmdb::DatabaseFlags::empty();
-    flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
+    //flags.set(lmdb::DatabaseFlags::INTEGER_KEY, true);
     let machdb = env.create_db(Some("machines"), flags)?;
     debug!(&log, "Opened machine db successfully.");
 

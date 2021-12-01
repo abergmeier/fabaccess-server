@@ -167,7 +167,16 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
         let ex = Executor::new();
         let db = db::Databases::new(&log, &config)?;
 
-        let machines = machine::load(&config)?;
+        {
+            info!(log, "Loaded DB state:");
+            let txn = db.machine.txn()?;
+            for (id, state) in db.machine.iter(&txn)? {
+                info!(log, "- {}: {:?}", id, state);
+            }
+            info!(log, "Loaded DB state END.");
+        }
+
+        let machines = machine::load(&config, db.clone(), &log)?;
         let (actor_map, actors) = actor::load(&log, &config)?;
         let (init_map, initiators) = initiator::load(&log, &config)?;
 

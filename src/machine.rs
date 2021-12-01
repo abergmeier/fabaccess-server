@@ -19,12 +19,13 @@ use futures::channel::{mpsc, oneshot};
 use futures_signals::signal::Signal;
 use futures_signals::signal::SignalExt;
 use futures_signals::signal::{Mutable, ReadOnlyMutable};
+use slog::Logger;
 
 use crate::error::{Result, Error};
 
-use crate::db::access;
+use crate::db::{access, Databases, MachineDB};
 use crate::db::machine::{MachineIdentifier, MachineState, Status};
-use crate::db::user::{User, UserData};
+use crate::db::user::{User, UserData, UserId};
 
 use crate::network::MachineMap;
 use crate::space;
@@ -73,13 +74,14 @@ impl Machine {
         }
     }
 
-    pub fn construct
-        ( id: MachineIdentifier
-        , desc: MachineDescription
-        , state: MachineState
-        ) -> Machine
+    pub fn construct(
+        id: MachineIdentifier,
+        desc: MachineDescription,
+        state: MachineState,
+        db: Arc<MachineDB>,
+    ) -> Machine
     {
-        Self::new(Inner::new(id, state), desc)
+        Self::new(Inner::new(id, state, db), desc)
     }
 
     pub fn do_state_change(&self, new_state: MachineState) 
@@ -136,17 +138,20 @@ pub struct Inner {
     /// case of an actor it should then make sure that the real world matches up with the set state
     state: Mutable<MachineState>,
     reset: Option<MachineState>,
+
+    previous: Option<UserId>,
+
+    db: Arc<MachineDB>,
 }
 
 impl Inner {
-    pub fn new ( id: MachineIdentifier
-               , state: MachineState
-               ) -> Inner 
-    {
+    pub fn new(id: MachineIdentifier, state: MachineState, db: Arc<MachineDB>) -> Inner {
         Inner {
             id,
             state: Mutable::new(state),
             reset: None,
+            previous: None,
+            db,
         }
     }
 
@@ -162,8 +167,13 @@ impl Inner {
         Box::pin(self.state.signal_cloned().dedupe_cloned())
     }
 
+    fn replace_state(&mut self, new_state: MachineState) -> MachineState {
+        self.db.put(&self.id, &new_state);
+        self.state.replace(new_state)
+    }
+
     pub fn do_state_change(&mut self, new_state: MachineState) {
-            let old_state = self.state.replace(new_state);
+            let old_state = self.replace_state(new_state);
             self.reset.replace(old_state);
     }
 
@@ -176,9 +186,30 @@ impl Inner {
     }
 
     pub fn reset_state(&mut self) {
-        if let Some(state) = self.reset.take() {
-            self.state.replace(state);
+        let previous_state = self.read_state();
+        let state_lock = previous_state.lock_ref();
+        // Only update previous user if state changed from InUse or ToCheck to whatever.
+        match state_lock.state {
+            Status::InUse(ref user) => {
+                self.previous = user.clone();
+            },
+            Status::ToCheck(ref user) => {
+                self.previous = Some(user.clone());
+            },
+            _ => {},
         }
+        drop(state_lock);
+
+        if let Some(state) = self.reset.take() {
+            self.replace_state(state);
+        } else {
+            // Default to Free
+            self.replace_state(MachineState::free());
+        }
+    }
+
+    pub fn get_previous(&self) -> &Option<UserId> {
+        &self.previous
     }
 }
 
@@ -242,15 +273,22 @@ impl MachineDescription {
     }
 }
 
-pub fn load(config: &crate::config::Config)
+pub fn load(config: &crate::config::Config, db: Databases, log: &Logger)
     -> Result<MachineMap> 
 {
     let mut map = config.machines.clone();
+    let db = db.machine;
 
     let it = map.drain()
         .map(|(k,v)| {
             // TODO: Read state from the state db
-            (v.name.clone(), Machine::construct(k, v, MachineState::new()))
+            if let Some(state) = db.get(&k).unwrap() {
+                debug!(log, "Loading old state from db for {}: {:?}", &k, &state);
+                (v.name.clone(), Machine::construct(k, v, state, db.clone()))
+            } else {
+                debug!(log, "No old state found in db for {}, creating new.", &k);
+                (v.name.clone(), Machine::construct(k, v, MachineState::new(), db.clone()))
+            }
         });
 
 

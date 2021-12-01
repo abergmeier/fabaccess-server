@@ -24,10 +24,12 @@ pub mod access;
 /// Stores&Retrieves Machines
 pub mod machine;
 
+pub type MachineDB = machine::internal::Internal;
+
 #[derive(Clone)]
 pub struct Databases {
     pub access: Arc<access::AccessControl>,
-    pub machine: Arc<machine::internal::Internal>,
+    pub machine: Arc<MachineDB>,
     pub userdb: Arc<user::Internal>,
 }
 
