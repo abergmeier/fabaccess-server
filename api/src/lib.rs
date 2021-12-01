@@ -3,7 +3,7 @@
 //!
 //! This crate contains slightly nicer and better documented bindings for the FabAccess API.
 
-
+#[allow(dead_code)]
 pub mod schema;
 
 /// Authentication subsystem
