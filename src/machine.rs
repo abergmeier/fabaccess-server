@@ -192,8 +192,20 @@ impl Inner {
     }
 
     pub fn do_state_change(&mut self, new_state: MachineState) {
-            let old_state = self.replace_state(new_state);
-            self.reset.replace(old_state);
+        let old_state = self.replace_state(new_state);
+
+        // Set "previous user" if state change warrants it
+        match old_state.state {
+            Status::InUse(ref user) => {
+                self.previous = user.clone();
+            },
+            Status::ToCheck(ref user) => {
+                self.previous = Some(user.clone());
+            },
+            _ => {},
+        }
+
+        self.reset.replace(old_state);
     }
 
     pub fn read_state(&self) -> ReadOnlyMutable<MachineState> {
