@@ -117,8 +117,7 @@ impl Future for Initiator {
                     debug!(this.log, "Sensor returned a new state");
                     this.future.take();
                     let f = this.machine.as_mut().map(|machine| {
-                        unimplemented!()
-                        //machine.request_state_change(user.as_ref(), state)
+                        machine.request_state_change(user.as_ref(), state)
                     });
                     this.state_change_fut = f;
                 }

@@ -24,6 +24,7 @@ use slog::Logger;
 use crate::error::{Result, Error};
 
 use crate::db::{access, Databases, MachineDB};
+use crate::db::access::AccessControl;
 use crate::db::machine::{MachineIdentifier, MachineState, Status};
 use crate::db::user::{User, UserData, UserId};
 
@@ -62,15 +63,24 @@ pub struct Machine {
     pub id: MachineIdentifier,
     pub desc: MachineDescription,
 
+    access_control: Arc<AccessControl>,
+
     inner: Arc<Mutex<Inner>>,
 }
 
 impl Machine {
-    pub fn new(inner: Inner, id: MachineIdentifier, desc: MachineDescription) -> Self {
+    pub fn new(
+        inner: Inner,
+        id: MachineIdentifier,
+        desc: MachineDescription,
+        access_control: Arc<AccessControl>
+        ) -> Self
+    {
         Self { 
             id,
             inner: Arc::new(Mutex::new(inner)),
             desc,
+            access_control,
         }
     }
 
@@ -79,9 +89,10 @@ impl Machine {
         desc: MachineDescription,
         state: MachineState,
         db: Arc<MachineDB>,
-    ) -> Machine
+        access_control: Arc<AccessControl>,
+        ) -> Machine
     {
-        Self::new(Inner::new(id.clone(), state, db), id, desc)
+        Self::new(Inner::new(id.clone(), state, db), id, desc, access_control)
     }
 
     pub fn do_state_change(&self, new_state: MachineState) 
@@ -96,6 +107,15 @@ impl Machine {
         };
 
         Box::pin(f)
+    }
+
+    pub fn request_state_change(&mut self, user: Option<&User>, new_state: MachineState)
+        -> BoxFuture<'static, Result<ReturnToken>>
+    {
+        let inner = self.inner.clone();
+        Box::pin(async move {
+            Ok(ReturnToken::new(inner))
+        })
     }
 
     pub async fn get_status(&self) -> Status {
@@ -140,7 +160,6 @@ pub struct Inner {
     reset: Option<MachineState>,
 
     previous: Option<UserId>,
-
     db: Arc<MachineDB>,
 }
 
@@ -277,6 +296,7 @@ pub fn load(config: &crate::config::Config, db: Databases, log: &Logger)
     -> Result<MachineMap> 
 {
     let mut map = config.machines.clone();
+    let access_control = db.access;
     let db = db.machine;
 
     let it = map.drain()
@@ -284,10 +304,24 @@ pub fn load(config: &crate::config::Config, db: Databases, log: &Logger)
             // TODO: Read state from the state db
             if let Some(state) = db.get(&k).unwrap() {
                 debug!(log, "Loading old state from db for {}: {:?}", &k, &state);
-                (k.clone(), Machine::construct(k, v, state, db.clone()))
+                (k.clone(),
+                 Machine::construct(
+                    k,
+                    v,
+                    state,
+                    db.clone(),
+                    access_control.clone()
+                 ))
             } else {
                 debug!(log, "No old state found in db for {}, creating new.", &k);
-                (k.clone(), Machine::construct(k, v, MachineState::new(), db.clone()))
+                (k.clone(),
+                 Machine::construct(
+                     k,
+                     v,
+                     MachineState::new(),
+                     db.clone(),
+                     access_control.clone(),
+                 ))
             }
         });
 

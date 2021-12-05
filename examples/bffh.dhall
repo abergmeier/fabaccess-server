@@ -22,10 +22,10 @@
     { cmd = "./examples/fail-actor.sh" 
     }}
   }
-  --, init_connections = [] : List { machine : Text, initiator : Text }
-, init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
-, initiators = --{=}
-  { Initiator = { module = "Dummy", params = {=} } }
+  , init_connections = [] : List { machine : Text, initiator : Text }
+--, init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
+  , initiators = {=}
+  --{ Initiator = { module = "Dummy", params = {=} } }
 , listens = 
   [ { address = "127.0.0.1", port = Some 59661 }
   , { address = "::1", port = Some 59661 }

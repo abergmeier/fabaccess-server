@@ -5,7 +5,7 @@ use slog::Logger;
 use std::sync::Arc;
 
 use std::fmt;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::cmp::Ordering;
 use std::path::Path;
 use std::fs;
@@ -105,6 +105,43 @@ pub trait RoleDB {
         }
 
         return Ok(output);
+    }
+
+    fn permitted_tally(&self,
+                       roles: &mut HashSet<RoleIdentifier>,
+                       role_id: &RoleIdentifier,
+                       perm: &Permission
+    ) -> Result<bool> {
+        if let Some(role) = self.get_role(role_id)? {
+            // Only check and tally parents of a role at the role itself if it's the first time we
+            // see it
+            if !roles.contains(&role_id) {
+                for perm_rule in role.permissions.iter() {
+                    if perm_rule.match_perm(perm) {
+                        return Ok(true);
+                    }
+                }
+                for parent in role.parents.iter() {
+                    if self.permitted_tally(roles, parent, perm)? {
+                        return Ok(true);
+                    }
+                }
+
+                roles.insert(role_id.clone());
+            }
+        }
+
+        Ok(false)
+    }
+
+    fn is_permitted(&self, user: &UserData, perm: impl AsRef<Permission>) -> Result<bool> {
+        let mut seen = HashSet::new();
+        for role_id in user.roles.iter() {
+            if self.permitted_tally(&mut seen, role_id, perm.as_ref())? {
+                return Ok(true);
+            }
+        }
+        Ok(false)
     }
 }
 
