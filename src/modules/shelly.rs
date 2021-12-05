@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use slog::Logger;
 
 use crate::db::machine::Status;
@@ -19,12 +20,23 @@ pub struct Shelly {
     log: Logger,
     name: String,
     client: mqtt::AsyncClient,
+    topic: String,
 }
 
 impl Shelly {
-    pub fn new(log: Logger, name: String, client: mqtt::AsyncClient) -> Self {
-        debug!(log, "Starting shelly module for {}", &name);
-        Shelly { log, name, client, }
+    pub fn new(log: Logger, name: String, client: mqtt::AsyncClient, params: &HashMap<String, String>) -> Self {
+        let topic = if let Some(topic) = params.get("topic") {
+            format!("shellies/{}/relay/0/command", topic)
+        } else {
+            format!("shellies/{}/relay/0/command", name)
+        };
+        debug!(log,
+            "Starting shelly module for {name} with topic '{topic}'",
+            name = &name,
+            topic = &topic,
+        );
+
+        Shelly { log, name, client, topic, }
     }
 
     /// Set the name to a new one. This changes the shelly that will be activated
@@ -39,12 +51,11 @@ impl Shelly {
 impl Actuator for Shelly {
     fn apply(&mut self, state: MachineState) -> BoxFuture<'static, ()> {
         info!(self.log, "Machine Status changed: {:?}", state);
-        let topic = format!("shellies/{}/relay/0/command", self.name);
         let pl = match state.state {
             Status::InUse(_) => "on",
             _ => "off",
         };
-        let msg = mqtt::Message::new(topic, pl, 0);
+        let msg = mqtt::Message::new(&self.topic.clone(), pl, 0);
         let f = self.client.publish(msg).map(|_| ());
 
         return Box::pin(f);

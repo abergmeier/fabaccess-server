@@ -41,7 +41,7 @@ use error::Error;
 use slog::Logger;
 
 use paho_mqtt::AsyncClient;
-use crate::config::Config;
+use crate::config::{ActorConn, Config, InitiatorConn};
 
 fn main() {
     use clap::{crate_version, crate_description, crate_name};
@@ -182,18 +182,18 @@ fn maybe(matches: clap::ArgMatches, log: Arc<Logger>) -> Result<(), Error> {
 
         let mut network = network::Network::new(machines, actor_map, init_map);
 
-        for (a,b) in config.actor_connections.iter() {
-            if let Err(e) = network.connect_actor(a,b) {
+        for ActorConn { machine, actor } in config.actor_connections.iter() {
+            if let Err(e) = network.connect_actor(machine, actor) {
                 error!(log, "{}", e);
             }
-            info!(log, "[Actor] Connected {} to {}", a, b);
+            info!(log, "[Actor] Connected {} to {}", machine, actor);
         }
 
-        for (a,b) in config.init_connections.iter() {
-            if let Err(e) = network.connect_init(a,b) {
+        for InitiatorConn { initiator, machine } in config.init_connections.iter() {
+            if let Err(e) = network.connect_init(initiator, machine) {
                 error!(log, "{}", e);
             }
-            info!(log, "[Initi] Connected {} to {}", a, b);
+            info!(log, "[Initi] Connected {} to {}", initiator, machine);
         }
 
         for actor in actors.into_iter() {

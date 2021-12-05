@@ -1,14 +1,15 @@
 -- { actor_connections = [] : List { _1 : Text, _2 : Text }
 { actor_connections = 
   -- Link up machines to actors
-  [ { _1 = "Testmachine", _2 = "Shelly_1234" }
-  , { _1 = "Another", _2 = "Bash" }
+  [ { machine = "Testmachine", actor = "Shelly1234" }
+  , { machine = "Another", actor = "Bash" }
   -- One machine can have as many actors as it wants
-  , { _1 = "Yetmore", _2 = "Bash2" }
-  , { _1 = "Yetmore", _2 = "FailBash"}
+  , { machine = "Yetmore", actor = "Bash2" }
+  , { machine = "Yetmore", actor = "FailBash"}
   ]
 , actors = 
-  { Shelly_1234 = { module = "Shelly", params = {=} }
+  { Shelly_1234 = { module = "Shelly", params =
+    { topic = "Topic1234" }}
   , Bash = { module = "Process", params =
     { cmd = "./examples/actor.sh"
     , args = "your ad could be here"
@@ -21,10 +22,10 @@
     { cmd = "./examples/fail-actor.sh" 
     }}
   }
-  , init_connections = [] : List { _1 : Text, _2 : Text }
---, init_connections = [{ _1 = "Initiator", _2 = "Testmachine" }]
-, initiators = {=}
-  --{ Initiator = { module = "Dummy", params = {=} } }
+  --, init_connections = [] : List { machine : Text, initiator : Text }
+, init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
+, initiators = --{=}
+  { Initiator = { module = "Dummy", params = {=} } }
 , listens = 
   [ { address = "127.0.0.1", port = Some 59661 }
   , { address = "::1", port = Some 59661 }

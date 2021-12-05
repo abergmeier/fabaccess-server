@@ -16,6 +16,18 @@ pub fn read(path: &Path) -> Result<Config> {
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ActorConn {
+    pub machine: String,
+    pub actor: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct InitiatorConn {
+    pub machine: String,
+    pub initiator: String,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// A list of address/port pairs to listen on.
     // TODO: This should really be a variant type; that is something that can figure out itself if
@@ -34,8 +46,8 @@ pub struct Config {
 
     pub mqtt_url: String,
 
-    pub actor_connections: Box<[(String, String)]>,
-    pub init_connections: Box<[(String, String)]>,
+    pub actor_connections: Box<[ActorConn]>,
+    pub init_connections: Box<[InitiatorConn]>,
 
     pub db_path: PathBuf,
 
@@ -101,10 +113,12 @@ impl Default for Config {
             initiators,
             mqtt_url: "tcp://localhost:1883".to_string(),
             actor_connections: Box::new([
-                ("Testmachine".to_string(), "Actor".to_string()),
+                ActorConn { machine: "Testmachine".to_string(), actor: "Actor".to_string() },
             ]),
             init_connections: Box::new([
-                ("Initiator".to_string(), "Testmachine".to_string()),
+                InitiatorConn {
+                    initiator: "Initiator".to_string(), machine: "Testmachine".to_string()
+                },
             ]),
 
             db_path: PathBuf::from("/run/bffh/database"),

@@ -172,7 +172,7 @@ fn load_single(
                 .map(|a| a.into_boxed_actuator())
         }
         "Shelly" => {
-            Some(Box::new(Shelly::new(log, name.clone(), client)))
+            Some(Box::new(Shelly::new(log, name.clone(), client, params)))
         }
         _ => {
             error!(log, "No actor found with name \"{}\", configured as \"{}\".", module_name, name);
