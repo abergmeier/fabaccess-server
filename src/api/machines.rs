@@ -74,7 +74,8 @@ impl machines::Server for Machines {
                     let perms = Perms::get_for(&machine.desc.privs, permissions.iter());
 
                     let mut builder = machines.reborrow().get(i as u32);
-                    builder.set_name(&name);
+                    builder.set_id(&name);
+                    builder.set_name(&machine.desc.name);
                     if let Some(ref desc) = machine.desc.description {
                         builder.set_description(desc);
                     }
@@ -134,9 +135,9 @@ impl machines::Server for Machines {
         ) -> Promise<(), capnp::Error> {
         let rc = Rc::clone(&self.session);
         if self.session.borrow().is_some() {
-            let name = {
+            let id = {
                 let params = pry!(params.get());
-                pry!(params.get_name()).to_string()
+                pry!(params.get_id()).to_string()
             };
 
             let network = self.network.clone();
@@ -145,17 +146,18 @@ impl machines::Server for Machines {
                 let user = &session.as_ref().unwrap().authzid;
                 let permissions = &session.as_ref().unwrap().perms;
 
-                if let Some(machine) = network.machines.get(&name) {
+                if let Some(machine) = network.machines.get(&id) {
                     let mut builder = results.get().init_machine();
                     let perms = Perms::get_for(&machine.desc.privs, permissions.iter());
-                    builder.set_name(&name);
+                    builder.set_id(&id);
+                    builder.set_name(&machine.desc.name);
                     if let Some(ref desc) = machine.desc.description {
                         builder.set_description(desc);
                     }
                     if let Some(ref wiki) = machine.desc.wiki {
                         builder.set_wiki(wiki);
                     }
-                    builder.set_urn(&format!("urn:fabaccess:resource:{}", &name));
+                    builder.set_urn(&format!("urn:fabaccess:resource:{}", &id));
 
                     let machineapi = Machine::new(user.clone(), perms, machine.clone());
                     let state = machine.get_status().await;

@@ -59,16 +59,16 @@ impl Index {
 // memory
 #[derive(Debug, Clone)]
 pub struct Machine {
-    pub id: uuid::Uuid,
+    pub id: MachineIdentifier,
     pub desc: MachineDescription,
 
     inner: Arc<Mutex<Inner>>,
 }
 
 impl Machine {
-    pub fn new(inner: Inner, desc: MachineDescription) -> Self {
+    pub fn new(inner: Inner, id: MachineIdentifier, desc: MachineDescription) -> Self {
         Self { 
-            id: uuid::Uuid::default(),
+            id,
             inner: Arc::new(Mutex::new(inner)),
             desc,
         }
@@ -81,7 +81,7 @@ impl Machine {
         db: Arc<MachineDB>,
     ) -> Machine
     {
-        Self::new(Inner::new(id, state, db), desc)
+        Self::new(Inner::new(id.clone(), state, db), id, desc)
     }
 
     pub fn do_state_change(&self, new_state: MachineState) 
@@ -284,10 +284,10 @@ pub fn load(config: &crate::config::Config, db: Databases, log: &Logger)
             // TODO: Read state from the state db
             if let Some(state) = db.get(&k).unwrap() {
                 debug!(log, "Loading old state from db for {}: {:?}", &k, &state);
-                (v.name.clone(), Machine::construct(k, v, state, db.clone()))
+                (k.clone(), Machine::construct(k, v, state, db.clone()))
             } else {
                 debug!(log, "No old state found in db for {}, creating new.", &k);
-                (v.name.clone(), Machine::construct(k, v, MachineState::new(), db.clone()))
+                (k.clone(), Machine::construct(k, v, MachineState::new(), db.clone()))
             }
         });
 

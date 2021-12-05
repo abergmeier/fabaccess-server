@@ -35,7 +35,7 @@
     { description = Some "A test machine"
     , disclose = "lab.test.read"
     , manage = "lab.test.admin"
-    , name = "Testmachine"
+    , name = "MachineA"
     , read = "lab.test.read"
     , write = "lab.test.write" 
     },
