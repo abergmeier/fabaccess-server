@@ -1,8 +1,6 @@
 use rkyv::{Archive, Serialize, Deserialize};
 
-use super::{
-    DB,
-};
+use super::DB;
 use crate::db::{AlignedAdapter, AllocAdapter};
 use crate::db::raw::RawDB;
 use std::sync::Arc;

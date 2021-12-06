@@ -38,7 +38,7 @@ pub mod user {
 }
 
 pub mod users {
-    pub use crate::schema::users_capnp::*;
+    pub use crate::schema::users_capnp::users::*;
 }
 
 pub mod utils {

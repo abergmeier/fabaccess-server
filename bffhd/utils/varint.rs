@@ -1,5 +1,5 @@
 use std::default::Default;
-use std::ops::{Deref};
+use std::ops::Deref;
 
 #[derive(Debug)]
 pub struct VarUInt<const N: usize> {

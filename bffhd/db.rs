@@ -1,6 +1,4 @@
-use std::{
-    marker::PhantomData,
-};
+use std::marker::PhantomData;
 
 pub use lmdb::{
     Environment,
@@ -39,14 +37,10 @@ mod fix;
 pub use fix::LMDBorrow;
 
 mod resources;
-pub use resources::{
-    ResourceDB,
-};
+pub use resources::ResourceDB;
 
 mod pass;
-pub use pass::{
-    PassDB,
-};
+pub use pass::PassDB;
 
 use lmdb::Error;
 use rkyv::Deserialize;

@@ -11,10 +11,16 @@ use api::bootstrap::{
 
 mod tls;
 mod authentication;
+mod session;
+mod users;
+mod resources;
 
+#[derive(Debug)]
+/// Cap'n Proto API Handler
 struct ApiSystem {
 
 }
+
 
 impl Server for ApiSystem {
     fn mechanisms(

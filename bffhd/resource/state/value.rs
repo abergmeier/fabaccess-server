@@ -1,8 +1,6 @@
-use core::{
-    ptr,
-};
 use std::{
     fmt,
+    ptr,
     any::Any,
     hash::Hash,
     str::FromStr,
@@ -14,7 +12,7 @@ use rkyv_typename::TypeName;
 use ptr_meta::{DynMetadata, Pointee};
 
 use inventory;
-use crate::utils::oid::{ObjectIdentifier};
+use crate::utils::oid::ObjectIdentifier;
 use rkyv::ser::{Serializer, ScratchSpace};
 use std::collections::HashMap;
 use std::alloc::Layout;

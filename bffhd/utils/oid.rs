@@ -52,10 +52,9 @@
 //! [Object Identifiers]: https://en.wikipedia.org/wiki/Object_identifier
 //! [ITU]: https://en.wikipedia.org/wiki/International_Telecommunications_Union
 
-use core::convert::{TryFrom };
-
 use rkyv::{Archive, Serialize};
 use rkyv::vec::{ArchivedVec, VecResolver};
+use std::convert::TryFrom;
 use std::ops::Deref;
 use std::fmt;
 use std::fmt::Formatter;
