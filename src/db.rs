@@ -25,12 +25,13 @@ pub mod access;
 pub mod machine;
 
 pub type MachineDB = machine::internal::Internal;
+pub type UserDB = user::Internal;
 
 #[derive(Clone)]
 pub struct Databases {
     pub access: Arc<access::AccessControl>,
     pub machine: Arc<MachineDB>,
-    pub userdb: Arc<user::Internal>,
+    pub userdb: Arc<UserDB>,
 }
 
 const LMDB_MAX_DB: u32 = 16;

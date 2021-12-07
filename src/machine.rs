@@ -23,10 +23,11 @@ use slog::Logger;
 
 use crate::error::{Result, Error};
 
-use crate::db::{access, Databases, MachineDB};
-use crate::db::access::AccessControl;
+use crate::db::{access, Databases, MachineDB, UserDB};
+use crate::db::access::{AccessControl, Perms};
 use crate::db::machine::{MachineIdentifier, MachineState, Status};
 use crate::db::user::{User, UserData, UserId};
+use crate::Error::Denied;
 
 use crate::network::MachineMap;
 use crate::space;
@@ -64,6 +65,8 @@ pub struct Machine {
     pub desc: MachineDescription,
 
     access_control: Arc<AccessControl>,
+    userdb: Arc<UserDB>,
+    log: Logger,
 
     inner: Arc<Mutex<Inner>>,
 }
@@ -73,7 +76,9 @@ impl Machine {
         inner: Inner,
         id: MachineIdentifier,
         desc: MachineDescription,
-        access_control: Arc<AccessControl>
+        access_control: Arc<AccessControl>,
+        userdb: Arc<UserDB>,
+        log: Logger,
         ) -> Self
     {
         Self { 
@@ -81,6 +86,8 @@ impl Machine {
             inner: Arc::new(Mutex::new(inner)),
             desc,
             access_control,
+            userdb,
+            log,
         }
     }
 
@@ -90,9 +97,12 @@ impl Machine {
         state: MachineState,
         db: Arc<MachineDB>,
         access_control: Arc<AccessControl>,
+        userdb: Arc<UserDB>,
+        log: &Logger,
         ) -> Machine
     {
-        Self::new(Inner::new(id.clone(), state, db), id, desc, access_control)
+        let log = log.new(o!("machine" => id.clone()));
+        Self::new(Inner::new(id.clone(), state, db), id, desc, access_control, userdb, log)
     }
 
     pub fn do_state_change(&self, new_state: MachineState) 
@@ -109,13 +119,110 @@ impl Machine {
         Box::pin(f)
     }
 
-    pub fn request_state_change(&mut self, user: Option<&User>, new_state: MachineState)
-        -> BoxFuture<'static, Result<ReturnToken>>
+    pub fn request_state_change(&mut self, userid: Option<&UserId>, new_state: MachineState)
+        -> Result<BoxFuture<'static, Result<()>>>
     {
         let inner = self.inner.clone();
-        Box::pin(async move {
-            Ok(ReturnToken::new(inner))
-        })
+        let perms = if let Some(userid) = userid {
+            if let Some(user) = self.userdb.get_user(&userid.uid)? {
+                let roles = self.access_control.collect_permrules(&user.data)?;
+                Perms::get_for(&self.desc.privs, roles.iter())
+            } else {
+                Perms::empty()
+            }
+        } else {
+            Perms::empty()
+        };
+
+        debug!(self.log, "State change requested: {:?}, {:?}, {}",
+            &userid,
+            new_state,
+            perms,
+        );
+
+        if perms.manage {
+            Ok(Box::pin(async move {
+                let mut guard = inner.lock().await;
+                guard.do_state_change(new_state);
+                Ok(())
+            }))
+        } else if perms.write {
+            let userid = userid.map(|u| u.clone());
+            let f = async move {
+                let mut guard = inner.lock().await;
+                // Match (current state, new state) for permission
+                if
+                    match (guard.read_state().lock_ref().state.clone(), &new_state.state) {
+                        // Going from available to used by the person requesting is okay.
+                        (Status::Free, Status::InUse(who))
+                        // Check that the person requesting does not request for somebody else.
+                        // *That* is manage privilege.
+                        if who.as_ref() == userid.as_ref() => true,
+
+                        // Reserving things for ourself is okay.
+                        (Status::Free, Status::Reserved(whom))
+                        if userid.as_ref() == Some(whom) => true,
+
+                        // Returning things we've been using is okay. This includes both if
+                        // they're being freed or marked as to be checked.
+                        (Status::InUse(who), Status::Free | Status::ToCheck(_))
+                        if who.as_ref() == userid.as_ref() => true,
+
+                        // Un-reserving things we reserved is okay
+                        (Status::Reserved(whom), Status::Free)
+                        if userid.as_ref() == Some(&whom) => true,
+                        // Using things that we've reserved is okay. But the person requesting
+                        // that has to be the person that reserved the machine. Otherwise
+                        // somebody could make a machine reserved by a different user as used by
+                        // that different user but use it themself.
+                        (Status::Reserved(whom), Status::InUse(who))
+                        if userid.as_ref() == Some(&whom)
+                            && who.as_ref() == Some(&whom)
+                        => true,
+
+                        // Default is deny.
+                        _ => false
+                    }
+                {
+                    // Permission granted
+                    guard.do_state_change(new_state);
+                    Ok(())
+                } else {
+                    Err(Denied)
+                }
+            };
+
+            Ok(Box::pin(f))
+        } else {
+            let userid = userid.map(|u| u.clone());
+            let f = async move {
+                let mut guard = inner.lock().await;
+                // Match (current state, new state) for permission
+                if
+                    match (guard.read_state().lock_ref().state.clone(), &new_state.state) {
+                        // Returning things we've been using is okay. This includes both if
+                        // they're being freed or marked as to be checked.
+                        (Status::InUse(who), Status::Free | Status::ToCheck(_))
+                        if who.as_ref() == userid.as_ref() => true,
+
+                        // Un-reserving things we reserved is okay
+                        (Status::Reserved(whom), Status::Free)
+                        if userid.as_ref() == Some(&whom) => true,
+
+                        // Default is deny.
+                        _ => false
+                    }
+                {
+                    // Permission granted
+                    guard.do_state_change(new_state);
+                    Ok(())
+                } else {
+                    Err(Denied)
+                }
+            };
+
+            Ok(Box::pin(f))
+        }
     }
 
     pub async fn get_status(&self) -> Status {
@@ -244,39 +351,6 @@ impl Inner {
     }
 }
 
-//pub type ReturnToken = futures::channel::oneshot::Sender<()>;
-pub struct ReturnToken {
-    f: Option<BoxFuture<'static, ()>>,
-}
-
-impl ReturnToken {
-    pub fn new(inner: Arc<Mutex<Inner>>) -> Self {
-        let f = async move {
-            let mut guard = inner.lock().await;
-            guard.reset_state();
-        };
-
-        Self { f: Some(Box::pin(f)) }
-    }
-}
-
-impl Future for ReturnToken {
-    type Output = (); // FIXME: This should probably be a Result<(), Error>
-
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let mut this = &mut *self;
-
-        match this.f.as_mut().map(|f| Future::poll(Pin::new(f), cx)) {
-            None => Poll::Ready(()), // TODO: Is it saner to return Pending here? This can only happen after the future completed
-            Some(Poll::Pending) => Poll::Pending,
-            Some(Poll::Ready(())) => {
-                let _ = this.f.take(); // Remove the future to not poll after completion
-                Poll::Ready(())
-            }
-        }
-    }
-}
-
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 /// A description of a machine
 ///
@@ -305,24 +379,27 @@ impl MachineDescription {
 }
 
 pub fn load(config: &crate::config::Config, db: Databases, log: &Logger)
-    -> Result<MachineMap> 
+    -> Result<MachineMap>
 {
     let mut map = config.machines.clone();
     let access_control = db.access;
-    let db = db.machine;
+    let machinedb = db.machine;
+    let userdb = db.userdb;
 
     let it = map.drain()
         .map(|(k,v)| {
             // TODO: Read state from the state db
-            if let Some(state) = db.get(&k).unwrap() {
+            if let Some(state) = machinedb.get(&k).unwrap() {
                 debug!(log, "Loading old state from db for {}: {:?}", &k, &state);
                 (k.clone(),
                  Machine::construct(
-                    k,
-                    v,
-                    state,
-                    db.clone(),
-                    access_control.clone()
+                     k,
+                     v,
+                     state,
+                     machinedb.clone(),
+                     access_control.clone(),
+                     userdb.clone(),
+                     log,
                  ))
             } else {
                 debug!(log, "No old state found in db for {}, creating new.", &k);
@@ -331,8 +408,10 @@ pub fn load(config: &crate::config::Config, db: Databases, log: &Logger)
                      k,
                      v,
                      MachineState::new(),
-                     db.clone(),
+                     machinedb.clone(),
                      access_control.clone(),
+                     userdb.clone(),
+                     log,
                  ))
             }
         });

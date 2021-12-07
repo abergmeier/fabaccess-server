@@ -11,6 +11,7 @@ use std::path::Path;
 use std::fs;
 use std::iter::FromIterator;
 use std::convert::{TryFrom, Into};
+use std::fmt::{Display, Formatter, Write};
 
 use serde::{Serialize, Deserialize};
 
@@ -21,6 +22,81 @@ pub mod internal;
 use crate::config::Config;
 use crate::db::user::UserData;
 pub use internal::Internal;
+
+#[derive(Clone, Copy, Debug)]
+pub struct Perms {
+    pub disclose: bool,
+    pub read: bool,
+    pub write: bool,
+    pub manage: bool,
+}
+
+impl Display for Perms {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        fn part(f: &mut Formatter<'_>, fst: &mut bool, n: &'static str) -> fmt::Result {
+            if *fst {
+                *fst = false;
+                f.write_char(' ')?;
+            } else {
+                f.write_str("| ")?;
+            }
+            f.write_str(n)?;
+            f.write_char(' ')
+        }
+
+        let mut fst = true;
+        f.write_char('(')?;
+
+        if self.disclose {
+            part(f, &mut fst, "DISCLOSE")?;
+        }
+        if self.read {
+            part(f, &mut fst, "READ")?;
+        }
+        if self.write {
+            part(f, &mut fst, "WRITE")?;
+        }
+        if self.manage {
+            part(f, &mut fst, "MANAGE")?;
+        }
+
+        f.write_char(')')
+    }
+}
+
+impl Perms {
+    pub fn get_for<'a, I: Iterator<Item=&'a PermRule>>(privs: &'a PrivilegesBuf, rules: I) -> Self {
+        let mut disclose = false;
+        let mut read = false;
+        let mut write = false;
+        let mut manage = false;
+        for rule in rules {
+            if rule.match_perm(&privs.disclose) {
+                disclose = true;
+            }
+            if rule.match_perm(&privs.read) {
+                read = true;
+            }
+            if rule.match_perm(&privs.write) {
+                write = true;
+            }
+            if rule.match_perm(&privs.manage) {
+                manage = true;
+            }
+        }
+
+        Self { disclose, read, write, manage }
+    }
+
+    pub fn empty() -> Self {
+        Self {
+            disclose: false,
+            read: false,
+            write: false,
+            manage: false,
+        }
+    }
+}
 
 pub struct AccessControl {
     internal: HashMap<RoleIdentifier, Role>,
@@ -565,6 +641,27 @@ impl TryFrom<String> for PermRule {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn display_perm() {
+        let mut perm = Perms {
+            disclose: false,
+            read: false,
+            write: false,
+            manage: false
+        };
+        println!("{}", perm);
+        assert_eq!("()", format!("{}", perm));
+
+        perm.disclose = true;
+        println!("{}", perm);
+        assert_eq!("( DISCLOSE )", format!("{}", perm));
+
+        perm.read = true;
+        perm.write = true;
+        println!("{}", perm);
+        assert_eq!("( DISCLOSE | READ | WRITE )", format!("{}", perm));
+    }
 
     #[test]
     fn permission_ord_test() {

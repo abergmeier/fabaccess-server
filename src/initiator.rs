@@ -12,7 +12,7 @@ use paho_mqtt::AsyncClient;
 use futures::future::BoxFuture;
 
 use futures_signals::signal::{Signal, Mutable, MutableSignalCloned};
-use crate::machine::{Machine, ReturnToken};
+use crate::machine::Machine;
 use crate::db::machine::MachineState;
 use crate::db::user::{User, UserId, UserData};
 
@@ -22,7 +22,7 @@ use crate::error::Result;
 use crate::config::Config;
 
 pub trait Sensor {
-    fn run_sensor(&mut self) -> BoxFuture<'static, (Option<User>, MachineState)>;
+    fn run_sensor(&mut self) -> BoxFuture<'static, (Option<UserId>, MachineState)>;
 }
 
 type BoxSensor = Box<dyn Sensor + Send>;
@@ -31,10 +31,9 @@ pub struct Initiator {
     log: Logger,
     signal: MutableSignalCloned<Option<Machine>>,
     machine: Option<Machine>,
-    future: Option<BoxFuture<'static, (Option<User>, MachineState)>>,
+    future: Option<BoxFuture<'static, (Option<UserId>, MachineState)>>,
     // TODO: Prepare the init for async state change requests.
-    state_change_fut: Option<BoxFuture<'static, Result<ReturnToken>>>,
-    token: Option<ReturnToken>,
+    state_change_fut: Option<BoxFuture<'static, Result<()>>>,
     sensor: BoxSensor,
 }
 
@@ -46,7 +45,6 @@ impl Initiator {
             machine: None,
             future: None,
             state_change_fut: None,
-            token: None,
             sensor: sensor,
         }
     }
@@ -92,13 +90,11 @@ impl Future for Initiator {
                         debug!(this.log, "State change blocked");
                         return Poll::Pending;
                     },
-                    Poll::Ready(Ok(tok)) => {
+                    Poll::Ready(Ok(rt)) => {
                         debug!(this.log, "State change returned ok");
                         // Explicity drop the future
                         let _ = this.state_change_fut.take();
 
-                        // Store the given return token for future use
-                        this.token.replace(tok);
                     }
                     Poll::Ready(Err(e)) => {
                         info!(this.log, "State change returned err: {}", e);
@@ -117,7 +113,7 @@ impl Future for Initiator {
                     debug!(this.log, "Sensor returned a new state");
                     this.future.take();
                     let f = this.machine.as_mut().map(|machine| {
-                        machine.request_state_change(user.as_ref(), state)
+                        machine.request_state_change(user.as_ref(), state).unwrap()
                     });
                     this.state_change_fut = f;
                 }
@@ -151,12 +147,12 @@ fn load_single(
     log: &Logger,
     name: &String,
     module_name: &String,
-    _params: &HashMap<String, String>
+    params: &HashMap<String, String>
     ) -> Option<BoxSensor>
 {
     match module_name.as_ref() {
         "Dummy" => {
-            Some(Box::new(Dummy::new(log)))
+            Some(Box::new(Dummy::new(log, params)))
         },
         _ => {
             error!(log, "No initiator found with name \"{}\", configured as \"{}\"", 
@@ -169,34 +165,47 @@ fn load_single(
 pub struct Dummy {
     log: Logger,
     step: bool,
+    userid: Option<UserId>,
 }
 
 impl Dummy {
-    pub fn new(log: &Logger) -> Self {
-        Self { log: log.new(o!("module" => "Dummy Initiator")), step: false }
+    pub fn new(log: &Logger, params: &HashMap<String, String>) -> Self {
+        let userid = if let Some(uid) = params.get("uid") {
+            Some(UserId::new(uid.clone(),
+                             params.get("subuid").map(String::from),
+                             params.get("realm").map(String::from)
+            ))
+        } else {
+            None
+        };
+
+        let log = log.new(o!("module" => "Dummy Initiator"));
+        debug!(log, "Constructed dummy initiator with params: {:?}", params);
+
+        Self { log, step: false, userid }
+
     }
 }
 
 impl Sensor for Dummy {
     fn run_sensor(&mut self)
-        -> BoxFuture<'static, (Option<User>, MachineState)>
+        -> BoxFuture<'static, (Option<UserId>, MachineState)>
     {
         let step = self.step;
         self.step = !step;
 
-        info!(self.log, "Kicking off new dummy initiator state change: {}", step);
+        info!(self.log, "Kicking off new dummy initiator state change: {}, {:?}",
+            if step { "free" } else { "used" },
+            &self.userid
+        );
 
+        let userid = self.userid.clone();
         let f = async move {
             Timer::after(std::time::Duration::from_secs(1)).await;
             if step {
-                return (None, MachineState::free());
+                return (userid.clone(), MachineState::free());
             } else {
-                let user = User::new(
-                    UserId::new("test".to_string(), None, None),
-                    UserData::new(vec![crate::db::access::RoleIdentifier::local_from_str("lmdb".to_string(), "testrole".to_string())], 0),
-                );
-                let id = user.id.clone();
-                return (Some(user), MachineState::used(Some(id)));
+                return (userid.clone(), MachineState::used(userid.clone()));
             }
         };
 

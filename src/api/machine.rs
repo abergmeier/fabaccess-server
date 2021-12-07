@@ -6,45 +6,12 @@ use capnp::Error;
 
 use futures::FutureExt;
 
-use crate::db::access::{PrivilegesBuf, PermRule};
+use crate::db::access::{PrivilegesBuf, PermRule, Perms};
 use crate::db::user::UserId;
 use crate::db::machine::{Status, MachineState};
 use crate::machine::Machine as NwMachine;
 use crate::schema::machine_capnp::machine::*;
 use crate::schema::machine_capnp::machine::MachineState as APIMState;
-
-#[derive(Clone, Copy)]
-pub struct Perms {
-    pub disclose: bool,
-    pub read: bool,
-    pub write: bool,
-    pub manage: bool,
-}
-
-impl Perms {
-    pub fn get_for<'a, I: Iterator<Item=&'a PermRule>>(privs: &'a PrivilegesBuf, rules: I) -> Self {
-        let mut disclose = false;
-        let mut read = false;
-        let mut write = false;
-        let mut manage = false;
-        for rule in rules {
-            if rule.match_perm(&privs.disclose) {
-                disclose = true;
-            }
-            if rule.match_perm(&privs.read) {
-                read = true;
-            }
-            if rule.match_perm(&privs.write) {
-                write = true;
-            }
-            if rule.match_perm(&privs.manage) {
-                manage = true;
-            }
-        }
-
-        Self { disclose, read, write, manage }
-    }
-}
 
 #[derive(Clone)]
 pub struct Machine {

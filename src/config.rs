@@ -5,9 +5,9 @@ use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 
 use crate::error::Result;
-use crate::machine::MachineDescription;
 use crate::db::machine::MachineIdentifier;
 use crate::db::access::*;
+use crate::machine::MachineDescription;
 
 pub fn read(path: &Path) -> Result<Config> {
     serde_dhall::from_file(path)

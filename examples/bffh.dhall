@@ -8,7 +8,7 @@
   , { machine = "Yetmore", actor = "FailBash"}
   ]
 , actors = 
-  { Shelly_1234 = { module = "Shelly", params =
+  { Shelly1234 = { module = "Shelly", params =
     { topic = "Topic1234" }}
   , Bash = { module = "Process", params =
     { cmd = "./examples/actor.sh"
@@ -22,10 +22,10 @@
     { cmd = "./examples/fail-actor.sh" 
     }}
   }
-  , init_connections = [] : List { machine : Text, initiator : Text }
---, init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
-  , initiators = {=}
-  --{ Initiator = { module = "Dummy", params = {=} } }
+  --, init_connections = [] : List { machine : Text, initiator : Text }
+  , init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
+  , initiators = --{=}
+  { Initiator = { module = "Dummy", params = { uid = "Testuser" } } }
 , listens = 
   [ { address = "127.0.0.1", port = Some 59661 }
   , { address = "::1", port = Some 59661 }
