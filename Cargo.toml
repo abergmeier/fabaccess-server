@@ -66,6 +66,11 @@ async-channel = "1.6.1"
 easy-parallel = "3.1.0"
 genawaiter = "0.99.1"
 
+# TLS
+rustls = "0.19"
+rustls-pemfile = "0.2"
+async-rustls = "0.2"
+
 [build-dependencies]
 capnpc = "0.14.4"
 # Used in build.rs to iterate over all files in schema/
