@@ -1,3 +1,4 @@
+use std::fs::File;
 use slog::Logger;
 
 use crate::config;
@@ -13,10 +14,15 @@ use smol::Executor;
 use futures::prelude::*;
 
 use std::io;
+use std::io::BufReader;
 
 use std::sync::Arc;
 
 use std::os::unix::io::AsRawFd;
+use std::path::Path;
+use async_rustls::TlsAcceptor;
+use rustls::{Certificate, KeyLogFile, NoClientAuth, PrivateKey, ServerConfig};
+use rustls_pemfile::Item;
 use signal_hook::low_level::pipe as sigpipe;
 
 use crate::db::Databases;
@@ -45,6 +51,33 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
 
         io::Result::Ok(LoopResult::Stop)
     });
+
+    info!(log, "Reading certificate chain file");
+    let mut certfp = BufReader::new(File::open(&config.certfile)?);
+    let certs = rustls_pemfile::certs(&mut certfp)?
+        .into_iter()
+        .map(Certificate)
+        .collect();
+    info!(log, "Reading private key file");
+    let mut keyfp = BufReader::new(File::open(&config.keyfile)?);
+    let mut tls_config = ServerConfig::new(Arc::new(NoClientAuth));
+    tls_config.key_log = Arc::new(KeyLogFile::new());
+    if let Some(path) = std::env::var_os("SSLKEYLOGFILE") {
+        let path = Path::new(&path);
+        warn!(log, "TLS SECRET LOGGING ENABLED! This will write all connection secrets to file {}!",
+            path.display());
+    }
+    match rustls_pemfile::read_one(&mut keyfp)? {
+        Some(rustls_pemfile::Item::PKCS8Key(key) | rustls_pemfile::Item::RSAKey(key)) => {
+            let key = PrivateKey(key);
+            tls_config.set_single_cert(certs, key)?;
+        }
+        _ => {
+            error!(log, "private key file must contain a PEM-encoded private key");
+            return Ok(());
+        }
+    }
+    let tls_acceptor: TlsAcceptor = Arc::new(tls_config).into();
 
     // Bind to each address in config.listens.
     // This is a Stream over Futures so it will do absolutely nothing unless polled to completion
@@ -97,18 +130,29 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
                             inner_log.new(o!())
                         };
 
+
                     let db = db.clone();
                     let network = network.clone();
                     let tlog = inner_log.new(o!());
+
+                    let tls_acceptor_clone = tls_acceptor.clone();
                     std::thread::spawn(move || {
+                        let tls_acceptor = tls_acceptor_clone;
                         let local_ex = LocalExecutor::new();
 
+                        info!(tlog, "New connection from on {:?}", socket);
                         let mut handler = connection::ConnectionHandler::new(tlog, db, network);
                         // We handle the error using map_err
-                        let f = handler.handle(socket)
+                        let log2 = log.clone();
+                        let f = tls_acceptor.accept(socket)
                             .map_err(move |e| {
                                 error!(log, "Error occured during protocol handling: {}", e);
                             })
+                            .and_then(|stream| {
+                                handler.handle(stream).map_err(move |e| {
+                                   error!(log2, "Error occured during protocol handling: {}", e);
+                                })
+                        })
                         // Void any and all results since pool.spawn allows no return value.
                         .map(|_| ());
 

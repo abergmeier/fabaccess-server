@@ -22,10 +22,10 @@
     { cmd = "./examples/fail-actor.sh" 
     }}
   }
-  --, init_connections = [] : List { machine : Text, initiator : Text }
-  , init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
-  , initiators = --{=}
-  { Initiator = { module = "Dummy", params = { uid = "Testuser" } } }
+  , init_connections = [] : List { machine : Text, initiator : Text }
+  --, init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
+  , initiators = {=}
+  --{ Initiator = { module = "Dummy", params = { uid = "Testuser" } } }
 , listens = 
   [ { address = "127.0.0.1", port = Some 59661 }
   , { address = "::1", port = Some 59661 }
@@ -74,4 +74,6 @@
       ]
     }
   }
+, certfile = "examples/self-signed-cert.pem"
+, keyfile = "examples/self-signed-key.pem"
 }

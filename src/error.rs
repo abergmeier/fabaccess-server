@@ -29,6 +29,7 @@ pub enum Error {
     BadVersion((u32,u32)),
     Argon2(argon2::Error),
     EventNetwork(network::Error),
+    RustTls(rustls::TLSError),
     Denied,
 }
 
@@ -82,6 +83,9 @@ impl fmt::Display for Error {
             }
             Error::EventNetwork(e) => {
                 e.fmt(f)
+            }
+            Error::RustTls(e) => {
+                write!(f, "TLS Error: {}", e)
             }
         }
     }
@@ -168,6 +172,12 @@ impl From<network::Error> for Error {
 impl From<argon2::Error> for Error {
     fn from(e: argon2::Error) -> Error {
         Error::Argon2(e)
+    }
+}
+
+impl From<rustls::TLSError> for Error {
+    fn from(e: rustls::TLSError) -> Error {
+        Error::RustTls(e)
     }
 }
 

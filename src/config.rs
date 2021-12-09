@@ -52,6 +52,10 @@ pub struct Config {
     pub db_path: PathBuf,
 
     pub roles: HashMap<String, RoleConfig>,
+
+    /// Path to a certificate chain to be used
+    pub certfile: PathBuf,
+    pub keyfile: PathBuf,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -123,6 +127,9 @@ impl Default for Config {
 
             db_path: PathBuf::from("/run/bffh/database"),
             roles: HashMap::new(),
+
+            certfile: PathBuf::from("/etc/bffh/pub.crt"),
+            keyfile: PathBuf::from("/etc/bffh/priv.key"),
         }
     }
 }

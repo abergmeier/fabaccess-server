@@ -134,7 +134,7 @@ pub fn load_file<P: AsRef<Path>>(path: P) -> Result<HashMap<String, User>> {
 }
 
 pub fn init(log: Logger, _config: &Config, env: Arc<lmdb::Environment>) -> Result<Internal> {
-    let mut flags = lmdb::DatabaseFlags::empty();
+    let flags = lmdb::DatabaseFlags::empty();
     let db = env.create_db(Some("userdb"), flags)?;
     debug!(&log, "Opened user db successfully.");
 
