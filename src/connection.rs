@@ -18,6 +18,7 @@ use crate::error::Result;
 
 use capnp_rpc::{rpc_twoparty_capnp, twoparty};
 use futures_util::{pin_mut, ready};
+use smol::io::split;
 
 use crate::schema::connection_capnp;
 
@@ -85,14 +86,14 @@ impl ConnectionHandler {
     pub fn handle<IO: 'static + Unpin + AsyncWrite + AsyncRead>(&mut self, stream: TlsStream<IO>)
         -> impl Future<Output=Result<()>>
     {
-        let conn = Connection::new(stream);
+        let (mut reader, mut writer) = split(stream);
 
         let boots = Bootstrap::new(self.log.new(o!()), self.db.clone(), self.network.clone());
         let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);
 
         let network = twoparty::VatNetwork::new(
-            conn.clone(),
-            conn,
+            reader,
+            writer,
             rpc_twoparty_capnp::Side::Server,
             Default::default(),
         );
@@ -100,78 +101,5 @@ impl ConnectionHandler {
 
         // Convert the error type to one of our errors
         rpc_system.map(|r| r.map_err(Into::into))
-    }
-}
-
-struct Connection<IO> {
-    inner: Rc<Mutex<TlsStream<IO>>>,
-}
-
-impl<IO> Connection<IO> {
-    pub fn new(stream: TlsStream<IO>) -> Self {
-        Self {
-            inner: Rc::new(Mutex::new(stream)),
-        }
-    }
-}
-
-impl<IO> Clone for Connection<IO> {
-    fn clone(&self) -> Self {
-        Self {
-            inner: self.inner.clone()
-        }
-    }
-}
-
-
-impl<IO: 'static + AsyncRead + AsyncWrite + Unpin> AsyncRead for Connection<IO> {
-    fn poll_read(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &mut [u8]) -> Poll<std::io::Result<usize>> {
-        let f = self.inner.lock();
-        pin_mut!(f);
-        let mut guard = ready!(f.poll(cx));
-        let stream = guard.deref_mut();
-        Pin::new(stream).poll_read(cx, buf)
-    }
-
-    fn poll_read_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &mut [IoSliceMut<'_>]) -> Poll<std::io::Result<usize>> {
-        let f = self.inner.lock();
-        pin_mut!(f);
-        let mut guard = ready!(f.poll(cx));
-        let stream = guard.deref_mut();
-        Pin::new(stream).poll_read_vectored(cx, bufs)
-    }
-}
-
-impl<IO: 'static + AsyncWrite + AsyncRead + Unpin> AsyncWrite for Connection<IO> {
-    fn poll_write(self: Pin<&mut Self>, cx: &mut Context<'_>, buf: &[u8]) -> Poll<std::io::Result<usize>> {
-        let f = self.inner.lock();
-        pin_mut!(f);
-        let mut guard = ready!(f.poll(cx));
-        let stream = guard.deref_mut();
-        Pin::new(stream).poll_write(cx, buf)
-    }
-
-    fn poll_write_vectored(self: Pin<&mut Self>, cx: &mut Context<'_>, bufs: &[IoSlice<'_>]) -> Poll<std::io::Result<usize>> {
-        let f = self.inner.lock();
-        pin_mut!(f);
-        let mut guard = ready!(f.poll(cx));
-        let stream = guard.deref_mut();
-        Pin::new(stream).poll_write_vectored(cx, bufs)
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        let f = self.inner.lock();
-        pin_mut!(f);
-        let mut guard = ready!(f.poll(cx));
-        let stream = guard.deref_mut();
-        Pin::new(stream).poll_flush(cx)
-    }
-
-    fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<std::io::Result<()>> {
-        let f = self.inner.lock();
-        pin_mut!(f);
-        let mut guard = ready!(f.poll(cx));
-        let stream = guard.deref_mut();
-        Pin::new(stream).poll_close(cx)
     }
 }

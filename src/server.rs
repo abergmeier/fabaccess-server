@@ -138,28 +138,25 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
                     let tls_acceptor_clone = tls_acceptor.clone();
                     std::thread::spawn(move || {
                         let tls_acceptor = tls_acceptor_clone;
-                        let local_ex = LocalExecutor::new();
 
                         info!(tlog, "New connection from on {:?}", socket);
+                        let peer = socket.peer_addr();
                         let mut handler = connection::ConnectionHandler::new(tlog, db, network);
                         // We handle the error using map_err
-                        let log2 = log.clone();
                         let f = tls_acceptor.accept(socket)
-                            .map_err(move |e| {
-                                error!(log, "Error occured during protocol handling: {}", e);
-                            })
-                            .and_then(|stream| {
-                                handler.handle(stream).map_err(move |e| {
-                                   error!(log2, "Error occured during protocol handling: {}", e);
-                                })
-                        })
-                        // Void any and all results since pool.spawn allows no return value.
-                        .map(|_| ());
+                            .map_err(Error::IO)
+                            .and_then(|stream| handler.handle(stream));
 
                         // Spawn the connection context onto the local executor since it isn't Send
                         // Also `detach` it so the task isn't canceled as soon as it's dropped.
                         // TODO: Store all those tasks to have a easier way of managing them?
-                        smol::block_on(f);
+                        if let Err(e) = smol::block_on(f) {
+                            error!(log, "Error occurred during connection handling: {:?}", e)
+                        } else if let Ok(peer) = peer {
+                            debug!(log, "Closed connection with {:?}", peer);
+                        } else {
+                            debug!(log, "Closed connection with unknown peer");
+                        }
                     });
                 },
                 Err(e) => {
