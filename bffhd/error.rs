@@ -1,11 +1,7 @@
 use std::io;
 use std::fmt;
-
 use rsasl::SaslError;
-
 use crate::db::DBError;
-
-//FIXME use crate::network;
 
 #[derive(Debug)]
 /// Shared error type
@@ -72,3 +68,5 @@ impl From<DBError> for Error {
         Error::DB(e)
     }
 }
+
+pub type Result<T> = std::result::Result<T, Error>;

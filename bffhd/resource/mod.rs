@@ -40,7 +40,7 @@ pub mod claim;
 ///   - Validating updates semantically i.e. are the types correct
 ///   - Check authorization of updates i.e. is this user allowed to do that
 #[async_trait]
-pub trait Resource: Debug {
+pub trait ResourceModel: Debug {
     /// Run whatever internal logic this resource has for the given State update, and return the
     /// new output state that this update produces.
     async fn on_update(&mut self, input: &State) -> Result<State, Error>;
@@ -50,7 +50,7 @@ pub trait Resource: Debug {
 #[derive(Debug)]
 pub struct Passthrough;
 #[async_trait]
-impl Resource for Passthrough {
+impl ResourceModel for Passthrough {
     async fn on_update(&mut self, input: &State) -> Result<State, Error> {
         Ok(input.clone())
     }
@@ -61,7 +61,7 @@ impl Resource for Passthrough {
 /// Error type a resource implementation can produce
 #[derive(Debug)]
 pub enum Error {
-    Internal(Box<dyn std::error::Error>),
+    Internal(Box<dyn std::error::Error + Send>),
     Denied,
 }
 
@@ -75,7 +75,7 @@ pub struct Update {
 #[derive(Debug)]
 pub struct ResourceDriver {
     // putput
-    res: Box<dyn Resource>,
+    res: Box<dyn ResourceModel>,
 
     // input
     rx: Receiver<Update>,

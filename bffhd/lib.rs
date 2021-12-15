@@ -26,6 +26,12 @@ pub mod users;
 pub mod resource;
 pub mod resources;
 
+pub mod actors;
+
+pub mod initiators;
+
+pub mod sensors;
+
 pub mod server;
 
 pub mod utils;

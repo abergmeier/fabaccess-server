@@ -1,5 +1,27 @@
+use std::sync::Arc;
 use async_channel::Sender;
+use lmdb::Environment;
 use crate::resource::Update;
+
+#[derive(Clone, Debug)]
+/// Database of currently valid claims, interests and notify, as far as applicable
+pub struct ClaimDB {
+    env: Arc<Environment>,
+}
+
+pub type UserID = String;
+pub type ResourceID = String;
+pub struct ClaimEntry {
+    subject: UserID,
+    target: ResourceID,
+    level: Level,
+}
+
+enum Level {
+    Claim(Claim),
+    Interest(Interest),
+    Notify(Notify),
+}
 
 #[derive(Debug)]
 /// A claim on a resource grants permission to update state
