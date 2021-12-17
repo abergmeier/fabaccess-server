@@ -6,5 +6,6 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-trait = "0.1.51"
+sdk-proc = { path = "sdk_proc" }
 futures-util = "0.3"
+diflouroborane = { path = "../.." }

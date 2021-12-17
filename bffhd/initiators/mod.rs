@@ -6,18 +6,48 @@ use async_oneshot as oneshot;
 use futures_signals::signal::Signal;
 use futures_util::future::BoxFuture;
 use smol::future::FutureExt;
-use sdk::initiators::{Initiator, InitiatorError, UpdateError, UpdateSink, UserID, ResourceID};
 use crate::resource::{Error, Update};
+use crate::resource::claim::{ResourceID, UserID};
+use crate::resource::state::State;
+
+pub enum UpdateError {
+    /// We're not connected to anything anymore. You can't do anything about this error and the
+    /// only reason why you even get it is because your future was called a last time before
+    /// being shelved so best way to handle this error is to just return from your loop entirely,
+    /// cleaning up any state that doesn't survive a freeze.
+    Closed,
+
+    Denied,
+
+    Other(Box<dyn std::error::Error + Send>),
+}
+
+pub trait InitiatorError: std::error::Error + Send {
+}
+
+pub trait Initiator {
+    fn start_for(&mut self, machine: ResourceID)
+        -> BoxFuture<'static, Result<(), Box<dyn InitiatorError>>>;
+
+    fn run(&mut self, request: &mut UpdateSink)
+        -> BoxFuture<'static, Result<(), Box<dyn InitiatorError>>>;
+}
 
 #[derive(Clone)]
-pub struct BffhUpdateSink {
-    tx: channel::Sender<(Option<UserID>, sdk::initiators::State)>,
+pub struct UpdateSink {
+    tx: channel::Sender<(Option<UserID>, State)>,
     rx: channel::Receiver<Result<(), Error>>,
 }
 
-#[async_trait::async_trait]
-impl UpdateSink for BffhUpdateSink {
-    async fn send(&mut self, userid: Option<UserID>, state: sdk::initiators::State)
+impl UpdateSink {
+    fn new(tx: channel::Sender<(Option<UserID>, State)>,
+           rx: channel::Receiver<Result<(), Error>>)
+        -> Self
+    {
+        Self { tx, rx }
+    }
+
+    async fn send(&mut self, userid: Option<UserID>, state: State)
         -> Result<(), UpdateError>
     {
         if let Err(_e) = self.tx.send((userid, state)).await {
@@ -34,15 +64,6 @@ impl UpdateSink for BffhUpdateSink {
     }
 }
 
-impl BffhUpdateSink {
-    fn new(tx: channel::Sender<(Option<UserID>, sdk::initiators::State)>,
-           rx: channel::Receiver<Result<(), Error>>)
-        -> Self
-    {
-        Self { tx, rx }
-    }
-}
-
 struct Resource;
 pub struct InitiatorDriver<S, I: Initiator> {
     resource_signal: S,
@@ -51,8 +72,8 @@ pub struct InitiatorDriver<S, I: Initiator> {
 
     initiator: I,
     initiator_future: Option<BoxFuture<'static, Result<(), Box<dyn InitiatorError>>>>,
-    update_sink: BffhUpdateSink,
-    initiator_req_rx: channel::Receiver<(Option<UserID>, sdk::initiators::State)>,
+    update_sink: UpdateSink,
+    initiator_req_rx: channel::Receiver<(Option<UserID>, State)>,
     initiator_reply_tx: channel::Sender<Result<(), Error>>,
 }
 
@@ -65,7 +86,7 @@ impl<S: Signal<Item=ResourceSink>, I: Initiator> InitiatorDriver<S, I> {
     pub fn new(resource_signal: S, initiator: I) -> Self {
         let (initiator_reply_tx, initiator_reply_rx) = channel::bounded(1);
         let (initiator_req_tx, initiator_req_rx) = async_channel::bounded(1);
-        let update_sink = BffhUpdateSink::new(initiator_req_tx, initiator_reply_rx);
+        let update_sink = UpdateSink::new(initiator_req_tx, initiator_reply_rx);
         Self {
             resource: None,
             resource_signal,
