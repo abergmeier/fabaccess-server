@@ -33,7 +33,8 @@
   ]
 , machines = 
   { Testmachine = 
-    { description = Some "A test machine"
+    { description = "A test machine"
+    , wiki = "test"
     , disclose = "lab.test.read"
     , manage = "lab.test.admin"
     , name = "MachineA"
@@ -41,7 +42,7 @@
     , write = "lab.test.write" 
     },
     Another = 
-    { description = Some "Another test machine"
+    { wiki = "test_another"
     , disclose = "lab.test.read"
     , manage = "lab.test.admin"
     , name = "Another"
@@ -49,7 +50,7 @@
     , write = "lab.test.write" 
     },
     Yetmore = 
-    { description = Some "Yet more test machines"
+    { description = "Yet more test machines"
     , disclose = "lab.test.read"
     , manage = "lab.test.admin"
     , name = "Yetmore"

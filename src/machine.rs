@@ -352,6 +352,7 @@ impl Inner {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 /// A description of a machine
 ///
 /// This is the struct that a machine is serialized to/from.
@@ -359,16 +360,23 @@ impl Inner {
 pub struct MachineDescription {
     /// The name of the machine. Doesn't need to be unique but is what humans will be presented.
     pub name: String,
+
     /// An optional description of the Machine.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
     pub description: Option<String>,
 
-    #[serde(default)]
-    #[serde(flatten)]
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
     pub wiki: Option<String>,
 
     /// The permission required
     #[serde(flatten)]
     pub privs: access::PrivilegesBuf,
+}
+
+fn deser_option<'de, D, T>(d: D) -> std::result::Result<Option<T>, D::Error>
+    where D: serde::Deserializer<'de>, T: serde::Deserialize<'de>,
+{
+    Ok(T::deserialize(d).ok())
 }
 
 impl MachineDescription {
