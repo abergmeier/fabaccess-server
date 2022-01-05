@@ -43,6 +43,10 @@ use slog::Logger;
 use paho_mqtt::AsyncClient;
 use crate::config::{ActorConn, Config, InitiatorConn};
 
+const RELEASE: &'static str = env!("BFFHD_RELEASE_STRING");
+const VERSION: &'static str = env!("CARGO_PKG_VERSION");
+const GITREV: &'static str = env!("CARGO_PKG_VERSION_GITREV");
+
 fn main() {
     use clap::{crate_version, crate_description, crate_name};
 
