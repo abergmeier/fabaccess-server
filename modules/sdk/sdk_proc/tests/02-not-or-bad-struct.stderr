@@ -1,0 +1,11 @@
+error: Modules must be structs
+ --> tests/02-not-or-bad-struct.rs:4:1
+  |
+4 | enum EnumModule {
+  | ^^^^
+
+error: Modules can't be unit structs
+ --> tests/02-not-or-bad-struct.rs:9:24
+  |
+9 | struct UnitStructModule;
+  |                        ^
