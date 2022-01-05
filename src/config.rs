@@ -97,6 +97,7 @@ impl Default for Config {
             name: "Testmachine".to_string(),
             description: Some("A test machine".to_string()),
             wiki: None,
+            category: None,
             privs: PrivilegesBuf {
                 disclose: PermissionBuf::from_string("lab.test.read".to_string()),
                 read: PermissionBuf::from_string("lab.test.read".to_string()),

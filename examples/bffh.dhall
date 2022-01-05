@@ -43,6 +43,7 @@
     },
     Another = 
     { wiki = "test_another"
+    , category = "test"
     , disclose = "lab.test.read"
     , manage = "lab.test.admin"
     , name = "Another"

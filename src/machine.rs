@@ -368,6 +368,9 @@ pub struct MachineDescription {
     #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
     pub wiki: Option<String>,
 
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
+    pub category: Option<String>,
+
     /// The permission required
     #[serde(flatten)]
     pub privs: access::PrivilegesBuf,

@@ -194,6 +194,9 @@ async fn fill_machine_builder(
     if let Some(ref wiki) = machine.desc.wiki {
         builder.set_wiki(wiki);
     }
+    if let Some(ref category) = machine.desc.category {
+        builder.set_category(category);
+    }
     builder.set_urn(&format!("urn:fabaccess:resource:{}", id.as_ref()));
 
     let machineapi = Machine::new(user.clone(), perms, machine.clone());
