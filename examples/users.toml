@@ -1,15 +1,15 @@
 [Testuser]
-# Define them in roles.toml as well
+# These roles have to be defined in 'bffh.dhall'.
+# Non-existant roles will not crash the server but print a `WARN` level message in the
+# server log in the form "Did not find role somerole/internal while trying to tally".
 roles = ["somerole/internal", "testrole/internal"]
 
-# If two or more users want to use the same machine at once the higher prio
-# wins
-priority = 0
-
+# The password will be hashed using argon2id on load time and is not available in plaintext afterwards.
 passwd = "secret"
 
 # You can add whatever random data you want.
 # It will get stored in the `kv` field in UserData.
+# This is not used for anything at the moment
 noot = "noot!"
 
 [Differentuser]
