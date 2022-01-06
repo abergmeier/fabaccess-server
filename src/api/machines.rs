@@ -200,8 +200,7 @@ async fn fill_machine_builder(
     builder.set_urn(&format!("urn:fabaccess:resource:{}", id.as_ref()));
 
     let machineapi = Machine::new(user.clone(), perms, machine.clone());
-    let state = machine.get_status().await;
-    if perms.write && state == Status::Free {
+    if perms.write {
         builder.set_use(capnp_rpc::new_client(machineapi.clone()));
     }
     if perms.manage {
@@ -229,7 +228,9 @@ async fn fill_machine_builder(
         Status::Reserved(_) => MachineState::Reserved,
         Status::ToCheck(_) => MachineState::ToCheck,
     };
-    builder.set_state(s);
+    if perms.read {
+        builder.set_state(s);
+    }
 
     builder.set_info(capnp_rpc::new_client(machineapi));
 }

@@ -58,6 +58,14 @@ pub struct Config {
     pub keyfile: PathBuf,
 }
 
+
+pub(crate) fn deser_option<'de, D, T>(d: D) -> std::result::Result<Option<T>, D::Error>
+    where D: serde::Deserializer<'de>, T: serde::Deserialize<'de>,
+{
+    Ok(T::deserialize(d).ok())
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoleConfig {
     #[serde(default = "Vec::new")]
@@ -69,6 +77,8 @@ pub struct RoleConfig {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Listen {
     pub address: String,
+
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
     pub port: Option<u16>,
 }
 

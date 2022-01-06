@@ -32,6 +32,8 @@ use crate::Error::Denied;
 use crate::network::MachineMap;
 use crate::space;
 
+use crate::config::deser_option;
+
 pub struct Machines {
     machines: Vec<Machine>
 }
@@ -374,12 +376,6 @@ pub struct MachineDescription {
     /// The permission required
     #[serde(flatten)]
     pub privs: access::PrivilegesBuf,
-}
-
-fn deser_option<'de, D, T>(d: D) -> std::result::Result<Option<T>, D::Error>
-    where D: serde::Deserializer<'de>, T: serde::Deserialize<'de>,
-{
-    Ok(T::deserialize(d).ok())
 }
 
 impl MachineDescription {
