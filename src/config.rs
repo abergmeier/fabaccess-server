@@ -50,6 +50,7 @@ pub struct Config {
     pub init_connections: Box<[InitiatorConn]>,
 
     pub db_path: PathBuf,
+    pub auditlog_path: PathBuf,
 
     pub roles: HashMap<String, RoleConfig>,
 
@@ -136,6 +137,7 @@ impl Default for Config {
                 },
             ]),
 
+            auditlog_path: PathBuf::from("/var/log/bffh/audit.log"),
             db_path: PathBuf::from("/run/bffh/database"),
             roles: HashMap::new(),
 

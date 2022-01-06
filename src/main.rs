@@ -25,6 +25,8 @@ mod actor;
 mod initiator;
 mod space;
 
+mod audit;
+
 use clap::{App, Arg};
 
 use std::io;

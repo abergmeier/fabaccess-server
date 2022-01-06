@@ -295,7 +295,7 @@ impl Inner {
         Box::pin(self.state.signal_cloned().dedupe_cloned())
     }
 
-    fn replace_state(&mut self, new_state: MachineState) -> MachineState {
+    fn replace_state(&self, new_state: MachineState) -> MachineState {
         self.db.put(&self.id, &new_state);
         self.state.replace(new_state)
     }

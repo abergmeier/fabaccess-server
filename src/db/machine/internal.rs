@@ -3,20 +3,22 @@ use std::sync::Arc;
 use slog::Logger;
 
 use lmdb::{Environment, Transaction, RwTransaction, Cursor, RoTransaction};
+use crate::audit::AuditLog;
 
 use super::{MachineIdentifier, MachineState};
 use crate::error::Result;
 
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct Internal {
     log: Logger,
+    audit: AuditLog,
     env: Arc<Environment>,
     db: lmdb::Database,
 }
 
 impl Internal {
-    pub fn new(log: Logger, env: Arc<Environment>, db: lmdb::Database) -> Self {
-        Self { log, env, db }
+    pub fn new(log: Logger, audit: AuditLog, env: Arc<Environment>, db: lmdb::Database) -> Self {
+        Self { log, audit, env, db }
     }
 
     pub fn get_with_txn<T: Transaction>(&self, txn: &T, id: &String) 
@@ -47,6 +49,7 @@ impl Internal {
     }
 
     pub fn put(&self, id: &MachineIdentifier, status: &MachineState) -> Result<()> {
+        self.audit.log(id, status)?;
         let mut txn = self.env.begin_rw_txn()?;
         self.put_with_txn(&mut txn, id, status)?;
         txn.commit().map_err(Into::into)

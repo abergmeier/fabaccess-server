@@ -38,6 +38,11 @@
     -- access into them.
     db_path = "/tmp/bffh",
 
+    -- Audit log path. Bffh will log state changes into this file, one per line.
+    -- Audit log entries are for now JSON:
+    -- {"timestamp":1641497361,"machine":"Testmachine","state":{"state":{"InUse":{"uid":"Testuser","subuid":null,"realm":null}}}}
+    auditlog_path = "/tmp/bffh.audit",
+
     -- In dhall you can also easily import definitions from other files, e.g. you could write
     -- roles = ./roles.dhall
     roles = {
@@ -192,14 +197,14 @@
     -- Initiators are configured almost the same way as Actors, refer to actor documentation for more details
     -- The below '{=}' is what you need if you want to define *no* initiators at all and only use the API with apps
     -- to let people use machines.
-    initiators = {=},
+    -- initiators = {=},
     -- The "Dummy" initiator will try to use and return a machine as the given user every few seconds. It's good to
     -- test your system but will spam your log so is disabled by default.
-    --{ Initiator = { module = "Dummy", params = { uid = "Testuser" } } }
+    initiators = { Initiator = { module = "Dummy", params = { uid = "Testuser" } } },
 
     -- Linking up machines to initiators. Similar to actors a machine can have several initiators assigned but an
     -- initiator can only be assigned to one machine.
     -- The below is once again how you have to define *no* initiators.
-    init_connections = [] : List { machine : Text, initiator : Text }
-    -- init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
+    --init_connections = [] : List { machine : Text, initiator : Text }
+     init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
 }
