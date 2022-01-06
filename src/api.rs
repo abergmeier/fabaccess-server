@@ -43,7 +43,10 @@ impl Bootstrap {
     }
 }
 
+use connection_capnp::{API_VERSION_MAJOR, API_VERSION_MINOR, API_VERSION_PATCH};
 use connection_capnp::bootstrap::*;
+use crate::RELEASE;
+
 impl connection_capnp::bootstrap::Server for Bootstrap {
     fn authentication_system(&mut self, 
         _: AuthenticationSystemParams,
@@ -97,6 +100,30 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
             results.get().set_user_system(c);
         }
 
+        Promise::ok(())
+    }
+
+    fn get_a_p_i_version(
+        &mut self,
+        _: GetAPIVersionParams,
+        mut results: GetAPIVersionResults
+    ) -> Promise<(), capnp::Error> {
+        let mut builder = results.get();
+        let mut builder = builder.init_version();
+        builder.set_major(API_VERSION_MAJOR);
+        builder.set_minor(API_VERSION_MINOR);
+        builder.set_patch(API_VERSION_PATCH);
+        Promise::ok(())
+    }
+
+    fn get_server_release(
+        &mut self,
+        _: GetServerReleaseParams,
+        mut results: GetServerReleaseResults
+    ) -> Promise<(), capnp::Error> {
+        let mut builder = results.get();
+        builder.set_name("bffh");
+        builder.set_release(RELEASE);
         Promise::ok(())
     }
 }
