@@ -1,6 +1,8 @@
 ## Installation
 
-Full documentation can be found at : https://fab-access.readthedocs.io/
+A more complete documentation can be found at : https://fab-access.readthedocs.io/
+
+-----
 
 Currently there are no distribution packages available.
 However installation is reasonably straight-forward, since Diflouroborane compiles into a single
