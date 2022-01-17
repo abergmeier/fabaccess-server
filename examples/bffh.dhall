@@ -188,7 +188,9 @@
             -- If you need to pass more arguments to the command you can use the `args` key in
             -- `params` as is done with the actor `Bash`
             module = "Process",
-            params = { cmd = "./examples/actor.py", }
+            -- the `args` are passed in front of all other parameters so they are best suited to
+            -- optional parameters like e.g. the verboseness
+            params = { cmd = "./examples/actor.py", args = "-vvv" }
         },
         DoorControl2 = {
             module = "Process",
