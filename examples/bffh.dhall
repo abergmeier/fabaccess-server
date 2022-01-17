@@ -180,6 +180,28 @@
                 args = "your ad could be here"
             }
         },
+
+        DoorControl1 = {
+            -- This actor calls the actor.py script in examples/
+            -- It gets passed it's own name, so you can have several actors
+            -- from the same script.
+            -- If you need to pass more arguments to the command you can use the `args` key in
+            -- `params` as is done with the actor `Bash`
+            module = "Process",
+            params = { cmd = "./examples/actor.py", }
+        },
+        DoorControl2 = {
+            module = "Process",
+            params = { cmd = "./examples/actor.py", }
+        },
+        DoorControl3 = {
+            -- This is an example for how it looks like if an actor is misconfigured.
+            -- the actor.py doesn't know anything about DoorControl3 and, if this actor is enabled,
+            -- will return with an error showing up in the server logs.
+            module = "Process",
+            params = { cmd = "./examples/actor.py", }
+        },
+
         Bash2 = { module = "Process", params = { cmd = "./examples/actor.sh" , args = "this is a different one" }},
         FailBash = { module = "Process", params = { cmd = "./examples/fail-actor.sh" }}
     },
@@ -188,7 +210,7 @@
     -- Actors need to be connected to machines to be useful. A machine can be connected to multiple actors, but one
     -- actor can only be connected to one machine.
     actor_connections = [
-        { machine = "Testmachine", actor = "Shelly1234" },
+        { machine = "Testmachine", actor = "DoorControl1" },
         { machine = "Another", actor = "Bash" },
         { machine = "Yetmore", actor = "Bash2" },
         { machine = "Yetmore", actor = "FailBash"}
