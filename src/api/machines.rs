@@ -52,16 +52,6 @@ impl machines::Server for Machines {
         let session = self.session.borrow();
         if session.deref().is_some() {
             let v: Vec<(String, crate::machine::Machine)> = self.network.machines.iter()
-                .filter(|(_name, machine)| {
-                    let required_disclose = &machine.desc.privs.disclose;
-                    for perm_rule in session.as_ref().unwrap().perms.iter() {
-                        if perm_rule.match_perm(required_disclose) {
-                            return true;
-                        }
-                    }
-
-                    false
-                })
                 .map(|(n,m)| (n.clone(), m.clone()))
                 .collect();
 
@@ -70,8 +60,34 @@ impl machines::Server for Machines {
                 let user = &session.as_ref().unwrap().authzid;
                 let permissions = &session.as_ref().unwrap().perms;
 
-                let mut machines = results.get().init_machine_list(v.len() as u32);
-                for (i, (id, machine)) in v.into_iter().enumerate() {
+                let mut filtered_v = Vec::with_capacity(v.len());
+                for (id, machine) in v.into_iter() {
+                    match machine.get_status().await {
+                        // Always show a machine if they're in use by myself
+                        Status::InUse(ref bywho) =>
+                            if bywho.is_some() && bywho.as_ref().filter(|bywho| *bywho == user).is_some()
+                            {
+                                filtered_v.push((id, machine));
+                            }
+                        Status::Reserved(ref bywho) => if bywho == user {
+                            filtered_v.push((id, machine));
+                        }
+
+                        // The rest depends on the actual priviledges below
+                        _ => {
+                            let required_disclose = &machine.desc.privs.disclose;
+                            if session.as_ref().unwrap().perms.iter()
+                                .any(|rule| rule.match_perm(required_disclose))
+                            {
+                                filtered_v.push((id, machine));
+                            }
+                        }
+                    }
+
+                }
+
+                let mut machines = results.get().init_machine_list(filtered_v.len() as u32);
+                for (i, (id, machine)) in filtered_v.into_iter().enumerate() {
                     let mut builder = machines.reborrow().get(i as u32);
                     fill_machine_builder(
                         &mut builder,
