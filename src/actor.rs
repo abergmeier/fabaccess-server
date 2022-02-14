@@ -129,7 +129,19 @@ impl Actuator for Dummy {
 pub fn load(log: &Logger, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
     let mut map = HashMap::new();
 
-    let mqtt = AsyncClient::new(config.mqtt_url.clone())?;
+    let mut mqtt = AsyncClient::new(config.mqtt_url.clone())?;
+    let dlog = log.clone();
+    mqtt.set_disconnected_callback(move |c, prop, reason| {
+        error!(dlog, "got Disconnect({}) message from MQTT Broker: {:?}", reason, prop);
+        let tok = c.reconnect();
+        smol::block_on(tok);
+    });
+    let dlog = log.clone();
+    mqtt.set_connection_lost_callback(move |c| {
+        error!(dlog, "lost connection to MQTT Broker!");
+        let tok = c.reconnect();
+        smol::block_on(tok);
+    });
     let tok = mqtt.connect(paho_mqtt::ConnectOptions::new());
     smol::block_on(tok)?;
 
