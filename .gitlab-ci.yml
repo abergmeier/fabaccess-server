@@ -30,7 +30,7 @@ lint:clippy:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo clippy -- -D warnings
   only:
-    - master
+    - main
     - development
     - merge_requests
   tags:
@@ -44,7 +44,7 @@ lint:fmt:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo fmt -- --check # TODO: Do we want to enforce formating?
   only:
-    - master
+    - main
     - development
     - merge_requests
   tags:
@@ -57,14 +57,14 @@ test:cargo:
     - rustc --version && cargo --version  # Print version info for debugging
     - cargo test --workspace --verbose
   only:
-    - master
+    - main
     - development
     - merge_requests
   tags:
     - linux
     - docker
 
-build:docker-master:
+build:docker-main:
   image:
     name: gcr.io/kaniko-project/executor:v1.6.0-debug
     entrypoint: [""]
@@ -75,7 +75,7 @@ build:docker-master:
     - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
     - /kaniko/executor --force --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $CI_REGISTRY_IMAGE:latest
   only:
-    - master
+    - main
   tags:
     - linux
     - docker
