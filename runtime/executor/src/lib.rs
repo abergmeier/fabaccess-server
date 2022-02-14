@@ -31,6 +31,7 @@ pub mod load_balancer;
 pub mod placement;
 pub mod pool;
 pub mod run;
+pub mod manage;
 mod thread_manager;
 mod worker;
 

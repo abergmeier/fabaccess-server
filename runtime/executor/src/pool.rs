@@ -39,6 +39,7 @@ impl Spooler<'_> {
 }
 
 #[derive(Clone, Debug)]
+/// Global executor
 pub struct Executor<'a> {
     spooler: Arc<Spooler<'a>>,
 }
