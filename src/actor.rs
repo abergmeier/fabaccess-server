@@ -3,6 +3,7 @@ use std::task::{Poll, Context};
 use std::sync::Mutex;
 use std::collections::HashMap;
 use std::future::Future;
+use std::time::Duration;
 
 use futures::{future::BoxFuture, Stream};
 use futures::channel::mpsc;
@@ -142,7 +143,11 @@ pub fn load(log: &Logger, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
         let tok = c.reconnect();
         smol::block_on(tok);
     });
-    let tok = mqtt.connect(paho_mqtt::ConnectOptions::new());
+    let conn_opts = paho_mqtt::ConnectOptionsBuilder::new()
+        .keep_alive_interval(Duration::from_secs(20))
+        .clean_session(false)
+        .finalize();
+    let tok = mqtt.connect(conn_opts);
     smol::block_on(tok)?;
 
     let actuators = config.actors.iter()
