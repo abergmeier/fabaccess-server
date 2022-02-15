@@ -145,7 +145,6 @@ pub fn load(log: &Logger, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
     });
     let conn_opts = paho_mqtt::ConnectOptionsBuilder::new()
         .keep_alive_interval(Duration::from_secs(20))
-        .clean_session(false)
         .finalize();
     let tok = mqtt.connect(conn_opts);
     smol::block_on(tok)?;
