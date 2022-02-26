@@ -9,6 +9,7 @@ use futures::{future::BoxFuture, Stream};
 use futures::channel::mpsc;
 use futures_signals::signal::Signal;
 use rumqttc::{AsyncClient, ConnectionError, Event, Incoming, MqttOptions};
+use async_compat::CompatExt;
 
 use crate::db::machine::MachineState;
 use crate::config::Config;
@@ -175,12 +176,12 @@ pub fn load(log: &Logger, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
         }
 
         Ok(eventloop)
-    })?;
+    }.compat())?;
     let dlog = log.clone();
     smol::spawn(async move {
         let mut fault = false;
         loop {
-            match eventloop.poll().await {
+            match eventloop.poll().compat().await {
                 Ok(_) => {
                     fault = false;
                     // TODO: Handle incoming MQTT messages
@@ -213,7 +214,7 @@ pub fn load(log: &Logger, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
                 }
             }
         }
-    }).detach();
+    }.compat()).detach();
 
     let actuators = config.actors.iter()
         .map(|(k,v)| (k, load_single(log, k, &v.module, &v.params, mqtt.clone())))

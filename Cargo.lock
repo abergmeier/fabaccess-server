@@ -80,6 +80,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "async-compat"
+version = "0.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9b48b4ff0c2026db683dea961cd8ea874737f56cffca86fa84415eaddc51c00d"
+dependencies = [
+ "futures-core",
+ "futures-io",
+ "once_cell",
+ "pin-project-lite",
+ "tokio",
+]
+
+[[package]]
 name = "async-executor"
 version = "1.4.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -515,6 +528,7 @@ name = "diflouroborane"
 version = "0.3.2"
 dependencies = [
  "async-channel",
+ "async-compat",
  "async-rustls",
  "async-trait",
  "bincode",
