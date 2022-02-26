@@ -9,7 +9,7 @@ use std::time::Duration;
 use futures::{future::BoxFuture, Stream};
 use futures::channel::mpsc;
 use futures_signals::signal::Signal;
-use rumqttc::{AsyncClient, ConnectionError, Event, Incoming, MqttOptions, OptionError, Transport};
+use rumqttc::{AsyncClient, ConnectionError, Event, Incoming, MqttOptions};
 
 use crate::db::machine::MachineState;
 use crate::config::Config;
@@ -19,7 +19,7 @@ use crate::network::ActorMap;
 use slog::Logger;
 use url::Url;
 use crate::Error;
-use crate::Error::{BadConfiguration, MQTTConnectionError};
+use crate::Error::{MQTTConnectionError};
 
 pub trait Actuator {
     fn apply(&mut self, state: MachineState) -> BoxFuture<'static, ()>;
@@ -139,11 +139,11 @@ pub fn load(log: &Logger, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
         .map_err(|opt| Error::Boxed(Box::new(opt)))?;
     mqttoptions.set_keep_alive(Duration::from_secs(20));
 
-    let (mut mqtt, mut eventloop) = AsyncClient::new(mqttoptions, 256);
+    let (mqtt, mut eventloop) = AsyncClient::new(mqttoptions, 256);
     let dlog = log.clone();
     let mut eventloop = smol::block_on(async move {
         match eventloop.poll().await {
-            Ok(Event::Incoming(Incoming::Connect(connect))) => {},
+            Ok(Event::Incoming(Incoming::Connect(_connect))) => {},
             Ok(e) => {
                 warn!(dlog, "Got unexpected mqtt event {:?}", e);
             }
