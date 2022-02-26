@@ -3,13 +3,11 @@ use slog::Logger;
 
 use crate::db::machine::Status;
 
-use futures::prelude::*;
 use futures::future::BoxFuture;
+use rumqttc::{AsyncClient, QoS};
 
 use crate::actor::Actuator;
 use crate::db::machine::MachineState;
-
-use paho_mqtt as mqtt;
 
 /// An actuator for a Shellie connected listening on one MQTT broker
 ///
@@ -19,12 +17,12 @@ use paho_mqtt as mqtt;
 pub struct Shelly {
     log: Logger,
     name: String,
-    client: mqtt::AsyncClient,
+    client: AsyncClient,
     topic: String,
 }
 
 impl Shelly {
-    pub fn new(log: Logger, name: String, client: mqtt::AsyncClient, params: &HashMap<String, String>) -> Self {
+    pub fn new(log: Logger, name: String, client: AsyncClient, params: &HashMap<String, String>) -> Self {
         let topic = if let Some(topic) = params.get("topic") {
             format!("shellies/{}/relay/0/command", topic)
         } else {
@@ -55,8 +53,17 @@ impl Actuator for Shelly {
             Status::InUse(_) => "on",
             _ => "off",
         };
-        let msg = mqtt::Message::new(&self.topic.clone(), pl, 0);
-        let f = self.client.publish(msg).map(|_| ());
+
+        let elog = self.log.clone();
+        let name = self.name.clone();
+        let client = self.client.clone();
+        let topic = self.topic.clone();
+        let f = async move {
+            let res = client.publish(topic, QoS::AtLeastOnce, false, pl).await;
+            if let Err(e) = res {
+                error!(elog,"Shelly actor {} failed to update state: {:?}",name,e,);
+            }
+        };
 
         return Box::pin(f);
     }

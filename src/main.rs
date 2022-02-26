@@ -42,7 +42,7 @@ use error::Error;
 
 use slog::Logger;
 
-use paho_mqtt::AsyncClient;
+
 use crate::config::{ActorConn, Config, InitiatorConn};
 
 const RELEASE: &'static str = env!("BFFHD_RELEASE_STRING");
@@ -101,7 +101,7 @@ fn main() {
     } else if matches.is_present("check config") {
         let configpath = matches.value_of("config").unwrap_or("/etc/diflouroborane.dhall");
         match config::read(&PathBuf::from_str(configpath).unwrap()) {
-            Ok(cfg) => {
+            Ok(_cfg) => {
                 //TODO: print a normalized version of the supplied config
                 println!("config is valid");
                 std::process::exit(0);

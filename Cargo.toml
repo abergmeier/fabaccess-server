@@ -50,8 +50,8 @@ clap = "2.33.3"
 rsasl = "1.4.0"
 #rsasl = { path = "../../rsasl" }
 
-# rumqtt needs tokio which I'm trying to get away from
-paho-mqtt = { git = "https://github.com/dequbed/paho.mqtt.rust.git", branch = "master", features = ["build_bindgen"] }
+rumqttc = { version = "0.10", features = ["url"] }
+url = "2.2.2"
 
 #mlua = { version = "0.4", features = ["async", "luajit"] }
 

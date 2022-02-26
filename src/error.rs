@@ -8,12 +8,11 @@ use rsasl::SaslError;
 // SpawnError is a somewhat ambigous name, `use as` to make it futures::SpawnError instead.
 use futures::task as futures_task;
 
-use paho_mqtt::errors as mqtt;
-
 use crate::network;
 
 #[derive(Debug)]
 pub enum Error {
+    BadConfiguration,
     TomlDe(toml::de::Error),
     TomlSer(toml::ser::Error),
     Dhall(serde_dhall::Error),
@@ -25,11 +24,13 @@ pub enum Error {
     FlexbuffersDe(flexbuffers::DeserializationError),
     FlexbuffersSer(flexbuffers::SerializationError),
     FuturesSpawn(futures_task::SpawnError),
-    MQTT(mqtt::Error),
+    MQTT(rumqttc::ClientError),
+    MQTTConnectionError(rumqttc::ConnectionError),
     BadVersion((u32,u32)),
     Argon2(argon2::Error),
     EventNetwork(network::Error),
     RustTls(rustls::TLSError),
+    ParseUrl(url::ParseError),
     Denied,
 }
 
@@ -70,7 +71,7 @@ impl fmt::Display for Error {
                 write!(f, "Future could not be spawned: {}", e)
             },
             Error::MQTT(e) => {
-                write!(f, "Paho MQTT encountered an error: {}", e)
+                write!(f, "MQTT client encountered an error: {:?}", e)
             },
             Error::Argon2(e) => {
                 write!(f, "Argon2 en/decoding failure: {}", e)
@@ -87,6 +88,9 @@ impl fmt::Display for Error {
             Error::RustTls(e) => {
                 write!(f, "TLS Error: {}", e)
             }
+            Error::ParseUrl(e) => write!(f, "Failed to parse URL: {}", e),
+            Error::BadConfiguration => write!(f, "Bad configuration provided"),
+            Error::MQTTConnectionError(e) => write!(f, "MQTT connection error: {:?}", e),
         }
     }
 }
@@ -157,15 +161,27 @@ impl From<futures_task::SpawnError> for Error {
     }
 }
 
-impl From<mqtt::Error> for Error {
-    fn from(e: mqtt::Error) -> Error {
+impl From<rumqttc::ClientError> for Error {
+    fn from(e: rumqttc::ClientError) -> Error {
         Error::MQTT(e)
+    }
+}
+
+impl From<rumqttc::ConnectionError> for Error {
+    fn from(e: rumqttc::ConnectionError) -> Error {
+        Error::MQTTConnectionError(e)
     }
 }
 
 impl From<network::Error> for Error {
     fn from(e: network::Error) -> Error {
         Error::EventNetwork(e)
+    }
+}
+
+impl From<url::ParseError> for Error {
+    fn from(e: url::ParseError) -> Error {
+        Error::ParseUrl(e)
     }
 }
 

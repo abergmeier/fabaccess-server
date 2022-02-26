@@ -192,7 +192,7 @@ pub fn load(log: &Logger, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
                 }
             }
         }
-    });
+    }).detach();
 
     let actuators = config.actors.iter()
         .map(|(k,v)| (k, load_single(log, k, &v.module, &v.params, mqtt.clone())))
