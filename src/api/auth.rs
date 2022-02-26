@@ -6,7 +6,7 @@
 use std::sync::Arc;
 use std::rc::Rc;
 use std::cell::RefCell;
-use std::ops::Deref;
+
 
 use slog::Logger;
 
@@ -22,14 +22,14 @@ use rsasl::{
 
 use serde::{Serialize, Deserialize};
 
-use capnp::capability::{Params, Results, Promise};
+use capnp::capability::{Promise};
 
 use crate::api::Session;
 
 pub use crate::schema::authenticationsystem_capnp as auth_system;
 use crate::db::Databases;
-use crate::db::pass::PassDB;
-use crate::db::user::{Internal as UserDB, UserId, User};
+
+use crate::db::user::{Internal as UserDB, User};
 use crate::db::access::AccessControl as AccessDB;
 
 pub struct AppData {

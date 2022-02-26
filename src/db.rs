@@ -1,7 +1,7 @@
 use std::sync::Arc;
-use std::path::PathBuf;
-use std::str::FromStr;
-use std::ops::{Deref, DerefMut};
+
+
+
 
 use slog::Logger;
 
@@ -74,7 +74,6 @@ use lmdb::{
     WriteFlags,
     Cursor,
     RoCursor,
-    RwCursor,
     Iter,
 };
 
@@ -359,7 +358,7 @@ mod tests {
 
         let db = DB::new(e.env.clone(), ldb);
 
-        let adapter = TestAdapter;
+        let _adapter = TestAdapter;
         let testdb = TestDB::new(db.clone());
 
         let mut val = "value";

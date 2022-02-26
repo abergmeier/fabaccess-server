@@ -7,8 +7,8 @@ use capnp::capability::Promise;
 
 use crate::api::user::User;
 use crate::connection::Session;
-use crate::db::access::{PermRule, Permission};
-use crate::db::user::{UserId, Internal as UserDB};
+use crate::db::access::{Permission};
+use crate::db::user::{Internal as UserDB};
 use crate::schema::usersystem_capnp::user_system;
 use crate::schema::usersystem_capnp::user_system::{info, manage};
 use crate::error;
@@ -86,7 +86,7 @@ impl manage::Server for Users {
 
         match result {
             Ok(()) => Promise::ok(()),
-            Err(e) => Promise::err(capnp::Error::failed("User lookup failed: {}".to_string())),
+            Err(_e) => Promise::err(capnp::Error::failed("User lookup failed: {}".to_string())),
         }
     }
 

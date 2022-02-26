@@ -1,23 +1,23 @@
 use std::fmt::Debug;
-use std::ops::DerefMut;
+
 use futures::{AsyncRead, AsyncWrite, FutureExt};
 use std::future::Future;
-use std::io::{IoSlice, IoSliceMut};
-use std::pin::Pin;
-use std::rc::Rc;
+
+
+
 use std::sync::Arc;
-use std::task::{Context, Poll};
+
 use async_rustls::server::TlsStream;
 
 use slog::Logger;
 
-use smol::lock::Mutex;
+
 
 use crate::api::Bootstrap;
 use crate::error::Result;
 
 use capnp_rpc::{rpc_twoparty_capnp, twoparty};
-use futures_util::{pin_mut, ready};
+
 use smol::io::split;
 
 use crate::schema::connection_capnp;
@@ -86,7 +86,7 @@ impl ConnectionHandler {
     pub fn handle<IO: 'static + Unpin + AsyncWrite + AsyncRead>(&mut self, stream: TlsStream<IO>)
         -> impl Future<Output=Result<()>>
     {
-        let (mut reader, mut writer) = split(stream);
+        let (reader, writer) = split(stream);
 
         let boots = Bootstrap::new(self.log.new(o!()), self.db.clone(), self.network.clone());
         let rpc: connection_capnp::bootstrap::Client = capnp_rpc::new_client(boots);

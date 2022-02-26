@@ -7,14 +7,14 @@ use smol::Timer;
 
 use slog::Logger;
 
-use paho_mqtt::AsyncClient;
+
 
 use futures::future::BoxFuture;
 
 use futures_signals::signal::{Signal, Mutable, MutableSignalCloned};
 use crate::machine::Machine;
 use crate::db::machine::MachineState;
-use crate::db::user::{User, UserId, UserData};
+use crate::db::user::{UserId};
 
 use crate::network::InitMap;
 
@@ -90,7 +90,7 @@ impl Future for Initiator {
                         debug!(this.log, "State change blocked");
                         return Poll::Pending;
                     },
-                    Poll::Ready(Ok(rt)) => {
+                    Poll::Ready(Ok(_rt)) => {
                         debug!(this.log, "State change returned ok");
                         // Explicity drop the future
                         let _ = this.state_change_fut.take();

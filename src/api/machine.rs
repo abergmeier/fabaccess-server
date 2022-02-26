@@ -1,12 +1,12 @@
-use std::sync::Arc;
+
 use std::time::Duration;
 
 use capnp::capability::Promise;
-use capnp::Error;
+
 
 use futures::FutureExt;
 
-use crate::db::access::{PrivilegesBuf, PermRule, Perms};
+use crate::db::access::{Perms};
 use crate::db::user::UserId;
 use crate::db::machine::{Status, MachineState};
 use crate::machine::Machine as NwMachine;
@@ -36,7 +36,7 @@ impl info::Server for Machine {
         let perms = self.perms.clone();
         let f = async move {
             if perms.manage {
-                let mut builder = results.get();
+                let builder = results.get();
                 let mut extinfo = builder.init_machine_info_extended();
                 let guard = machine.lock().await;
 
@@ -83,7 +83,7 @@ impl info::Server for Machine {
     fn get_reservation_list(
         &mut self,
         _: info::GetReservationListParams,
-        mut results: info::GetReservationListResults,
+        _results: info::GetReservationListResults,
     ) -> Promise<(), capnp::Error> {
         Promise::err(capnp::Error::unimplemented("Reservations are unavailable".to_string()))
     }
@@ -91,7 +91,7 @@ impl info::Server for Machine {
     fn get_property_list(
         &mut self,
         _: info::GetPropertyListParams,
-        mut results: info::GetPropertyListResults,
+        _results: info::GetPropertyListResults,
     ) -> Promise<(), capnp::Error> {
         Promise::err(capnp::Error::unimplemented("Extended Properties are unavailable".to_string()))
     }

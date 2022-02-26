@@ -22,7 +22,7 @@ use std::os::unix::io::AsRawFd;
 use std::path::Path;
 use async_rustls::TlsAcceptor;
 use rustls::{Certificate, KeyLogFile, NoClientAuth, PrivateKey, ServerConfig};
-use rustls_pemfile::Item;
+
 use signal_hook::low_level::pipe as sigpipe;
 
 use crate::db::Databases;
@@ -103,7 +103,7 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
             }
         }).collect();
 
-    let local_ex = LocalExecutor::new();
+    let _local_ex = LocalExecutor::new();
 
     let network = Arc::new(nw);
 

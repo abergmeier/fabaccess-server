@@ -2,7 +2,7 @@ use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::{LineWriter, Write};
 use std::sync::Mutex;
-use std::time::Instant;
+
 use crate::Config;
 use serde::{Serialize, Deserialize};
 use serde_json::Serializer;

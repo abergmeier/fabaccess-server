@@ -2,20 +2,24 @@ use std::pin::Pin;
 use std::task::{Poll, Context};
 use std::sync::Mutex;
 use std::collections::HashMap;
+use std::convert::TryFrom;
 use std::future::Future;
 use std::time::Duration;
 
 use futures::{future::BoxFuture, Stream};
 use futures::channel::mpsc;
 use futures_signals::signal::Signal;
+use rumqttc::{AsyncClient, ConnectionError, Event, Incoming, MqttOptions, OptionError, Transport};
 
 use crate::db::machine::MachineState;
 use crate::config::Config;
 use crate::error::Result;
 use crate::network::ActorMap;
 
-use paho_mqtt::AsyncClient;
 use slog::Logger;
+use url::Url;
+use crate::Error;
+use crate::Error::{BadConfiguration, MQTTConnectionError};
 
 pub trait Actuator {
     fn apply(&mut self, state: MachineState) -> BoxFuture<'static, ()>;
@@ -130,24 +134,65 @@ impl Actuator for Dummy {
 pub fn load(log: &Logger, config: &Config) -> Result<(ActorMap, Vec<Actor>)> {
     let mut map = HashMap::new();
 
-    let mut mqtt = AsyncClient::new(config.mqtt_url.clone())?;
+    let mqtt_url = Url::parse(config.mqtt_url.as_str())?;
+    let mut mqttoptions = MqttOptions::try_from(mqtt_url)
+        .map_err(|opt| Error::Boxed(Box::new(opt)))?;
+    mqttoptions.set_keep_alive(Duration::from_secs(20));
+
+    let (mut mqtt, mut eventloop) = AsyncClient::new(mqttoptions, 256);
     let dlog = log.clone();
-    mqtt.set_disconnected_callback(move |c, prop, reason| {
-        error!(dlog, "got Disconnect({}) message from MQTT Broker: {:?}", reason, prop);
-        let tok = c.reconnect();
-        smol::block_on(tok);
-    });
+    let mut eventloop = smol::block_on(async move {
+        match eventloop.poll().await {
+            Ok(Event::Incoming(Incoming::Connect(connect))) => {},
+            Ok(e) => {
+                warn!(dlog, "Got unexpected mqtt event {:?}", e);
+            }
+            Err(connerror) => {
+                error!(dlog, "MQTT connection failed: {:?}", &connerror);
+                return Err(MQTTConnectionError(connerror));
+            }
+        }
+
+        Ok(eventloop)
+    })?;
     let dlog = log.clone();
-    mqtt.set_connection_lost_callback(move |c| {
-        error!(dlog, "lost connection to MQTT Broker!");
-        let tok = c.reconnect();
-        smol::block_on(tok);
+    smol::spawn(async move {
+        let mut fault = false;
+        loop {
+            match eventloop.poll().await {
+                Ok(_) => {
+                    fault = false;
+                    // TODO: Handle incoming MQTT messages
+                }
+                Err(ConnectionError::Cancel) |
+                Err(ConnectionError::StreamDone) |
+                Err(ConnectionError::RequestsDone) => {
+                    // Normal exit
+                    info!(dlog, "MQTT request queue closed, stopping client.");
+                    return;
+                }
+                Err(ConnectionError::Timeout(_)) => {
+                    error!(dlog, "MQTT operation timed out!");
+                    warn!(dlog, "MQTT client will continue, but messages may have been lost.")
+                    // Timeout does not close the client
+                }
+                Err(ConnectionError::Io(e)) if fault => {
+                    error!(dlog, "MQTT recurring IO error, closing client: {}", e);
+                    // Repeating IO errors close client. Any Ok() in between resets fault to false.
+                    return;
+                }
+                Err(ConnectionError::Io(e)) => {
+                    fault = true;
+                    error!(dlog, "MQTT encountered IO error: {}", e);
+                    // *First* IO error does not close the client.
+                }
+                Err(e) => {
+                   error!(dlog, "MQTT client encountered unhandled error: {:?}", e);
+                   return;
+                }
+            }
+        }
     });
-    let conn_opts = paho_mqtt::ConnectOptionsBuilder::new()
-        .keep_alive_interval(Duration::from_secs(20))
-        .finalize();
-    let tok = mqtt.connect(conn_opts);
-    smol::block_on(tok)?;
 
     let actuators = config.actors.iter()
         .map(|(k,v)| (k, load_single(log, k, &v.module, &v.params, mqtt.clone())))

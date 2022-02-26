@@ -13,7 +13,7 @@ use crate::schema::machinesystem_capnp::machine_system;
 use crate::schema::machinesystem_capnp::machine_system::info as machines;
 use crate::network::Network;
 use crate::db::user::UserId;
-use crate::db::access::{PermRule, admin_perm, Permission, Perms};
+use crate::db::access::{PermRule, admin_perm, Perms};
 use crate::connection::Session;
 use crate::machine::Machine as NwMachine;
 

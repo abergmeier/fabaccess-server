@@ -6,13 +6,13 @@ use slog::Logger;
 
 use std::sync::Arc;
 
-use capnp::capability::{Params, Results, Promise};
+use capnp::capability::{Promise};
 
 use crate::schema::connection_capnp;
 use crate::connection::Session;
 
 use crate::db::Databases;
-use crate::db::user::UserId;
+
 
 use crate::network::Network;
 
@@ -108,7 +108,7 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
         _: GetAPIVersionParams,
         mut results: GetAPIVersionResults
     ) -> Promise<(), capnp::Error> {
-        let mut builder = results.get();
+        let builder = results.get();
         let mut builder = builder.init_version();
         builder.set_major(API_VERSION_MAJOR);
         builder.set_minor(API_VERSION_MINOR);
