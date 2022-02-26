@@ -296,7 +296,8 @@ impl Inner {
     }
 
     fn replace_state(&self, new_state: MachineState) -> MachineState {
-        self.db.put(&self.id, &new_state);
+        // Ignore for now, nothing we can do either way.
+        let _ = self.db.put(&self.id, &new_state);
         self.state.replace(new_state)
     }
 

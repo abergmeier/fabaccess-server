@@ -113,8 +113,6 @@ fn main() {
         }
     }
 
-    let retval;
-
     // Scope to drop everything before exiting.
     {
         // Initialize the logging subsystem first to be able to better document the progress from now
@@ -126,10 +124,9 @@ fn main() {
         info!(log, "Starting");
 
         match maybe(matches, log.clone()) {
-            Ok(_) => retval = 0,
+            Ok(_) => {},
             Err(e) => {
                 error!(log, "{}", e);
-                retval = -1;
             }
         }
         drop(guard);
