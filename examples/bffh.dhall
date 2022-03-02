@@ -212,7 +212,7 @@
     -- Actors need to be connected to machines to be useful. A machine can be connected to multiple actors, but one
     -- actor can only be connected to one machine.
     actor_connections = [
-        { machine = "Testmachine", actor = "DoorControl1" },
+        { machine = "Testmachine", actor = "Shelly1234" },
         { machine = "Another", actor = "Bash" },
         { machine = "Yetmore", actor = "Bash2" },
         { machine = "Yetmore", actor = "FailBash"}
@@ -221,14 +221,14 @@
     -- Initiators are configured almost the same way as Actors, refer to actor documentation for more details
     -- The below '{=}' is what you need if you want to define *no* initiators at all and only use the API with apps
     -- to let people use machines.
-    -- initiators = {=},
+    initiators = {=},
     -- The "Dummy" initiator will try to use and return a machine as the given user every few seconds. It's good to
     -- test your system but will spam your log so is disabled by default.
-    initiators = { Initiator = { module = "Dummy", params = { uid = "Testuser" } } },
+    --initiators = { Initiator = { module = "Dummy", params = { uid = "Testuser" } } },
 
     -- Linking up machines to initiators. Similar to actors a machine can have several initiators assigned but an
     -- initiator can only be assigned to one machine.
     -- The below is once again how you have to define *no* initiators.
-    --init_connections = [] : List { machine : Text, initiator : Text }
-     init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
+    init_connections = [] : List { machine : Text, initiator : Text }
+    --init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
 }

@@ -3,10 +3,9 @@ use std::fmt;
 use toml;
 use serde_dhall;
 
-use rsasl::SaslError;
-
 // SpawnError is a somewhat ambigous name, `use as` to make it futures::SpawnError instead.
 use futures::task as futures_task;
+use rsasl::error::SessionError;
 
 use crate::network;
 
@@ -16,7 +15,7 @@ pub enum Error {
     TomlDe(toml::de::Error),
     TomlSer(toml::ser::Error),
     Dhall(serde_dhall::Error),
-    SASL(SaslError),
+    SASL(SessionError),
     IO(io::Error),
     Boxed(Box<dyn std::error::Error>),
     Capnp(capnp::Error),
@@ -95,8 +94,8 @@ impl fmt::Display for Error {
     }
 }
 
-impl From<SaslError> for Error {
-    fn from(e: SaslError) -> Error {
+impl From<SessionError> for Error {
+    fn from(e: SessionError) -> Error {
         Error::SASL(e)
     }
 }

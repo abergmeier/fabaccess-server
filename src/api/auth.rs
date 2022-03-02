@@ -6,23 +6,21 @@
 use std::sync::Arc;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::io::Cursor;
 
 
 use slog::Logger;
 
-use rsasl::{
-    SASL,
-    RSASL,
-    Property,
-    Session as SaslSession,
-    ReturnCode,
-    Callback,
-    Step,
-};
-
 use serde::{Serialize, Deserialize};
 
 use capnp::capability::{Promise};
+use rsasl::callback::Callback;
+use rsasl::error::SessionError;
+use rsasl::mechname::Mechname;
+use rsasl::property::{AuthId, Password};
+use rsasl::SASL;
+use rsasl::session::Step;
+use rsasl::validate::{Validation, validations};
 
 use crate::api::Session;
 
@@ -39,42 +37,35 @@ pub struct SessionData {
     authz: Option<User>,
 }
 
-struct CB;
-impl Callback<AppData, SessionData> for CB {
-    fn callback(sasl: &mut SASL<AppData, SessionData>,
-                session: &mut SaslSession<SessionData>,
-                prop: Property
-        ) -> Result<(), ReturnCode>
-    {
-        let ret = match prop {
-            Property::GSASL_VALIDATE_SIMPLE => {
-                // FIXME: get_property and retrieve_mut can't be used interleaved but that's
-                // technically safe.
+struct CB {
+    userdb: Arc<UserDB>,
+}
+impl CB {
+    pub fn new(userdb: Arc<UserDB>) -> Self {
+        Self { userdb }
+    }
+}
 
-                let authid: &str = session
-                    .get_property(Property::GSASL_AUTHID)
-                    .ok_or(ReturnCode::GSASL_NO_AUTHID)
-                    .and_then(|a| match a.to_str() {
-                        Ok(s) => Ok(s),
-                        Err(_) => Err(ReturnCode::GSASL_SASLPREP_ERROR),
-                    })?;
+impl Callback for CB {
+    fn validate(&self, session: &mut rsasl::session::SessionData, validation: Validation, _mechanism: &Mechname) -> Result<(), SessionError> {
+        let ret = match validation {
+            validations::SIMPLE => {
 
-                let pass = session.get_property(Property::GSASL_PASSWORD)
-                    .ok_or(ReturnCode::GSASL_NO_PASSWORD)?;
+                let authid = session
+                    .get_property::<AuthId>()
+                    .ok_or(SessionError::no_property::<AuthId>())?;
 
+                let pass = session.get_property::<Password>()
+                                  .ok_or(SessionError::no_property::<Password>())?;
 
-                if let Some(appdata) = sasl.retrieve_mut() {
-                    if let Ok(Some(user)) = appdata.userdb.login(authid, pass.to_bytes()) {
-                        session.retrieve_mut().unwrap().authz.replace(user);
-                        return Ok(());
-                    }
+                if let Some(opt) = self.userdb.login(authid.as_ref(), pass.as_bytes()).unwrap() {
+                    return Ok(())
                 }
 
-                ReturnCode::GSASL_AUTHENTICATION_ERROR
+                SessionError::AuthenticationFailure
             }
-            p => {
-                println!("Callback called with property {:?}", p);
-                ReturnCode::GSASL_NO_CALLBACK 
+            _ => {
+                SessionError::no_validate(validation)
             }
         };
         Err(ret)
@@ -82,22 +73,19 @@ impl Callback<AppData, SessionData> for CB {
 }
 
 pub struct Auth {
-    pub ctx: RSASL<AppData, SessionData>,
+    pub ctx: SASL,
     session: Rc<RefCell<Option<Session>>>,
+    userdb: Arc<UserDB>,
     access: Arc<AccessDB>,
     log: Logger,
 }
 
 impl Auth {
     pub fn new(log: Logger, dbs: Databases, session: Rc<RefCell<Option<Session>>>) -> Self {
-        let mut ctx = SASL::new().unwrap();
+        let mut ctx = SASL::new();
+        ctx.install_callback(Arc::new(CB::new(dbs.userdb.clone())));
 
-        let appdata = Box::new(AppData { userdb: dbs.userdb.clone() });
-
-        ctx.store(appdata);
-        ctx.install_callback::<CB>();
-
-        Self { log, ctx, session, access: dbs.access.clone() }
+        Self { log, ctx, session, userdb: dbs.userdb.clone(), access: dbs.access.clone() }
     }
 }
 
@@ -147,6 +135,8 @@ impl authentication_system::Server for Auth {
                 })
         }
 
+        let mech = Mechname::new(mech.as_bytes()).unwrap();
+
         let mut session = match self.ctx.server_start(mech) {
             Ok(s) => s,
             Err(e) => 
@@ -156,7 +146,7 @@ impl authentication_system::Server for Auth {
                 }),
         };
 
-        session.store(Box::new(SessionData { authz: None }));
+        let mut out = Cursor::new(Vec::new());
 
         // If the client has provided initial data go use that
         use request::initial_response::Which;
@@ -169,24 +159,24 @@ impl authentication_system::Server for Auth {
 
             Ok(Which::None(_)) => {
                 // FIXME: Actually this needs to indicate NO data instead of SOME data of 0 length
-                session.step(&[])
+                session.step(Option::<&[u8]>::None, &mut out)
             }
             Ok(Which::Initial(data)) => {
-                session.step(pry!(data))
+                session.step(Some(pry!(data)), &mut out)
             }
         };
 
         // The step may either return an error, a success or the need for more data
         // TODO: Set the session user. Needs a lookup though <.>
-        use response::Result as Resres;
+
         match step_res {
             Ok(Step::Done(b)) => {
                 let user = session
-                    .retrieve_mut()
+                    .get_property::<AuthId>()
                     .and_then(|data| {
-                        data.authz.take()
+                        self.userdb.get_user(data.as_str()).unwrap()
                     })
-                    .expect("Authentication returned OK but didn't set user id");
+                    .expect("Authentication returned OK but the given AuthId is invalid");
 
                 let perms = pry!(self.access.collect_permrules(&user.data)
                     .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e))));
@@ -199,26 +189,26 @@ impl authentication_system::Server for Auth {
                 )));
 
                 let mut outcome = pry!(res.get().get_response()).init_outcome();
-                outcome.reborrow().set_result(Resres::Successful);
-                if b.len() != 0 {
-                    outcome.init_additional_data().set_additional(&b);
+                outcome.reborrow().set_result(response::Result::Successful);
+                if let Some(data) = b {
+                    outcome.init_additional_data().set_additional(&out.get_ref());
                 }
                 Promise::ok(())
             },
             Ok(Step::NeedsMore(b)) => {
-                pry!(res.get().get_response()).set_challence(&b);
+                if b.is_some() {
+                    pry!(res.get().get_response()).set_challence(&out.get_ref());
+                }
                 Promise::ok(())
             }
-            // TODO: This should really be an outcome because this is failed auth just as much atm.
             Err(e) => {
                 let mut outcome = pry!(res.get().get_response()).init_outcome();
-                outcome.reborrow().set_result(Resres::Failed);
+                outcome.reborrow().set_result(response::Result::InvalidCredentials);
                 let text = format!("{}", e);
                 outcome.set_help_text(&text);
                 Promise::ok(())
             }
         }
-
     }
 }
 
