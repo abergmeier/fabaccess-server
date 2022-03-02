@@ -58,7 +58,7 @@ impl Callback for CB {
                 let pass = session.get_property::<Password>()
                                   .ok_or(SessionError::no_property::<Password>())?;
 
-                if let Some(opt) = self.userdb.login(authid.as_ref(), pass.as_bytes()).unwrap() {
+                if self.userdb.login(authid.as_ref(), pass.as_bytes()).unwrap().is_some() {
                     return Ok(())
                 }
 
@@ -190,7 +190,7 @@ impl authentication_system::Server for Auth {
 
                 let mut outcome = pry!(res.get().get_response()).init_outcome();
                 outcome.reborrow().set_result(response::Result::Successful);
-                if let Some(data) = b {
+                if b.is_some() {
                     outcome.init_additional_data().set_additional(&out.get_ref());
                 }
                 Promise::ok(())
