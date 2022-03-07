@@ -66,8 +66,12 @@ impl UpdateSink {
 
 struct Resource;
 pub struct InitiatorDriver<S, I: Initiator> {
+    // TODO: make this a static reference to the resource because it's much easier and we don't
+    //       need to replace resources at runtime at the moment.
     resource_signal: S,
     resource: Option<channel::Sender<Update>>,
+
+    // TODO: Initiators should instead
     error_channel: Option<oneshot::Receiver<Error>>,
 
     initiator: I,

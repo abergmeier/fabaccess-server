@@ -7,9 +7,6 @@
 //!
 //! This is the server component of the FabAccess project.
 //! The entry point of bffhd can be found in [bin/bffhd/main.rs](../bin/bffhd/main.rs)
-//!
-//! P.S.: If you're curious about the name; the project was initially called "Better Fablab
-//! Friend and Helper" (BFFH). And the chemical formula of Diflouroborane is BF2H.
 
 /// Internal Databases build on top of LMDB, a mmap()'ed B-tree DB optimized for reads
 pub mod db;
