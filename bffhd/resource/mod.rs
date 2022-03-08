@@ -10,6 +10,7 @@ use state::db::StateAccessor;
 
 pub mod state;
 pub mod claim;
+pub mod db;
 
 
 /// A resource in BFFH has to contain several different parts;

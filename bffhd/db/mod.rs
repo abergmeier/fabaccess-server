@@ -36,12 +36,6 @@ pub use hash::{
 mod fix;
 pub use fix::LMDBorrow;
 
-mod resources;
-pub use resources::ResourceDB;
-
-mod pass;
-pub use pass::PassDB;
-
 use lmdb::Error;
 use rkyv::Deserialize;
 use rkyv::ser::serializers::AlignedSerializer;

@@ -18,6 +18,7 @@ pub mod error;
 pub mod permissions;
 
 pub mod users;
+pub mod authentication;
 
 /// Resources
 pub mod resource;
