@@ -5,7 +5,7 @@
 
 //! Diflouroborane
 //!
-//! This is the server component of the FabAccess project.
+//! This is the capnp component of the FabAccess project.
 //! The entry point of bffhd can be found in [bin/bffhd/main.rs](../bin/bffhd/main.rs)
 
 /// Internal Databases build on top of LMDB, a mmap()'ed B-tree DB optimized for reads
@@ -29,6 +29,6 @@ pub mod initiators;
 
 pub mod sensors;
 
-pub mod server;
+pub mod capnp;
 
 pub mod utils;

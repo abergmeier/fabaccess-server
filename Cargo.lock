@@ -739,6 +739,7 @@ dependencies = [
  "futures-test",
  "futures-util",
  "inventory",
+ "lazy_static",
  "libc",
  "lmdb-rkv",
  "once_cell",

@@ -10,7 +10,7 @@
 //! Main differences between other executors are:
 //! * Uses SMP based execution scheme to exploit cache affinity on multiple cores and execution is
 //! equally distributed over the system resources, which means utilizing the all system.
-//! * Uses NUMA-aware allocation for scheduler's queues and exploit locality on server workloads.
+//! * Uses NUMA-aware allocation for scheduler's queues and exploit locality on capnp workloads.
 //! * Tailored for creating middleware and working with actor model like concurrency and distributed communication.
 //!
 //! **NOTE:** Bastion Executor is independent of it's framework implementation.

@@ -1,12 +1,12 @@
 use std::io;
 use std::fmt;
-use rsasl::SaslError;
+use rsasl::error::SessionError;
 use crate::db::DBError;
 
 #[derive(Debug)]
 /// Shared error type
 pub enum Error {
-    SASL(SaslError),
+    SASL(SessionError),
     IO(io::Error),
     Boxed(Box<dyn std::error::Error>),
     Capnp(capnp::Error),
@@ -39,8 +39,8 @@ impl fmt::Display for Error {
     }
 }
 
-impl From<SaslError> for Error {
-    fn from(e: SaslError) -> Error {
+impl From<SessionError> for Error {
+    fn from(e: SessionError) -> Error {
         Error::SASL(e)
     }
 }

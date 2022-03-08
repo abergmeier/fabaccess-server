@@ -1,6 +1,6 @@
 use api::session::Builder;
-use crate::server::resources::Resources;
-use crate::server::users::Users;
+use crate::capnp::resources::Resources;
+use crate::capnp::users::Users;
 
 #[derive(Debug, Clone)]
 pub struct Session {

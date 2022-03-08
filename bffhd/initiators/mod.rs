@@ -5,7 +5,6 @@ use async_channel as channel;
 use async_oneshot as oneshot;
 use futures_signals::signal::Signal;
 use futures_util::future::BoxFuture;
-use smol::future::FutureExt;
 use crate::resource::{Error, Update};
 use crate::resource::claim::{ResourceID, UserID};
 use crate::resource::state::State;
@@ -126,7 +125,7 @@ impl<S: Signal<Item=ResourceSink> + Unpin, I: Initiator + Unpin> Future for Init
             // If we've send an update to the resource in question we have error channel set, so
             // we poll that first to determine if the resource has acted on it yet.
             if let Some(ref mut errchan) = self.error_channel {
-                match errchan.poll(cx) {
+                match Pin::new(errchan).poll(cx) {
                     // In case there's an ongoing
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Ok(error)) => {
@@ -142,7 +141,7 @@ impl<S: Signal<Item=ResourceSink> + Unpin, I: Initiator + Unpin> Future for Init
             }
 
             if let Some(ref mut init_fut) = self.initiator_future {
-                match init_fut.poll(cx) {
+                match init_fut.as_mut().poll(cx) {
                     Poll::Pending => return Poll::Pending,
                     Poll::Ready(Ok(())) => {},
                     Poll::Ready(Err(_e)) => {

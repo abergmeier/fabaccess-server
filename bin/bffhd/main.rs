@@ -150,7 +150,7 @@ fn main() -> Result<(), Error> {
                 ex.spawn(init).detach();
             }
 
-            server::serve_api_connections(log.clone(), config, db, network, ex)
+            capnp::serve_api_connections(log.clone(), config, db, network, ex)
         }
          */
 

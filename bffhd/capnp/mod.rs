@@ -1,17 +1,12 @@
 use std::future::Future;
-use futures_util::future::FutureExt;
-use async_rustls::TlsStream;
 use capnp::capability::Promise;
 use capnp::Error;
-use capnp_rpc::rpc_twoparty_capnp::Side;
-use capnp_rpc::RpcSystem;
-use capnp_rpc::twoparty::VatNetwork;
-use smol::io::{AsyncRead, AsyncWrite};
+use futures_rustls::server::TlsStream;
+use futures_util::{AsyncRead, AsyncWrite};
 
 use crate::error::Result;
 
 use api::bootstrap::{
-    Client,
     Server,
     MechanismsParams,
     MechanismsResults,
@@ -33,19 +28,8 @@ impl APIHandler {
     pub fn handle<IO: 'static + Unpin + AsyncRead + AsyncWrite>(&mut self, stream: TlsStream<IO>)
         -> impl Future<Output = Result<()>>
     {
-        let (mut reader, mut writer) = smol::io::split(stream);
-
-        let bootstrap = ApiSystem {};
-        let rpc: Client = capnp_rpc::new_client(bootstrap);
-        let network = VatNetwork::new(
-            reader,
-            writer,
-            Side::Server,
-            Default::default(),
-        );
-        let rpc_system = RpcSystem::new(Box::new(network), Some(rpc.client));
-
-        rpc_system.map(|r| r.map_err(Into::into))
+        unimplemented!();
+        futures_util::future::ready(Ok(()))
     }
 }
 
