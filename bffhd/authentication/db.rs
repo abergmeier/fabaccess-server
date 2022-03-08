@@ -1,11 +1,11 @@
 use std::sync::Arc;
-use super::Environment;
-use super::AllocAdapter;
-use super::DB;
-use super::raw::RawDB;
-use super::{DatabaseFlags, WriteFlags};
+use crate::db::Environment;
+use crate::db::AllocAdapter;
+use crate::db::DB;
+use crate::db::RawDB;
+use crate::db::{DatabaseFlags, WriteFlags};
 use crate::db::Result;
-use super::Transaction;
+use crate::db::Transaction;
 
 use argon2;
 

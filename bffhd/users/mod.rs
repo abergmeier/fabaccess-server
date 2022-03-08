@@ -28,10 +28,9 @@ use api::user::{
 };
 
 mod db;
-mod pass;
 
 pub use db::UserDB;
-pub use pass::PassDB;
+pub use crate::authentication::db::PassDB;
 
 #[derive(Debug, Clone, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize)]
 /// User API endpoint

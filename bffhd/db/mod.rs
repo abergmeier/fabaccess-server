@@ -46,6 +46,8 @@ use std::collections::HashMap;
 use crate::resource::state::{OwnedEntry, State, db::StateDB};
 use std::iter::FromIterator;
 use std::ops::Deref;
+use crate::authentication::db::PassDB;
+use crate::resource::db::ResourceDB;
 use crate::utils::oid::{ArchivedObjectIdentifier, ObjectIdentifier};
 use crate::resource::state::value::SerializeValue;
 
