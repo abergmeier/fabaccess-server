@@ -7,8 +7,6 @@ use std::future::Future;
 
 use std::sync::Arc;
 
-use async_rustls::server::TlsStream;
-
 use slog::Logger;
 
 
@@ -17,6 +15,7 @@ use crate::api::Bootstrap;
 use crate::error::Result;
 
 use capnp_rpc::{rpc_twoparty_capnp, twoparty};
+use futures_rustls::server::TlsStream;
 
 use smol::io::split;
 

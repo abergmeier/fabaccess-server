@@ -20,8 +20,8 @@ use std::sync::Arc;
 
 use std::os::unix::io::AsRawFd;
 use std::path::Path;
-use async_rustls::TlsAcceptor;
-use rustls::{Certificate, KeyLogFile, NoClientAuth, PrivateKey, ServerConfig};
+use futures_rustls::TlsAcceptor;
+use rustls::{Certificate, KeyLogFile, PrivateKey, ServerConfig};
 
 use signal_hook::low_level::pipe as sigpipe;
 
@@ -60,23 +60,30 @@ pub fn serve_api_connections(log: Arc<Logger>, config: Config, db: Databases, nw
         .collect();
     info!(log, "Reading private key file");
     let mut keyfp = BufReader::new(File::open(&config.keyfile)?);
-    let mut tls_config = ServerConfig::new(Arc::new(NoClientAuth));
-    tls_config.key_log = Arc::new(KeyLogFile::new());
-    if let Some(path) = std::env::var_os("SSLKEYLOGFILE") {
-        let path = Path::new(&path);
-        warn!(log, "TLS SECRET LOGGING ENABLED! This will write all connection secrets to file {}!",
-            path.display());
-    }
+    let mut tls_builder = ServerConfig::builder()
+        .with_safe_defaults()
+        .with_no_client_auth()
+        ;
+
+    let mut tls_config;
     match rustls_pemfile::read_one(&mut keyfp)? {
         Some(rustls_pemfile::Item::PKCS8Key(key) | rustls_pemfile::Item::RSAKey(key)) => {
             let key = PrivateKey(key);
-            tls_config.set_single_cert(certs, key)?;
+            tls_config = tls_builder.with_single_cert(certs, key)?;
         }
         _ => {
             error!(log, "private key file must contain a PEM-encoded private key");
             return Ok(());
         }
     }
+
+    if let Some(path) = std::env::var_os("SSLKEYLOGFILE") {
+        let path = Path::new(&path);
+        warn!(log, "TLS SECRET LOGGING ENABLED! This will write all connection secrets to file {}!",
+            path.display());
+    }
+    tls_config.key_log = Arc::new(KeyLogFile::new());
+
     let tls_acceptor: TlsAcceptor = Arc::new(tls_config).into();
 
     // Bind to each address in config.listens.
