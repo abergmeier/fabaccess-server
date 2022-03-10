@@ -23,7 +23,7 @@ use serde::ser::SerializeMap;
 use value::{RegisteredImpl, SerializeValue};
 
 use crate::utils::oid::ObjectIdentifier;
-use crate::resource::state::value::{DynOwnedVal, DynVal, TypeOid, };
+use crate::resources::state::value::{DynOwnedVal, DynVal, TypeOid, };
 
 pub mod value;
 pub mod db;
@@ -32,10 +32,10 @@ pub mod db;
 #[derive(Archive, Serialize, Deserialize)]
 #[derive(Clone, PartialEq)]
 #[archive_attr(derive(Debug))]
-/// State object of a resource
+/// State object of a resources
 ///
 /// This object serves three functions:
-/// 1. it is constructed by modification via Claims or via internal resource logic
+/// 1. it is constructed by modification via Claims or via internal resources logic
 /// 2. it is serializable and storable in the database
 /// 3. it is sendable and forwarded to all Actors and Notifys
 pub struct State {

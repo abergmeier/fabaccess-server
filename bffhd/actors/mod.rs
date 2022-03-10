@@ -4,7 +4,7 @@ use std::pin::Pin;
 use std::task::{Context, Poll};
 use futures_signals::signal::{MutableSignalRef, ReadOnlyMutable, Signal};
 use futures_util::future::BoxFuture;
-use crate::resource::state::State;
+use crate::resources::state::State;
 
 pub trait Actor {
     fn apply(&mut self, state: State) -> BoxFuture<'static, ()>;

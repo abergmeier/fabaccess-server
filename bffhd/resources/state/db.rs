@@ -24,7 +24,7 @@ use crate::db::{
     LMDBorrow,
 };
 
-use crate::resource::state::State;
+use crate::resources::state::State;
 
 type StateAdapter = AllocAdapter<State>;
 
@@ -37,7 +37,7 @@ pub struct StateDB {
     input: DB<StateAdapter>,
     output: DB<StateAdapter>,
 
-    // TODO: Index resource name/id/uuid -> u64
+    // TODO: Index resources name/id/uuid -> u64
 }
 
 impl StateDB {

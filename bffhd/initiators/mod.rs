@@ -5,9 +5,9 @@ use async_channel as channel;
 use async_oneshot as oneshot;
 use futures_signals::signal::Signal;
 use futures_util::future::BoxFuture;
-use crate::resource::{Error, Update};
-use crate::resource::claim::{ResourceID, UserID};
-use crate::resource::state::State;
+use crate::resources::{Error, Update};
+use crate::resources::claim::{ResourceID, UserID};
+use crate::resources::state::State;
 
 pub enum UpdateError {
     /// We're not connected to anything anymore. You can't do anything about this error and the
@@ -65,7 +65,7 @@ impl UpdateSink {
 
 struct Resource;
 pub struct InitiatorDriver<S, I: Initiator> {
-    // TODO: make this a static reference to the resource because it's much easier and we don't
+    // TODO: make this a static reference to the resources because it's much easier and we don't
     //       need to replace resources at runtime at the moment.
     resource_signal: S,
     resource: Option<channel::Sender<Update>>,
@@ -122,8 +122,8 @@ impl<S: Signal<Item=ResourceSink> + Unpin, I: Initiator + Unpin> Future for Init
         // do while there is work to do
         while {
             // First things first:
-            // If we've send an update to the resource in question we have error channel set, so
-            // we poll that first to determine if the resource has acted on it yet.
+            // If we've send an update to the resources in question we have error channel set, so
+            // we poll that first to determine if the resources has acted on it yet.
             if let Some(ref mut errchan) = self.error_channel {
                 match Pin::new(errchan).poll(cx) {
                     // In case there's an ongoing

@@ -7,8 +7,9 @@ use serde::{Serialize, Deserialize, Deserializer, Serializer};
 use std::fmt::Formatter;
 use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
 use std::str::FromStr;
-use diflouroborane::permissions::{PermRule, RoleIdentifier};
 use serde::de::Error;
+use diflouroborane::authorization::permissions::PermRule;
+use diflouroborane::authorization::roles::RoleIdentifier;
 
 type Result<T> = std::result::Result<T, serde_dhall::Error>;
 

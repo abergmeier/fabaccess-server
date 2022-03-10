@@ -734,6 +734,7 @@ dependencies = [
  "clap",
  "erased-serde",
  "executor",
+ "futures-lite",
  "futures-rustls",
  "futures-signals",
  "futures-test",

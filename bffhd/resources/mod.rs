@@ -13,12 +13,12 @@ pub mod claim;
 pub mod db;
 
 
-/// A resource in BFFH has to contain several different parts;
+/// A resources in BFFH has to contain several different parts;
 /// - Currently set state
 /// - Execution state of attached actors (⇒ BFFH's job)
-/// - Output of interal logic of a resource
+/// - Output of interal logic of a resources
 /// ⇒ Resource logic gets read access to set state and write access to output state.
-/// ⇒ state `update` happens via resource logic. This logic should do access control. If the update
+/// ⇒ state `update` happens via resources logic. This logic should do access control. If the update
 ///   succeeds then BFFH stores those input parameters ("set" state) and results / output state.
 ///   Storing input parameters is relevant so that BFFH can know that an "update" is a no-op
 ///   without having to run the module code.
@@ -42,7 +42,7 @@ pub mod db;
 ///   - Check authorization of updates i.e. is this user allowed to do that
 #[async_trait]
 pub trait ResourceModel: Debug {
-    /// Run whatever internal logic this resource has for the given State update, and return the
+    /// Run whatever internal logic this resources has for the given State update, and return the
     /// new output state that this update produces.
     async fn on_update(&mut self, input: &State) -> Result<State, Error>;
     async fn shutdown(&mut self);
@@ -59,7 +59,7 @@ impl ResourceModel for Passthrough {
     async fn shutdown(&mut self) {}
 }
 
-/// Error type a resource implementation can produce
+/// Error type a resources implementation can produce
 #[derive(Debug)]
 pub enum Error {
     Internal(Box<dyn std::error::Error + Send>),
@@ -99,9 +99,9 @@ impl ResourceDriver {
                     // the DB is not necessarily fatal, but it means that BFFH is now in an
                     // inconsistent state until a future update succeeds with writing to the DB.
                     // Not applying the new state isn't correct either since we don't know what the
-                    // internal logic of the resource has done to make this happen.
+                    // internal logic of the resources has done to make this happen.
                     // Another half right solution is to unwrap and recreate everything.
-                    // "Best" solution would be to tell the resource to rollback their interal
+                    // "Best" solution would be to tell the resources to rollback their interal
                     // changes on a fatal failure and then notify the Claimant, while simply trying
                     // again for temporary failures.
                     let _ = self.db.set(&state, &outstate);

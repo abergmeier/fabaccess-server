@@ -1,5 +1,5 @@
 use api::session::Builder;
-use crate::capnp::resources::Resources;
+use crate::capnp::machinesystem::Resources;
 use crate::capnp::users::Users;
 
 #[derive(Debug, Clone)]
