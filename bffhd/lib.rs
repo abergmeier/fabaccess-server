@@ -43,6 +43,7 @@ use std::path::Path;
 use std::sync::Arc;
 use anyhow::Context;
 use futures_rustls::TlsAcceptor;
+use futures_util::StreamExt;
 use rustls::{Certificate, KeyLogFile, PrivateKey, ServerConfig};
 use rustls::server::NoClientAuth;
 use signal_hook::consts::signal::*;
@@ -75,18 +76,32 @@ impl Diflouroborane {
 
         self.log_version_number();
 
-        let signals = signal_hook_async_std::Signals::new(&[
+        let mut signals = signal_hook_async_std::Signals::new(&[
             SIGINT,
             SIGQUIT,
             SIGTERM,
         ]).context("Failed to construct signal handler")?;
-        tracing::debug!("Set up signal handler");
 
         let tlsconfig = TlsConfig::new(config.tlskeylog.as_ref(), !config.is_quiet())?;
         let acceptor = tlsconfig.make_tls_acceptor(&config.tlsconfig)?;
 
-        APIServer::bind(self.executor.clone(), &config.listens, acceptor);
+        let mut apiserver = self.executor.run(APIServer::bind(self.executor.clone(), &config.listens, acceptor))?;
 
+        let (mut tx, rx) = async_oneshot::oneshot();
+
+        self.executor.spawn(apiserver.handle_until(rx));
+
+        let f = async {
+            let mut sig = None;
+            while {
+                sig = signals.next().await;
+                sig.is_none()
+            } {}
+            tracing::info!(signal = %sig.unwrap(), "Received signal");
+            tx.send(());
+        };
+
+        self.executor.run(f);
         Ok(())
     }
 }

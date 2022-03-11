@@ -131,7 +131,7 @@ fn main() -> anyhow::Result<()> {
         config.log_format = matches.value_of("log format").unwrap_or("Full").to_string();
 
         let mut bffh = Diflouroborane::new();
-        bffh.setup(&config);
+        bffh.setup(&config)?;
     }
 
     Ok(())
