@@ -36,6 +36,7 @@ pub mod utils;
 mod tls;
 mod keylog;
 mod logging;
+mod audit;
 
 use std::fs::File;
 use std::io::BufReader;
