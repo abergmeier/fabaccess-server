@@ -133,7 +133,7 @@ impl authentication_system::Server for Auth {
         // Extract the MECHANISM the client wants to use and start a session.
         // Or fail at that and thrown an exception TODO: return Outcome
         let mech = pry!(req.get_mechanism());
-        if mech != "PLAIN" || mech != "X-FABFIRE" {
+        if !((mech == "PLAIN") || (mech == "X-FABFIRE")) {
                 return Promise::err(capnp::Error {
                     kind: capnp::ErrorKind::Failed,
                     description: format!("Invalid SASL mech"),
