@@ -30,6 +30,9 @@ use crate::db::Databases;
 use crate::db::user::{Internal as UserDB, User};
 use crate::db::access::AccessControl as AccessDB;
 
+mod fabfire;
+use fabfire::FABFIRE;
+
 pub struct AppData {
     userdb: Arc<UserDB>,
 }
@@ -83,6 +86,7 @@ pub struct Auth {
 impl Auth {
     pub fn new(log: Logger, dbs: Databases, session: Rc<RefCell<Option<Session>>>) -> Self {
         let mut ctx = SASL::new();
+        ctx.register(&FABFIRE);
         ctx.install_callback(Arc::new(CB::new(dbs.userdb.clone())));
 
         Self { log, ctx, session, userdb: dbs.userdb.clone(), access: dbs.access.clone() }
@@ -111,9 +115,10 @@ impl authentication_system::Server for Auth {
         for (i, m) in mechvec.into_iter().enumerate() {
             res_mechs.set(i as u32, m);
         }*/
-        // For now, only PLAIN
-        let mut res_mechs = res.get().init_mechs(1);
+        // For now, only PLAIN and X-FABFIRE
+        let mut res_mechs = res.get().init_mechs(2);
         res_mechs.set(0, "PLAIN");
+        res_mechs.set(1, "X-FABFIRE");
 
         Promise::ok(())
     }
@@ -128,7 +133,7 @@ impl authentication_system::Server for Auth {
         // Extract the MECHANISM the client wants to use and start a session.
         // Or fail at that and thrown an exception TODO: return Outcome
         let mech = pry!(req.get_mechanism());
-        if pry!(req.get_mechanism()) != "PLAIN" {
+        if mech != "PLAIN" || mech != "X-FABFIRE" {
                 return Promise::err(capnp::Error {
                     kind: capnp::ErrorKind::Failed,
                     description: format!("Invalid SASL mech"),

@@ -1,0 +1,7 @@
+# Setup build image for multistage build
+FROM rust:latest
+# install build deps
+RUN apt-get update && apt-get upgrade -y
+RUN apt-get install -yqq --no-install-recommends capnproto build-essential cmake clang libclang-dev libgsasl7-dev
+
+COPY ../nfc_rs /nfc_rs
