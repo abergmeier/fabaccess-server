@@ -21,4 +21,6 @@
 , db_path = "/tmp/bffh/"
 , roles = ./roles.dhall
 , mqtt_url = "tcp://localhost:1883"
+, certfile = "./bffh.crt"
+, keyfile = "./bffh.key"
 }

@@ -1,11 +1,11 @@
-use api::resources::resources::Server;
+use api::machinesystem_capnp::machine_system::Server as MachineSystem;
 
 #[derive(Debug, Clone)]
-pub struct Resources {
+pub struct Machines {
 
 }
 
-impl Resources {
+impl Machines {
     pub fn new() -> Self {
         Self {
 
@@ -14,6 +14,6 @@ impl Resources {
 
 }
 
-impl Server for Resources {
+impl MachineSystem for Machines {
 
 }

@@ -3,7 +3,6 @@ use capnp::capability::Promise;
 use capnp::Error;
 use capnp_rpc::pry;
 use once_cell::sync::Lazy;
-use api::utils::l10n_string as l10n;
 
 struct Locales {
     map: HashMap<&'static str, HashMap<&'static str, &'static str>>
@@ -31,6 +30,7 @@ struct L10NString {
     msg: &'static str,
 }
 
+/*
 impl l10n::Server for L10NString {
     fn get(&mut self, params: l10n::GetParams, mut results: l10n::GetResults)
         -> Promise<(), Error>
@@ -59,3 +59,4 @@ impl l10n::Server for L10NString {
         Promise::ok(())
     }
 }
+ */

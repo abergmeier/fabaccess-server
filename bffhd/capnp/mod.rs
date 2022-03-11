@@ -1,81 +1,143 @@
-use std::future::Future;
+use crate::config::Listen;
+use crate::{Diflouroborane, TlsConfig};
+use anyhow::Context;
+use async_net::TcpListener;
 use capnp::capability::Promise;
 use capnp::Error;
 use capnp_rpc::rpc_twoparty_capnp::Side;
-use capnp_rpc::RpcSystem;
 use capnp_rpc::twoparty::VatNetwork;
-use futures_lite::StreamExt;
+use capnp_rpc::RpcSystem;
+use executor::prelude::Executor;
 use futures_rustls::server::TlsStream;
-use futures_util::{AsyncRead, AsyncWrite, FutureExt};
+use futures_rustls::TlsAcceptor;
+use futures_util::stream::FuturesUnordered;
+use futures_util::{stream, AsyncRead, AsyncWrite, FutureExt, StreamExt};
+use std::fs::File;
+use std::future::Future;
+use std::io;
+use std::io::BufReader;
+use std::sync::Arc;
 
 use crate::error::Result;
 
-use api::bootstrap::{
-    Client,
-    Server,
-    MechanismsParams,
-    MechanismsResults,
-    CreateSessionParams,
-    CreateSessionResults
-};
-
 mod authenticationsystem;
+mod connection;
 mod machine;
 mod machinesystem;
 mod permissionsystem;
-mod user;
-mod users;
 mod session;
+mod user;
+mod user_system;
 
-#[derive(Debug)]
-pub struct APIHandler {
-
+pub struct APIServer {
+    executor: Executor<'static>,
+    sockets: Vec<TcpListener>,
+    acceptor: TlsAcceptor,
 }
 
-impl APIHandler {
-    pub fn handle<IO: 'static + Unpin + AsyncRead + AsyncWrite>(&mut self, stream: TlsStream<IO>)
-        -> impl Future<Output = Result<()>>
-    {
-        let (rx, tx) = futures_lite::io::split(stream);
-        let vat = VatNetwork::new(rx, tx, Side::Server, Default::default());
-        let bootstrap: Client = capnp_rpc::new_client(ApiSystem::new());
+impl APIServer {
+    pub fn new(
+        executor: Executor<'static>,
+        sockets: Vec<TcpListener>,
+        acceptor: TlsAcceptor,
+    ) -> Self {
+        Self {
+            executor,
+            sockets,
+            acceptor,
+        }
+    }
 
-        RpcSystem::new(Box::new(vat), Some(bootstrap.client))
-            .map(|res| match res {
-                Ok(()) => Ok(()),
-                Err(e) => Err(e.into())
+    pub async fn bind(
+        executor: Executor<'static>,
+        listens: impl IntoIterator<Item = &Listen>,
+        acceptor: TlsAcceptor,
+    ) -> anyhow::Result<Self> {
+        let span = tracing::info_span!("binding API listen sockets");
+        let _guard = span.enter();
+
+        let mut sockets = FuturesUnordered::new();
+
+        listens
+            .into_iter()
+            .map(|a| async move {
+                (async_net::resolve(a.to_tuple()).await, a)
             })
+            .collect::<FuturesUnordered<_>>()
+            .filter_map(|(res, addr)| async move {
+                match res {
+                    Ok(a) => Some(a),
+                    Err(e) => {
+                        tracing::error!("Failed to resolve {:?}: {}", addr, e);
+                        None
+                    }
+                }
+            })
+            .for_each(|addrs| async {
+                for addr in addrs {
+                    sockets.push(async move { (TcpListener::bind(addr).await, addr) })
+                }
+            })
+            .await;
+
+        let sockets: Vec<TcpListener> = sockets
+            .filter_map(|(res, addr)| async move {
+                match res {
+                    Ok(s) => {
+                        tracing::info!("Opened listen socket on {}", addr);
+                        Some(s)
+                    }
+                    Err(e) => {
+                        tracing::error!("Failed to open socket on {}: {}", addr, e);
+                        None
+                    }
+                }
+            })
+            .collect()
+            .await;
+
+        if sockets.is_empty() {
+            tracing::warn!("No usable listen addresses configured for the API server!");
+        }
+
+        Ok(Self::new(executor, sockets, acceptor))
     }
-}
 
-#[derive(Debug)]
-/// Cap'n Proto API Handler
-struct ApiSystem {
-
-}
-
-impl ApiSystem {
-    pub fn new() -> Self {
-        Self {}
-    }
-}
-
-impl Server for ApiSystem {
-    fn mechanisms(
-        &mut self,
-        _: MechanismsParams,
-        _: MechanismsResults
-    ) -> Promise<(), Error>
-    {
-        todo!()
+    pub async fn handle_until(&mut self, stop: impl Future) {
+        stream::select_all(
+            self.sockets
+                .iter()
+                .map(|tcplistener| tcplistener.incoming()),
+        )
+        .take_until(stop)
+        .for_each(|stream| async {
+            match stream {
+                Ok(stream) => self.handle(self.acceptor.accept(stream)),
+                Err(e) => tracing::warn!("Failed to accept stream: {}", e),
+            }
+        });
     }
 
-    fn create_session(
-        &mut self,
-        _: CreateSessionParams,
-        _: CreateSessionResults
-    ) -> Promise<(), Error>
-    {
-        todo!()
+    fn handle<IO: 'static + Unpin + AsyncRead + AsyncWrite>(
+        &self,
+        stream: impl Future<Output = io::Result<TlsStream<IO>>>,
+    ) {
+        let f = async move {
+            let stream = match stream.await {
+                Ok(stream) => stream,
+                Err(e) => {
+                    tracing::error!("TLS handshake failed: {}", e);
+                    return;
+                }
+            };
+            let (rx, tx) = futures_lite::io::split(stream);
+            let vat = VatNetwork::new(rx, tx, Side::Server, Default::default());
+            let bootstrap: connection::Client = capnp_rpc::new_client(connection::BootCap::new());
+
+            if let Err(e) = RpcSystem::new(Box::new(vat), Some(bootstrap.client)).await {
+                tracing::error!("Error during RPC handling: {}", e);
+            }
+        };
+        self.executor.spawn_local(f);
     }
 }

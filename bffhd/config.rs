@@ -8,8 +8,8 @@ use std::fmt::Formatter;
 use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
 use std::str::FromStr;
 use serde::de::Error;
-use diflouroborane::authorization::permissions::PermRule;
-use diflouroborane::authorization::roles::RoleIdentifier;
+use crate::authorization::permissions::PermRule;
+use crate::authorization::roles::RoleIdentifier;
 
 type Result<T> = std::result::Result<T, serde_dhall::Error>;
 
@@ -44,6 +44,24 @@ pub struct Config {
     pub db_path: PathBuf,
 
     pub roles: HashMap<RoleIdentifier, RoleConfig>,
+
+    #[serde(flatten)]
+    pub tlsconfig: TlsListen,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tlskeylog: Option<PathBuf>,
+
+    #[serde(default, skip)]
+    pub verbosity: isize,
+
+    #[serde(default, skip)]
+    pub log_format: String,
+}
+
+impl Config {
+    pub fn is_quiet(&self) -> bool {
+        self.verbosity < 0
+    }
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -60,10 +78,34 @@ pub struct ModuleConfig {
     pub params: HashMap<String, String>
 }
 
+pub struct ListenSock {
+    listen: Listen,
+    tls_config: TlsListen,
+}
+
 #[derive(Debug, Clone)]
 pub struct Listen {
     address: String,
     port: Option<u16>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, Default)]
+pub struct TlsListen {
+    pub certfile: PathBuf,
+    pub keyfile: PathBuf,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub ciphers: Option<String>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub tls_min_version: Option<String>,
+    #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
+    pub protocols: Vec<String>,
+}
+
+impl Listen {
+    pub fn to_tuple(&self) -> (&str, u16) {
+        (self.address.as_str(), self.port.unwrap_or(DEFAULT_PORT))
+    }
 }
 
 impl std::fmt::Display for Listen {
@@ -184,6 +226,16 @@ impl Default for Config {
 
             db_path: PathBuf::from("/run/bffh/database"),
             roles: HashMap::new(),
+
+            tlsconfig: TlsListen {
+                certfile: PathBuf::from("./bffh.crt"),
+                keyfile: PathBuf::from("./bffh.key"),
+                .. Default::default()
+            },
+
+            tlskeylog: None,
+            verbosity: 0,
+            log_format: "Full".to_string(),
         }
     }
 }
