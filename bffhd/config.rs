@@ -83,9 +83,17 @@ pub struct ListenSock {
     tls_config: TlsListen,
 }
 
-#[derive(Debug, Clone)]
+
+pub(crate) fn deser_option<'de, D, T>(d: D) -> std::result::Result<Option<T>, D::Error>
+    where D: serde::Deserializer<'de>, T: serde::Deserialize<'de>,
+{
+    Ok(T::deserialize(d).ok())
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Listen {
     address: String,
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
     port: Option<u16>,
 }
 
@@ -123,73 +131,6 @@ impl ToSocketAddrs for Listen {
         } else {
             (self.address.as_str(), DEFAULT_PORT).to_socket_addrs()
         }
-    }
-}
-
-impl<'de> serde::Deserialize<'de> for Listen {
-    fn deserialize<D>(deserializer: D) -> std::result::Result<Self, D::Error>
-        where D: Deserializer<'de>
-    {
-        deserializer.deserialize_str(ListenVisitor)
-    }
-}
-impl serde::Serialize for Listen {
-    fn serialize<S>(&self, serializer: S) -> std::result::Result<S::Ok, S::Error>
-        where S: Serializer
-    {
-        if let Some(port) = self.port {
-            serializer.serialize_str(&format!("{}:{}", self.address, port))
-        } else {
-            serializer.serialize_str(&self.address)
-        }
-    }
-}
-
-struct ListenVisitor;
-impl<'de> serde::de::Visitor<'de> for ListenVisitor {
-    type Value = Listen;
-
-    fn expecting(&self, formatter: &mut Formatter) -> std::fmt::Result {
-        write!(formatter, "A string encoding a valid IP or Hostname (e.g. 127.0.0.1 or [::1]) with \
-        or without a defined port")
-    }
-
-    fn visit_str<E>(self, v: &str) -> std::result::Result<Self::Value, E>
-        where E: Error
-    {
-        let sockaddr = SocketAddr::from_str(v);
-        if let Ok(address) = sockaddr {
-            return Ok(Listen {
-                address: address.ip().to_string(),
-                port: Some(address.port()),
-            })
-        }
-
-        let ipaddr = IpAddr::from_str(v);
-        if let Ok(address) = ipaddr {
-            return Ok(Listen {
-                address: address.to_string(),
-                port: None,
-            })
-        }
-
-        let mut split = v.split(':');
-        let address = split.next()
-            .expect("str::split should always return at least one element")
-            .to_string();
-        let port = if let Some(port) = split.next() {
-            let port: u16 = port.parse()
-                .map_err(|_| {
-                    E::custom(&format!("Expected valid ip address or hostname with or without \
-                    port. Failed to parse \"{}\".", v))
-                })?;
-
-            Some(port)
-        } else {
-            None
-        };
-
-        Ok(Listen { address, port })
     }
 }
 
