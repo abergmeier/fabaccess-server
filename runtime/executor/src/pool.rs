@@ -145,10 +145,9 @@ impl<'a, 'executor: 'a> Executor<'executor> {
 
             // Wrap the future into one that stores the result into `out`.
             let future = {
-                let out = out.as_mut_ptr();
-
+                let out: *mut R = out.as_mut_ptr();
                 async move {
-                    *out = future.await;
+                    out.write(future.await);
                 }
             };
 
