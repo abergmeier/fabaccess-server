@@ -6,6 +6,7 @@
 use std::sync::Arc;
 use std::rc::Rc;
 use std::cell::RefCell;
+use std::convert::TryFrom;
 use std::io::Cursor;
 
 
@@ -18,7 +19,7 @@ use rsasl::callback::Callback;
 use rsasl::error::SessionError;
 use rsasl::mechname::Mechname;
 use rsasl::property::{AuthId, Password};
-use rsasl::SASL;
+use rsasl::{Property, SASL};
 use rsasl::session::Step;
 use rsasl::validate::{Validation, validations};
 
@@ -32,6 +33,7 @@ use crate::db::access::AccessControl as AccessDB;
 
 mod fabfire;
 use fabfire::FABFIRE;
+use crate::api::auth::fabfire::FabFireCardKey;
 
 pub struct AppData {
     userdb: Arc<UserDB>,
@@ -73,10 +75,35 @@ impl Callback for CB {
         };
         Err(ret)
     }
+
+    fn provide_prop(
+        &self,
+        session: &mut rsasl::session::SessionData,
+        property: Property,
+    ) -> Result<(), SessionError> {
+        match property {
+            FABFIRECARDKEY => {
+                // Access the authentication id, i.e. the username to check the password for
+                let authcid = session.get_property_or_callback::<AuthId>()?;
+                println!("auth'ing user {:?}", authcid);
+                self.userdb.get_user(authcid.unwrap().as_ref()).map(|user| {
+                    let kvs= user.unwrap().data.kv;
+                    println!("kvs: {:?}", kvs);
+                    kvs.get("cardkey").map(|key| {
+                        session.set_property::<FabFireCardKey>(Arc::new(<[u8; 16]>::try_from(hex::decode(key).unwrap()).unwrap()));
+                    });
+                }).ok();
+
+                Ok(())
+            }
+            _ => Err(SessionError::NoProperty { property }),
+        }
+    }
 }
 
 pub struct Auth {
     pub ctx: SASL,
+    sasl_session: Option<rsasl::session::Session>,
     session: Rc<RefCell<Option<Session>>>,
     userdb: Arc<UserDB>,
     access: Arc<AccessDB>,
@@ -89,7 +116,7 @@ impl Auth {
         ctx.register(&FABFIRE);
         ctx.install_callback(Arc::new(CB::new(dbs.userdb.clone())));
 
-        Self { log, ctx, session, userdb: dbs.userdb.clone(), access: dbs.access.clone() }
+        Self { log, ctx, sasl_session: None, session, userdb: dbs.userdb.clone(), access: dbs.access.clone() }
     }
 }
 
@@ -134,6 +161,7 @@ impl authentication_system::Server for Auth {
         // Or fail at that and thrown an exception TODO: return Outcome
         let mech = pry!(req.get_mechanism());
         if !((mech == "PLAIN") || (mech == "X-FABFIRE")) {
+                debug!(self.log, "Invalid SASL mech: {}", mech);
                 return Promise::err(capnp::Error {
                     kind: capnp::ErrorKind::Failed,
                     description: format!("Invalid SASL mech"),
@@ -142,8 +170,8 @@ impl authentication_system::Server for Auth {
 
         let mech = Mechname::new(mech.as_bytes()).unwrap();
 
-        let mut session = match self.ctx.server_start(mech) {
-            Ok(s) => s,
+        self.sasl_session = match self.ctx.server_start(mech) {
+            Ok(s) => Some(s),
             Err(e) => 
                 return Promise::err(capnp::Error {
                     kind: capnp::ErrorKind::Failed,
@@ -164,10 +192,11 @@ impl authentication_system::Server for Auth {
 
             Ok(Which::None(_)) => {
                 // FIXME: Actually this needs to indicate NO data instead of SOME data of 0 length
-                session.step(Option::<&[u8]>::None, &mut out)
+                self.sasl_session.as_mut().unwrap().step(Option::<&[u8]>::None, &mut out)
             }
             Ok(Which::Initial(data)) => {
-                session.step(Some(pry!(data)), &mut out)
+                debug!(self.log, "running step() with initial data");
+                self.sasl_session.as_mut().unwrap().step(Some(pry!(data)), &mut out)
             }
         };
 
@@ -176,7 +205,7 @@ impl authentication_system::Server for Auth {
 
         match step_res {
             Ok(Step::Done(b)) => {
-                let user = session
+                let user = self.sasl_session.as_mut().unwrap()
                     .get_property::<AuthId>()
                     .and_then(|data| {
                         self.userdb.get_user(data.as_str()).unwrap()
@@ -207,8 +236,67 @@ impl authentication_system::Server for Auth {
                 Promise::ok(())
             }
             Err(e) => {
+                error!(self.log, "SASL Auth failed: {}", e);
                 let mut outcome = pry!(res.get().get_response()).init_outcome();
-                outcome.reborrow().set_result(response::Result::InvalidCredentials);
+                outcome.reborrow().set_result(response::Result::InvalidCredentials); //FIXME: Check if problem where invalid creds or something else
+                let text = format!("{}", e);
+                outcome.set_help_text(&text);
+                Promise::ok(())
+            }
+        }
+    }
+
+    fn step(&mut self, params: authentication_system::StepParams, mut res: authentication_system::StepResults) -> Promise<(), capnp::Error> {
+        let resp = pry!(pry!(params.get()).get_response());
+
+        let mut out = Cursor::new(Vec::new());
+
+        // Use the data the Client has provided
+        let step_res = self.sasl_session.as_mut().unwrap().step(Some(resp), &mut out);
+
+
+        debug!(self.log, "running step() with additional data");
+
+
+        // The step may either return an error, a success or the need for more data
+        // TODO: Set the session user. Needs a lookup though <.>
+
+        match step_res {
+            Ok(Step::Done(b)) => {
+                let user =  self.sasl_session.as_mut().unwrap()
+                    .get_property::<AuthId>()
+                    .and_then(|data| {
+                        self.userdb.get_user(data.as_str()).unwrap()
+                    })
+                    .expect("Authentication returned OK but the given AuthId is invalid");
+
+                let perms = pry!(self.access.collect_permrules(&user.data)
+                    .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e))));
+                self.session.replace(Some(Session::new(
+                    self.log.new(o!()),
+                    user.id,
+                    "".to_string(),
+                    user.data.roles.into_boxed_slice(),
+                    perms.into_boxed_slice()
+                )));
+
+                let mut outcome = pry!(res.get().get_response()).init_outcome();
+                outcome.reborrow().set_result(response::Result::Successful);
+                if b.is_some() {
+                    outcome.init_additional_data().set_additional(&out.get_ref());
+                }
+                Promise::ok(())
+            },
+            Ok(Step::NeedsMore(b)) => {
+                if b.is_some() {
+                    pry!(res.get().get_response()).set_challence(&out.get_ref());
+                }
+                Promise::ok(())
+            }
+            Err(e) => {
+                error!(self.log, "SASL Auth failed: {}", e);
+                let mut outcome = pry!(res.get().get_response()).init_outcome();
+                outcome.reborrow().set_result(response::Result::InvalidCredentials); //FIXME: Check if problem where invalid creds or something else
                 let text = format!("{}", e);
                 outcome.set_help_text(&text);
                 Promise::ok(())

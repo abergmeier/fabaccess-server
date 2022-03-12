@@ -77,7 +77,7 @@ async-rustls = "0.2"
 
 # Desfire
 desfire = { git = "https://gitlab.com/fabinfra/fabaccess/nfc_rs.git", branch = "main" }
-hex = "0.4.3"
+hex = { version = "0.4.3", features = ["serde"] }
 linkme = "0.2"
 
 [build-dependencies]

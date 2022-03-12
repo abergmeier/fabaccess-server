@@ -6,16 +6,24 @@ use rsasl::SASL;
 use rsasl::session::{SessionData, StepResult};
 use serde::{Deserialize, Serialize};
 use desfire::desfire::Desfire;
-use desfire::iso7816_4::apducommand::APDUCommand;
 use desfire::iso7816_4::apduresponse::APDUResponse;
-use desfire::error::{Error as DesfireError, Error};
+use desfire::error::{Error as DesfireError};
 use std::convert::TryFrom;
-use std::ops::Deref;
+use std::sync::Arc;
+use desfire::desfire::desfire::MAX_BYTES_PER_TRANSACTION;
+use rsasl::property::AuthId;
+use crate::api::auth::fabfire::FabFireCardKey;
 
 enum FabFireError {
     ParseError,
     SerializationError,
+    DeserializationError(serde_json::Error),
     CardError(DesfireError),
+    InvalidMagic(String),
+    InvalidToken(String),
+    InvalidURN(String),
+    InvalidCredentials(String),
+    Session(SessionError),
 }
 
 impl Debug for FabFireError {
@@ -23,7 +31,13 @@ impl Debug for FabFireError {
         match self {
             FabFireError::ParseError => write!(f, "ParseError"),
             FabFireError::SerializationError => write!(f, "SerializationError"),
+            FabFireError::DeserializationError(e) => write!(f, "DeserializationError: {}", e),
             FabFireError::CardError(err) => write!(f, "CardError: {}", err),
+            FabFireError::InvalidMagic(magic) => write!(f, "InvalidMagic: {}", magic),
+            FabFireError::InvalidToken(token) => write!(f, "InvalidToken: {}", token),
+            FabFireError::InvalidURN(urn) => write!(f, "InvalidURN: {}", urn),
+            FabFireError::InvalidCredentials(credentials) => write!(f, "InvalidCredentials: {}", credentials),
+            FabFireError::Session(err) => write!(f, "Session: {}", err),
         }
     }
 }
@@ -33,7 +47,13 @@ impl Display for FabFireError {
         match self {
             FabFireError::ParseError => write!(f, "ParseError"),
             FabFireError::SerializationError => write!(f, "SerializationError"),
+            FabFireError::DeserializationError(e) => write!(f, "DeserializationError: {}", e),
             FabFireError::CardError(err) => write!(f, "CardError: {}", err),
+            FabFireError::InvalidMagic(magic) => write!(f, "InvalidMagic: {}", magic),
+            FabFireError::InvalidToken(token) => write!(f, "InvalidToken: {}", token),
+            FabFireError::InvalidURN(urn) => write!(f, "InvalidURN: {}", urn),
+            FabFireError::InvalidCredentials(credentials) => write!(f, "InvalidCredentials: {}", credentials),
+            FabFireError::Session(err) => write!(f, "Session: {}", err),
         }
     }
 }
@@ -43,45 +63,61 @@ impl MechanismError for FabFireError {
         match self {
             FabFireError::ParseError => MechanismErrorKind::Parse,
             FabFireError::SerializationError => MechanismErrorKind::Protocol,
+            FabFireError::DeserializationError(_) => MechanismErrorKind::Parse,
             FabFireError::CardError(_) => MechanismErrorKind::Protocol,
+            FabFireError::InvalidMagic(_) => MechanismErrorKind::Protocol,
+            FabFireError::InvalidToken(_) => MechanismErrorKind::Protocol,
+            FabFireError::InvalidURN(_) => MechanismErrorKind::Protocol,
+            FabFireError::InvalidCredentials(_) => MechanismErrorKind::Protocol,
+            FabFireError::Session(_) => MechanismErrorKind::Protocol,
         }
     }
 }
 
 #[derive(Debug, Deserialize, Serialize)]
+#[serde(rename_all = "camelCase")]
 struct CardInfo {
-    card_uid: [u8; 7],
+    #[serde(rename = "UID", with = "hex")]
+    uid: [u8; 7],
     key_old: Option<Box<[u8]>>,
-    key_new: Option<Box<[u8]>>
+    key_new: Option<Box<[u8]>>,
 }
 
 struct KeyInfo {
     key_id: u8,
-    key: Box<[u8]>
+    key: Box<[u8]>,
 }
 
 struct AuthInfo {
     rnd_a: Vec<u8>,
     rnd_b: Vec<u8>,
-    iv: Vec<u8>
+    iv: Vec<u8>,
 }
 
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "Cmd")]
 enum CardCommand {
     message {
+        #[serde(rename = "MssgID", skip_serializing_if = "Option::is_none")]
         msg_id: Option<u32>,
+        #[serde(rename = "ClrTxt", skip_serializing_if = "Option::is_none")]
         clr_txt: Option<String>,
+        #[serde(rename = "AddnTxt", skip_serializing_if = "Option::is_none")]
         addn_txt: Option<String>,
     },
     sendPICC {
-        data: String
+        #[serde(deserialize_with = "hex::deserialize", serialize_with = "hex::serialize_upper")]
+        data: Vec<u8>
+    },
+    readPICC {
+        #[serde(deserialize_with = "hex::deserialize", serialize_with = "hex::serialize_upper")]
+        data: Vec<u8>
     },
     haltPICC,
     Key {
         data: String
     },
-    ConfirmUser
+    ConfirmUser,
 }
 
 enum Step {
@@ -92,7 +128,6 @@ enum Step {
     GetToken,
     Authenticate1,
     Authenticate2,
-    Authenticate3,
 }
 
 pub struct FabFire {
@@ -117,52 +152,70 @@ impl Authentication for FabFire {
     fn step(&mut self, session: &mut SessionData, input: Option<&[u8]>, writer: &mut dyn Write) -> StepResult {
         match self.step {
             Step::New => {
+                // println!("Step: New");
                 //receive card info (especially card UID) from reader
                 return match input {
-                    None => { Err(SessionError::InputDataRequired) },
+                    None => { Err(SessionError::InputDataRequired) }
                     Some(cardinfo) => {
                         self.card_info = match serde_json::from_slice(cardinfo) {
                             Ok(card_info) => Some(card_info),
-                            Err(_) => {
-                                return Err(FabFireError::ParseError.into())
+                            Err(e) => {
+                                // eprintln!("{:?}", e);
+                                return Err(FabFireError::DeserializationError(e).into());
                             }
                         };
-                        self.step = Step::SelectApp;
-                        Ok(rsasl::session::Step::NeedsMore(None))
+                        //select application
+                        let buf = match self.desfire.select_application_cmd(self.app_id) {
+                            Ok(buf) => match Vec::<u8>::try_from(buf) {
+                                Ok(data) => data,
+                                Err(e) => {
+                                    // eprintln!("Failed to convert APDUCommand to Vec<u8>: {:?}", e);
+                                    return Err(FabFireError::SerializationError.into());
+                                }
+                            },
+                            Err(e) => {
+                                // eprintln!("Failed to generate APDUCommand: {:?}", e);
+                                return Err(FabFireError::SerializationError.into());
+                            }
+                        };
+                        let cmd = CardCommand::sendPICC { data: buf };
+                        return match serde_json::to_vec(&cmd) {
+                            Ok(send_buf) => {
+                                self.step = Step::SelectApp;
+                                writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
+                                Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                            }
+                            Err(e) => {
+                                // eprintln!("Failed to serialize APDUCommand: {:?}", e);
+                                Err(FabFireError::SerializationError.into())
+                            }
+                        };
                     }
-                }
+                };
             }
             Step::SelectApp => {
-                //select application
-                let buf = match self.desfire.select_application_cmd(self.app_id) {
-                    Ok(buf) => match Vec::<u8>::try_from(buf) {
-                        Ok(data) => data,
-                        Err(_) => {
-                            return Err(FabFireError::SerializationError.into())
-                        }
-                    },
-                    Err(_) => {
-                        return Err(FabFireError::SerializationError.into())
-                    }
-                };
-                let cmd = CardCommand::sendPICC { data: hex::encode_upper(buf) };
-                return match serde_json::to_writer(writer, &cmd) {
-                    Ok(_) => {
-                        self.step = Step::VerifyMagic;
-                        Ok(rsasl::session::Step::NeedsMore(None))
-                    }
-                    Err(_) => {
-                        Err(FabFireError::SerializationError.into())
-                    }
-                }
-            }
-            Step::VerifyMagic => {
+                // println!("Step: SelectApp");
                 // check that we successfully selected the application
-                let response = match input {
-                    None => {return Err(SessionError::InputDataRequired)},
-                    Some(buf) => APDUResponse::new(buf)
+                let response: CardCommand = match input {
+                    None => { return Err(SessionError::InputDataRequired); }
+                    Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
+                        Ok(response) => response,
+                        Err(e) => {
+                            // eprintln!("{:?}", e);
+                            return Err(e.into());
+                        }
+                    }
                 };
-                response.check().map_err(|e| FabFireError::CardError(e))?;
+
+                let apdu_response = match response {
+                    CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
+                    _ => {
+                        // eprintln!("Unexpected response: {:?}", response);
+                        return Err(FabFireError::ParseError.into());
+                    }
+                };
+
+                apdu_response.check().map_err(|e| FabFireError::CardError(e))?;
 
                 // request the contents of the file containing the magic string
                 const MAGIC_FILE_ID: u8 = 0x01;
@@ -171,40 +224,58 @@ impl Authentication for FabFire {
                     Ok(buf) => match Vec::<u8>::try_from(buf) {
                         Ok(data) => data,
                         Err(_) => {
-                            return Err(FabFireError::SerializationError.into())
+                            return Err(FabFireError::SerializationError.into());
                         }
                     },
                     Err(_) => {
-                        return Err(FabFireError::SerializationError.into())
+                        return Err(FabFireError::SerializationError.into());
                     }
                 };
-                let cmd = CardCommand::sendPICC { data: hex::encode_upper(buf) };
-                return match serde_json::to_writer(writer, &cmd) {
-                    Ok(_) => {
-                        self.step = Step::GetURN;
-                        Ok(rsasl::session::Step::NeedsMore(None))
+                let cmd = CardCommand::sendPICC { data: buf };
+                return match serde_json::to_vec(&cmd) {
+                    Ok(send_buf) => {
+                        self.step = Step::VerifyMagic;
+                        writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
+                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                     }
                     Err(_) => {
                         Err(FabFireError::SerializationError.into())
                     }
-                }
-            }
-            Step::GetURN => {
-                // verify the magic string to determine that we have a valid fabfire card
-                let response = match input {
-                    None => {return Err(SessionError::InputDataRequired)},
-                    Some(buf) => APDUResponse::new(buf)
                 };
-                match response.check() {
+            }
+            Step::VerifyMagic => {
+                // println!("Step: VerifyMagic");
+                // verify the magic string to determine that we have a valid fabfire card
+                let response: CardCommand = match input {
+                    None => { return Err(SessionError::InputDataRequired); }
+                    Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
+                        Ok(response) => response,
+                        Err(e) => {
+                            // eprintln!("{:?}", e);
+                            return Err(e.into());
+                        }
+                    }
+                };
+
+                let apdu_response = match response {
+                    CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
+                    _ => {
+                        // eprintln!("Unexpected response: {:?}", response);
+                        return Err(FabFireError::ParseError.into());
+                    }
+                };
+
+
+                match apdu_response.check() {
                     Ok(_) => {
-                        match response.body {
+                        match apdu_response.body {
                             Some(data) => {
                                 if std::str::from_utf8(data.as_slice()) != Ok(MAGIC) {
                                     return Err(FabFireError::ParseError.into());
                                 }
                             }
                             None => {
-                                return Err(FabFireError::ParseError.into())
+                                return Err(FabFireError::ParseError.into());
                             }
                         };
                     }
@@ -221,92 +292,143 @@ impl Authentication for FabFire {
                     Ok(buf) => match Vec::<u8>::try_from(buf) {
                         Ok(data) => data,
                         Err(_) => {
-                            return Err(FabFireError::SerializationError.into())
+                            return Err(FabFireError::SerializationError.into());
                         }
                     },
                     Err(_) => {
-                        return Err(FabFireError::SerializationError.into())
+                        return Err(FabFireError::SerializationError.into());
                     }
                 };
-                let cmd = CardCommand::sendPICC { data: hex::encode_upper(buf) };
-                return match serde_json::to_writer(writer, &cmd) {
-                    Ok(_) => {
-                        self.step = Step::GetToken;
-                        Ok(rsasl::session::Step::NeedsMore(None))
+                let cmd = CardCommand::sendPICC { data: buf };
+                return match serde_json::to_vec(&cmd) {
+                    Ok(send_buf) => {
+                        self.step = Step::GetURN;
+                        writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
+                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                     }
                     Err(_) => {
                         Err(FabFireError::SerializationError.into())
                     }
-                }
-            }
-            Step::GetToken => {
-                // parse the urn and match it to our local urn
-                let response = match input {
-                    None => {return Err(SessionError::InputDataRequired)},
-                    Some(buf) => APDUResponse::new(buf)
                 };
-                match response.check() {
+            }
+            Step::GetURN => {
+                // println!("Step: GetURN");
+                // parse the urn and match it to our local urn
+                let response: CardCommand = match input {
+                    None => { return Err(SessionError::InputDataRequired); }
+                    Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
+                        Ok(response) => response,
+                        Err(e) => {
+                            // eprintln!("{:?}", e);
+                            return Err(e.into());
+                        }
+                    }
+                };
+
+                let apdu_response = match response {
+                    CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
+                    _ => {
+                        // eprintln!("Unexpected response: {:?}", response);
+                        return Err(FabFireError::ParseError.into());
+                    }
+                };
+
+
+                match apdu_response.check() {
                     Ok(_) => {
-                        match response.body {
+                        match apdu_response.body {
                             Some(data) => {
-                                if String::from_utf8(data).unwrap() != self.local_urn {
+                                let received_urn = String::from_utf8(data).unwrap();
+                                if received_urn != self.local_urn {
+                                    // eprintln!("URN mismatch: {:?} != {:?}", received_urn, self.local_urn);
                                     return Err(FabFireError::ParseError.into());
                                 }
                             }
                             None => {
-                                return Err(FabFireError::ParseError.into())
+                                // eprintln!("No data in response");
+                                return Err(FabFireError::ParseError.into());
                             }
                         };
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        // eprintln!("Invalid response: {:?}", e);
                         return Err(FabFireError::ParseError.into());
                     }
                 }
                 // request the contents of the file containing the URN
                 const TOKEN_FILE_ID: u8 = 0x03;
 
-                let buf = match self.desfire.read_data_chunk_cmd(TOKEN_FILE_ID, 0, 47) { // TODO: support data longer than 47 Bytes
+                let buf = match self.desfire.read_data_chunk_cmd(TOKEN_FILE_ID, 0, MAX_BYTES_PER_TRANSACTION) { // TODO: support data longer than 47 Bytes
                     Ok(buf) => match Vec::<u8>::try_from(buf) {
                         Ok(data) => data,
                         Err(_) => {
-                            return Err(FabFireError::SerializationError.into())
+                            return Err(FabFireError::SerializationError.into());
                         }
                     },
                     Err(_) => {
-                        return Err(FabFireError::SerializationError.into())
+                        return Err(FabFireError::SerializationError.into());
                     }
                 };
-                let cmd = CardCommand::sendPICC { data: hex::encode_upper(buf) };
-                return match serde_json::to_writer(writer, &cmd) {
-                    Ok(_) => {
-                        self.step = Step::Authenticate1;
-                        Ok(rsasl::session::Step::NeedsMore(None))
+                let cmd = CardCommand::sendPICC { data: buf };
+                return match serde_json::to_vec(&cmd) {
+                    Ok(send_buf) => {
+                        self.step = Step::GetToken;
+                        writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
+                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                     }
                     Err(_) => {
                         Err(FabFireError::SerializationError.into())
                     }
-                }
-            }
-            Step::Authenticate1 => {
-                // parse the token and select the appropriate user
-                let response = match input {
-                    None => {return Err(SessionError::InputDataRequired)},
-                    Some(buf) => APDUResponse::new(buf)
                 };
-                match response.check() {
+            }
+            Step::GetToken => {
+                // println!("Step: GetToken");
+                // parse the token and select the appropriate user
+                let response: CardCommand = match input {
+                    None => { return Err(SessionError::InputDataRequired); }
+                    Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
+                        Ok(response) => response,
+                        Err(e) => {
+                            // eprintln!("{:?}", e);
+                            return Err(e.into());
+                        }
+                    }
+                };
+
+                let apdu_response = match response {
+                    CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
+                    _ => {
+                        // eprintln!("Unexpected response: {:?}", response);
+                        return Err(FabFireError::ParseError.into());
+                    }
+                };
+
+
+                match apdu_response.check() {
                     Ok(_) => {
-                        match response.body {
+                        match apdu_response.body {
                             Some(data) => {
-                                if String::from_utf8(data).unwrap() != "LoremIpsum" { // FIXME: match against user db
-                                    return Err(FabFireError::ParseError.into());
-                                }
+                                let token = String::from_utf8(data).unwrap();
+                                session.set_property::<AuthId>(Arc::new(token.trim_matches(char::from(0)).to_string()));
+                                let key = match session.get_property_or_callback::<FabFireCardKey>() {
+                                    Ok(Some(key)) => Box::from(key.as_slice()),
+                                    Ok(None) => {
+                                        return Err(FabFireError::InvalidCredentials("No keys on file for token".to_string()).into());
+                                    }
+                                    Err(e) => {
+                                        return Err(FabFireError::Session(e).into());
+                                    }
+                                };
+                                self.key_info = Some(KeyInfo{ key_id: 0x01, key });
                             }
                             None => {
-                                return Err(FabFireError::ParseError.into())
+                                // eprintln!("No data in response");
+                                return Err(FabFireError::ParseError.into());
                             }
                         };
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        // eprintln!("Invalid response: {:?}", e);
                         return Err(FabFireError::ParseError.into());
                     }
                 }
@@ -315,62 +437,85 @@ impl Authentication for FabFire {
                     Ok(buf) => match Vec::<u8>::try_from(buf) {
                         Ok(data) => data,
                         Err(_) => {
-                            return Err(FabFireError::SerializationError.into())
+                            return Err(FabFireError::SerializationError.into());
                         }
                     },
                     Err(_) => {
-                        return Err(FabFireError::SerializationError.into())
+                        return Err(FabFireError::SerializationError.into());
                     }
                 };
-                let cmd = CardCommand::sendPICC { data: hex::encode_upper(buf) };
-                return match serde_json::to_writer(writer, &cmd) {
-                    Ok(_) => {
-                        self.step = Step::Authenticate2;
-                        Ok(rsasl::session::Step::NeedsMore(None))
+                let cmd = CardCommand::sendPICC { data: buf };
+                return match serde_json::to_vec(&cmd) {
+                    Ok(send_buf) => {
+                        self.step = Step::Authenticate1;
+                        writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
+                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                     }
                     Err(_) => {
                         Err(FabFireError::SerializationError.into())
                     }
-                }
-
-            }
-            Step::Authenticate2 => {
-                let response = match input {
-                    None => {return Err(SessionError::InputDataRequired)},
-                    Some(buf) => APDUResponse::new(buf)
                 };
-                match response.check() {
+            }
+            Step::Authenticate1 => {
+                // println!("Step: Authenticate1");
+                let response: CardCommand = match input {
+                    None => { return Err(SessionError::InputDataRequired); }
+                    Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
+                        Ok(response) => response,
+                        Err(e) => {
+                            // eprintln!("{:?}", e);
+                            return Err(e.into());
+                        }
+                    }
+                };
+
+                let apdu_response = match response {
+                    CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
+                    _ => {
+                        // eprintln!("Unexpected response: {:?}", response);
+                        return Err(FabFireError::ParseError.into());
+                    }
+                };
+
+
+                match apdu_response.check() {
                     Ok(_) => {
-                        match response.body {
+                        match apdu_response.body {
                             Some(data) => {
                                 let rnd_b_enc = data.as_slice();
 
                                 //FIXME: This is ugly, we should find a better way to make the function testable
                                 //TODO: Check if we need a CSPRNG here
                                 let rnd_a: [u8; 16] = rand::random();
-                                println!("RND_A: {:x?}", rnd_a);
+                                // println!("RND_A: {:x?}", rnd_a);
 
-                                let (cmd_challenge_response, rnd_b, iv) = self.desfire.authenticate_iso_aes_response_cmd(rnd_b_enc, &*(self.key_info.as_ref().unwrap().key), &rnd_a).unwrap();
-                                self.auth_info = Some(AuthInfo{rnd_a: Vec::<u8>::from(rnd_a), rnd_b, iv});
+                                let (cmd_challenge_response,
+                                    rnd_b,
+                                    iv) = self.desfire.authenticate_iso_aes_response_cmd(
+                                    rnd_b_enc,
+                                    &*(self.key_info.as_ref().unwrap().key),
+                                    &rnd_a).unwrap();
+                                self.auth_info = Some(AuthInfo { rnd_a: Vec::<u8>::from(rnd_a), rnd_b, iv });
                                 let buf = match Vec::<u8>::try_from(cmd_challenge_response) {
-                                        Ok(data) => data,
-                                        Err(_) => {
-                                            return Err(FabFireError::SerializationError.into())
-                                        }
+                                    Ok(data) => data,
+                                    Err(_) => {
+                                        return Err(FabFireError::SerializationError.into());
+                                    }
                                 };
-                                let cmd = CardCommand::sendPICC { data: hex::encode_upper(buf) };
-                                return match serde_json::to_writer(writer, &cmd) {
-                                    Ok(_) => {
-                                        self.step = Step::Authenticate3;
-                                        Ok(rsasl::session::Step::NeedsMore(None))
+                                let cmd = CardCommand::sendPICC { data: buf };
+                                return match serde_json::to_vec(&cmd) {
+                                    Ok(send_buf) => {
+                                        self.step = Step::Authenticate2;
+                                        writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
+                                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                                     }
                                     Err(_) => {
                                         Err(FabFireError::SerializationError.into())
                                     }
-                                }
+                                };
                             }
                             None => {
-                                return Err(FabFireError::ParseError.into())
+                                return Err(FabFireError::ParseError.into());
                             }
                         };
                     }
@@ -379,36 +524,67 @@ impl Authentication for FabFire {
                     }
                 }
             }
-            Step::Authenticate3 => {
-                let response = match input {
-                    None => {return Err(SessionError::InputDataRequired)},
-                    Some(buf) => APDUResponse::new(buf)
+            Step::Authenticate2 => {
+                // println!("Step: Authenticate2");
+                let response: CardCommand = match input {
+                    None => { return Err(SessionError::InputDataRequired); }
+                    Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
+                        Ok(response) => response,
+                        Err(e) => {
+                            // eprintln!("{:?}", e);
+                            return Err(e.into());
+                        }
+                    }
                 };
-                match response.check() {
+
+                let apdu_response = match response {
+                    CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
+                    _ => {
+                        // eprintln!("Unexpected response: {:?}", response);
+                        return Err(FabFireError::ParseError.into());
+                    }
+                };
+
+
+                match apdu_response.check() {
                     Ok(_) => {
-                        match response.body {
+                        match apdu_response.body {
                             Some(data) => {
                                 match self.auth_info.as_ref() {
-                                    None => {return Err(FabFireError::ParseError.into())}
+                                    None => { return Err(FabFireError::ParseError.into()); }
                                     Some(auth_info) => {
                                         if self.desfire.authenticate_iso_aes_verify(
                                             data.as_slice(),
                                             auth_info.rnd_a.as_slice(),
                                             auth_info.rnd_b.as_slice(), &*(self.key_info.as_ref().unwrap().key),
                                             auth_info.iv.as_slice()).is_ok() {
-                                            // TODO: Do stuff with the info that we are authenticated
-                                            return Ok(rsasl::session::Step::Done(None));
+
+                                            let cmd = CardCommand::message{
+                                                msg_id: Some(4),
+                                                clr_txt: None,
+                                                addn_txt: Some("".to_string()),
+                                            };
+                                            return match serde_json::to_vec(&cmd) {
+                                                Ok(send_buf) => {
+                                                    self.step = Step::Authenticate1;
+                                                    writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
+                                                    return Ok(rsasl::session::Step::Done(Some(send_buf.len())))
+                                                }
+                                                Err(_) => {
+                                                    Err(FabFireError::SerializationError.into())
+                                                }
+                                            };
                                         }
                                     }
                                 }
                             }
                             None => {
-                                return Err(FabFireError::ParseError.into())
+                                return Err(FabFireError::ParseError.into());
                             }
                         };
                     }
                     Err(_) => {
-                        return Err(FabFireError::ParseError.into());
+                        return Err(FabFireError::InvalidCredentials(format!("{}", apdu_response)).into());
                     }
                 }
             }
@@ -416,5 +592,4 @@ impl Authentication for FabFire {
 
         return Ok(rsasl::session::Step::Done(None));
     }
-
 }

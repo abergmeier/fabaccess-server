@@ -95,7 +95,7 @@ pub struct UserData {
 
     /// Additional data storage
     #[serde(flatten, skip_serializing_if = "HashMap::is_empty")]
-    kv: HashMap<String, String>,
+    pub kv: HashMap<String, String>,
 }
 
 impl UserData {

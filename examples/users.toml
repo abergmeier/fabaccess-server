@@ -11,3 +11,4 @@ passwd = "secret"
 # It will get stored in the `kv` field in UserData.
 # This is not used for anything at the moment
 noot = "noot!"
+cardkey = "7ab8704a61b5317e1fe4cae9e3e1fd8d"
