@@ -38,6 +38,11 @@
     -- access into them.
     db_path = "/tmp/bffh",
 
+    -- Audit log path. Bffh will log state changes into this file, one per line.
+    -- Audit log entries are for now JSON:
+    -- {"timestamp":1641497361,"machine":"Testmachine","state":{"state":{"InUse":{"uid":"Testuser","subuid":null,"realm":null}}}}
+    auditlog_path = "/tmp/bffh.audit",
+
     -- In dhall you can also easily import definitions from other files, e.g. you could write
     -- roles = ./roles.dhall
     roles = {
@@ -175,6 +180,30 @@
                 args = "your ad could be here"
             }
         },
+
+        DoorControl1 = {
+            -- This actor calls the actor.py script in examples/
+            -- It gets passed it's own name, so you can have several actors
+            -- from the same script.
+            -- If you need to pass more arguments to the command you can use the `args` key in
+            -- `params` as is done with the actor `Bash`
+            module = "Process",
+            -- the `args` are passed in front of all other parameters so they are best suited to
+            -- optional parameters like e.g. the verboseness
+            params = { cmd = "./examples/actor.py", args = "-vvv" }
+        },
+        DoorControl2 = {
+            module = "Process",
+            params = { cmd = "./examples/actor.py" }
+        },
+        DoorControl3 = {
+            -- This is an example for how it looks like if an actor is misconfigured.
+            -- the actor.py doesn't know anything about DoorControl3 and, if this actor is enabled,
+            -- will return with an error showing up in the server logs.
+            module = "Process",
+            params = { cmd = "./examples/actor.py" }
+        },
+
         Bash2 = { module = "Process", params = { cmd = "./examples/actor.sh" , args = "this is a different one" }},
         FailBash = { module = "Process", params = { cmd = "./examples/fail-actor.sh" }}
     },
@@ -195,11 +224,11 @@
     initiators = {=},
     -- The "Dummy" initiator will try to use and return a machine as the given user every few seconds. It's good to
     -- test your system but will spam your log so is disabled by default.
-    --{ Initiator = { module = "Dummy", params = { uid = "Testuser" } } }
+    --initiators = { Initiator = { module = "Dummy", params = { uid = "Testuser" } } },
 
     -- Linking up machines to initiators. Similar to actors a machine can have several initiators assigned but an
     -- initiator can only be assigned to one machine.
     -- The below is once again how you have to define *no* initiators.
     init_connections = [] : List { machine : Text, initiator : Text }
-    -- init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
+    --init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
 }
