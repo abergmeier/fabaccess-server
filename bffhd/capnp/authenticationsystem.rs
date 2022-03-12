@@ -27,7 +27,7 @@ impl AuthenticationSystem for Authentication {
     }
 
     fn abort(&mut self, _: AbortParams, _: AbortResults) -> Promise<(), Error> {
-        std::mem::replace(&mut self.state, State::Aborted);
+        self.state = State::Aborted;
         Promise::ok(())
     }
 }

@@ -96,14 +96,14 @@ impl ResourceDriver {
             match self.res.on_update(&state).await {
                 Ok(outstate) => {
                     // FIXME: Send any error here to some global error collector. A failed write to
-                    // the DB is not necessarily fatal, but it means that BFFH is now in an
-                    // inconsistent state until a future update succeeds with writing to the DB.
-                    // Not applying the new state isn't correct either since we don't know what the
-                    // internal logic of the resources has done to make this happen.
-                    // Another half right solution is to unwrap and recreate everything.
-                    // "Best" solution would be to tell the resources to rollback their interal
-                    // changes on a fatal failure and then notify the Claimant, while simply trying
-                    // again for temporary failures.
+                    //  the DB is not necessarily fatal, but it means that BFFH is now in an
+                    //  inconsistent state until a future update succeeds with writing to the DB.
+                    //  Not applying the new state isn't correct either since we don't know what the
+                    //  internal logic of the resources has done to make this happen.
+                    //  Another half right solution is to unwrap and recreate everything.
+                    //  "Best" solution would be to tell the resources to rollback their interal
+                    //  changes on a fatal failure and then notify the Claimant, while simply trying
+                    //  again for temporary failures.
                     let _ = self.db.set(&state, &outstate);
                     self.signal.set(outstate);
                 },

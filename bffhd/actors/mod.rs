@@ -6,6 +6,9 @@ use futures_signals::signal::{MutableSignalRef, ReadOnlyMutable, Signal};
 use futures_util::future::BoxFuture;
 use crate::resources::state::State;
 
+mod shelly;
+
+
 pub trait Actor {
     fn apply(&mut self, state: State) -> BoxFuture<'static, ()>;
 }
