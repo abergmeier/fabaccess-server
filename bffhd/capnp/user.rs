@@ -4,8 +4,11 @@ use api::user_capnp::user::{
     manage,
     admin,
 };
+use crate::session::SessionHandle;
 
-struct User;
+struct User {
+    session: SessionHandle,
+}
 
 impl info::Server for User {
 

@@ -7,16 +7,18 @@ use api::usersystem_capnp::user_system::{
     info, info::Server as InfoServer,
     manage, manage::Server as ManageServer,
 };
+use crate::authorization::AuthorizationHandle;
+use crate::session::SessionHandle;
 
 #[derive(Debug, Clone)]
 pub struct Users {
-
+    session: SessionHandle,
 }
 
 impl Users {
-    pub fn new() -> Self {
+    pub fn new(session: SessionHandle) -> Self {
         Self {
-
+            session,
         }
     }
 }

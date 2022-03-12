@@ -16,16 +16,21 @@ impl Inner {
 }
 
 #[derive(Clone)]
-pub struct AuthenticationHandler {
+pub struct AuthenticationHandle {
     inner: Arc<Inner>,
 }
 
-impl AuthenticationHandler {
-    pub fn new(rsasl: SASL) -> Self {
+impl AuthenticationHandle {
+    pub fn new() -> Self {
+        let rsasl = SASL::new();
         Self { inner: Arc::new(Inner::new(rsasl)) }
     }
 
-    pub fn start(&self, mechanism: &Mechname) -> Result<Session, SASLError> {
-        self.inner.rsasl.server_start(mechanism)
+    pub fn start(&self, mechanism: &Mechname) -> anyhow::Result<Session> {
+        Ok(self.inner.rsasl.server_start(mechanism)?)
+    }
+
+    pub fn list_available_mechs(&self) -> impl IntoIterator<Item=&Mechname> {
+        self.inner.rsasl.server_mech_list().into_iter().map(|m| m.mechanism)
     }
 }

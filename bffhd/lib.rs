@@ -37,6 +37,7 @@ mod tls;
 mod keylog;
 mod logging;
 mod audit;
+mod session;
 
 use std::fs::File;
 use std::io::BufReader;
@@ -49,9 +50,13 @@ use rustls::{Certificate, KeyLogFile, PrivateKey, ServerConfig};
 use rustls::server::NoClientAuth;
 use signal_hook::consts::signal::*;
 use executor::pool::Executor;
+use crate::authentication::AuthenticationHandle;
 use crate::capnp::APIServer;
 use crate::config::{Config, TlsListen};
+use crate::session::SessionManager;
 use crate::tls::TlsConfig;
+
+pub const RELEASE_STRING: &'static str = env!("BFFHD_RELEASE_STRING");
 
 pub struct Diflouroborane {
     executor: Executor<'static>,
@@ -65,7 +70,6 @@ impl Diflouroborane {
     }
 
     fn log_version_number(&self) {
-        const RELEASE_STRING: &'static str = env!("BFFHD_RELEASE_STRING");
         tracing::info!(version=RELEASE_STRING, "Starting");
     }
 
@@ -86,7 +90,10 @@ impl Diflouroborane {
         let tlsconfig = TlsConfig::new(config.tlskeylog.as_ref(), !config.is_quiet())?;
         let acceptor = tlsconfig.make_tls_acceptor(&config.tlsconfig)?;
 
-        let mut apiserver = self.executor.run(APIServer::bind(self.executor.clone(), &config.listens, acceptor))?;
+        let sessionmanager = SessionManager::new();
+        let authentication = AuthenticationHandle::new();
+
+        let mut apiserver = self.executor.run(APIServer::bind(self.executor.clone(), &config.listens, acceptor, sessionmanager, authentication))?;
 
         let (mut tx, rx) = async_oneshot::oneshot();
 

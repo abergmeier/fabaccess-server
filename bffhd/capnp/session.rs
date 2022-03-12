@@ -1,17 +1,24 @@
+use api::authenticationsystem_capnp::response::successful::Builder;
+use capnp::capability::Promise;
+use crate::authorization::AuthorizationHandle;
 use crate::capnp::machinesystem::Machines;
+use crate::capnp::permissionsystem::Permissions;
 use crate::capnp::user_system::Users;
+use crate::session::{SessionHandle, SessionManager};
+use crate::users::User;
 
 #[derive(Debug, Clone)]
-pub struct Session {
-    resources: Machines,
-    users: Users,
-}
+pub struct APISession;
 
-impl Session {
+impl APISession {
     pub fn new() -> Self {
-        Session {
-            resources: Machines::new(),
-            users: Users::new(),
-        }
+        Self
+    }
+
+    pub fn build(session: SessionHandle, mut builder: Builder) {
+        let mut builder = builder.init_session();
+        builder.set_machine_system(capnp_rpc::new_client(Machines::new(session.clone())));
+        builder.set_user_system(capnp_rpc::new_client(Users::new(session.clone())));
+        builder.set_permission_system(capnp_rpc::new_client(Permissions::new(session)));
     }
 }

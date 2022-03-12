@@ -6,8 +6,11 @@ use api::machine_capnp::machine::{
     manage, manage::Server as ManageServer,
     use_, use_::Server as UseServer,
 };
+use crate::session::SessionHandle;
 
-pub struct Machine;
+pub struct Machine {
+    session: SessionHandle,
+}
 
 impl InfoServer for Machine {
     fn get_property_list(

@@ -17,8 +17,11 @@ use std::future::Future;
 use std::io;
 use std::io::BufReader;
 use std::sync::Arc;
+use crate::authentication::AuthenticationHandle;
+use crate::authorization::AuthorizationHandle;
 
 use crate::error::Result;
+use crate::session::SessionManager;
 
 mod authenticationsystem;
 mod connection;
@@ -33,6 +36,8 @@ pub struct APIServer {
     executor: Executor<'static>,
     sockets: Vec<TcpListener>,
     acceptor: TlsAcceptor,
+    sessionmanager: SessionManager,
+    authentication: AuthenticationHandle,
 }
 
 impl APIServer {
@@ -40,11 +45,15 @@ impl APIServer {
         executor: Executor<'static>,
         sockets: Vec<TcpListener>,
         acceptor: TlsAcceptor,
+        sessionmanager: SessionManager,
+        authentication: AuthenticationHandle,
     ) -> Self {
         Self {
             executor,
             sockets,
             acceptor,
+            sessionmanager,
+            authentication,
         }
     }
 
@@ -52,6 +61,8 @@ impl APIServer {
         executor: Executor<'static>,
         listens: impl IntoIterator<Item = &Listen>,
         acceptor: TlsAcceptor,
+        sessionmanager: SessionManager,
+        authentication: AuthenticationHandle,
     ) -> anyhow::Result<Self> {
         let span = tracing::info_span!("binding API listen sockets");
         let _guard = span.enter();
@@ -100,10 +111,10 @@ impl APIServer {
             tracing::warn!("No usable listen addresses configured for the API server!");
         }
 
-        Ok(Self::new(executor, sockets, acceptor))
+        Ok(Self::new(executor, sockets, acceptor, sessionmanager, authentication))
     }
 
-    pub async fn handle_until(&mut self, stop: impl Future) {
+    pub async fn handle_until(self, stop: impl Future) {
         stream::select_all(
             self.sockets
                 .iter()
@@ -132,7 +143,8 @@ impl APIServer {
             };
             let (rx, tx) = futures_lite::io::split(stream);
             let vat = VatNetwork::new(rx, tx, Side::Server, Default::default());
-            let bootstrap: connection::Client = capnp_rpc::new_client(connection::BootCap::new());
+
+            let bootstrap: connection::Client = capnp_rpc::new_client(connection::BootCap::new(self.authentication.clone(), self.sessionmanager.clone()));
 
             if let Err(e) = RpcSystem::new(Box::new(vat), Some(bootstrap.client)).await {
                 tracing::error!("Error during RPC handling: {}", e);
