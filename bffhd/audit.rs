@@ -6,8 +6,6 @@ use std::sync::Mutex;
 use crate::Config;
 use serde::{Serialize, Deserialize};
 use serde_json::Serializer;
-use time::OffsetDateTime;
-use crate::db::machine::{MachineIdentifier, MachineState};
 
 #[derive(Debug)]
 pub struct AuditLog {
@@ -17,8 +15,8 @@ pub struct AuditLog {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLogLine {
     timestamp: i64,
-    machine: MachineIdentifier,
-    state: MachineState,
+    machine: String,
+    state: String,
 }
 
 impl AuditLog {
@@ -28,9 +26,9 @@ impl AuditLog {
         Ok(Self { writer })
     }
 
-    pub fn log(&self, machine: &MachineIdentifier, state: &MachineState) -> io::Result<()> {
-        let timestamp = OffsetDateTime::now_utc().unix_timestamp();
-        let line = AuditLogLine { timestamp, machine: machine.clone(), state: state.clone() };
+    pub fn log(&self, machine: &str, state: &str) -> io::Result<()> {
+        let timestamp = chrono::Utc::now().timestamp();
+        let line = AuditLogLine { timestamp, machine: machine.to_string(), state: state.to_string() };
 
         let mut guard = self.writer.lock().unwrap();
         let mut writer: &mut LineWriter<File> = &mut *guard;

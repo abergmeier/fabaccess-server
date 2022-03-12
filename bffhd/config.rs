@@ -42,6 +42,7 @@ pub struct Config {
     pub init_connections: Vec<(String, String)>,
 
     pub db_path: PathBuf,
+    pub auditlog_path: PathBuf,
 
     pub roles: HashMap<RoleIdentifier, RoleConfig>,
 
@@ -166,6 +167,7 @@ impl Default for Config {
             ],
 
             db_path: PathBuf::from("/run/bffh/database"),
+            auditlog_path: PathBuf::from("/var/log/bffh/audit.log"),
             roles: HashMap::new(),
 
             tlsconfig: TlsListen {
