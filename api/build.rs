@@ -9,6 +9,7 @@ fn is_hidden(entry: &DirEntry) -> bool {
 
 #[cfg(not(feature = "gen_static"))]
 fn main() {
+    println!("cargo:rerun-if-changed=schema");
     let mut compile_command = ::capnpc::CompilerCommand::new();
     compile_command
         .src_prefix("schema")
@@ -38,6 +39,7 @@ fn main() {
 
 #[cfg(feature = "gen_static")]
 fn main() {
+    println!("cargo:rerun-if-changed=schema");
     let mut compile_command = ::capnpc::CompilerCommand::new();
     compile_command
         .src_prefix("schema")
