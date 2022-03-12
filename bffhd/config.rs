@@ -22,9 +22,6 @@ pub fn read(path: &Path) -> Result<Config> {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// A list of address/port pairs to listen on.
-    // TODO: This should really be a variant type; that is something that can figure out itself if
-    // it contains enough information to open a socket (i.e. it checks if it's a valid path (=>
-    // Unix socket) or IPv4/v6 address)
     pub listens: Vec<Listen>,
 
     /// Machine descriptions to load
