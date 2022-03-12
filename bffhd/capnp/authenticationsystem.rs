@@ -4,7 +4,7 @@ use capnp::Error;
 use capnp_rpc::pry;
 use rsasl::session::{Session, Step};
 
-use api::authenticationsystem_capnp::authentication_system::{
+use api::authenticationsystem_capnp::authentication::{
     Server as AuthenticationSystem,
     StepParams, StepResults,
     AbortParams, AbortResults,

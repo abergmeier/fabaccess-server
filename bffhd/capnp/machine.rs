@@ -10,15 +10,6 @@ use api::machine_capnp::machine::{
 pub struct Machine;
 
 impl InfoServer for Machine {
-    fn get_machine_info_extended(
-        &mut self,
-        _: info::GetMachineInfoExtendedParams,
-        _: info::GetMachineInfoExtendedResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        ::capnp::capability::Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
-    }
     fn get_property_list(
         &mut self,
         _: info::GetPropertyListParams,
@@ -112,6 +103,15 @@ impl CheckServer for Machine {
 }
 
 impl ManageServer for Machine {
+    fn get_machine_info_extended(
+        &mut self,
+        _: manage::GetMachineInfoExtendedParams,
+        _: manage::GetMachineInfoExtendedResults,
+    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
+        ::capnp::capability::Promise::err(::capnp::Error::unimplemented(
+            "method not implemented".to_string(),
+        ))
+    }
     fn set_property(
         &mut self,
         _: manage::SetPropertyParams,

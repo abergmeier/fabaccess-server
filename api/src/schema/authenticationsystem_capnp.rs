@@ -4,7 +4,7 @@
 
 
 pub mod response {
-  pub use self::Which::{Error,Challenge,Successful};
+  pub use self::Which::{Failed,Challenge,Successful};
 
   #[derive(Copy, Clone)]
   pub struct Owned(());
@@ -59,7 +59,7 @@ pub mod response {
     pub fn which(self) -> ::core::result::Result<WhichReader<'a,>, ::capnp::NotInSchema> {
       match self.reader.get_data_field::<u16>(1) {
         0 => {
-          ::core::result::Result::Ok(Error(
+          ::core::result::Result::Ok(Failed(
             ::capnp::traits::FromStructReader::new(self.reader)
           ))
         }
@@ -127,7 +127,7 @@ pub mod response {
       self.builder.into_reader().total_size()
     }
     #[inline]
-    pub fn init_error(self, ) -> crate::schema::authenticationsystem_capnp::response::error::Builder<'a> {
+    pub fn init_failed(self, ) -> crate::schema::authenticationsystem_capnp::response::failed::Builder<'a> {
       self.builder.set_data_field::<u16>(1, 0);
       self.builder.set_data_field::<u16>(0, 0u16);
       self.builder.get_pointer_field(0).clear();
@@ -158,7 +158,7 @@ pub mod response {
     pub fn which(self) -> ::core::result::Result<WhichBuilder<'a,>, ::capnp::NotInSchema> {
       match self.builder.get_data_field::<u16>(1) {
         0 => {
-          ::core::result::Result::Ok(Error(
+          ::core::result::Result::Ok(Failed(
             ::capnp::traits::FromStructBuilder::new(self.builder)
           ))
         }
@@ -191,43 +191,43 @@ pub mod response {
     pub const TYPE_ID: u64 = 0xe76b_4158_bdde_4934;
   }
   pub enum Which<A0,A1,A2> {
-    Error(A0),
+    Failed(A0),
     Challenge(A1),
     Successful(A2),
   }
-  pub type WhichReader<'a,> = Which<crate::schema::authenticationsystem_capnp::response::error::Reader<'a>,::capnp::Result<::capnp::data::Reader<'a>>,crate::schema::authenticationsystem_capnp::response::successful::Reader<'a>>;
-  pub type WhichBuilder<'a,> = Which<crate::schema::authenticationsystem_capnp::response::error::Builder<'a>,::capnp::Result<::capnp::data::Builder<'a>>,crate::schema::authenticationsystem_capnp::response::successful::Builder<'a>>;
+  pub type WhichReader<'a,> = Which<crate::schema::authenticationsystem_capnp::response::failed::Reader<'a>,::capnp::Result<::capnp::data::Reader<'a>>,crate::schema::authenticationsystem_capnp::response::successful::Reader<'a>>;
+  pub type WhichBuilder<'a,> = Which<crate::schema::authenticationsystem_capnp::response::failed::Builder<'a>,::capnp::Result<::capnp::data::Builder<'a>>,crate::schema::authenticationsystem_capnp::response::successful::Builder<'a>>;
 
   #[repr(u16)]
   #[derive(Clone, Copy, Debug, PartialEq)]
-  pub enum ErrorCode {
+  pub enum Error {
     Aborted = 0,
     BadMechanism = 1,
     InvalidCredentials = 2,
     Failed = 3,
   }
-  impl ::capnp::traits::FromU16 for ErrorCode {
+  impl ::capnp::traits::FromU16 for Error {
     #[inline]
-    fn from_u16(value: u16) -> ::core::result::Result<ErrorCode, ::capnp::NotInSchema> {
+    fn from_u16(value: u16) -> ::core::result::Result<Error, ::capnp::NotInSchema> {
       match value {
-        0 => ::core::result::Result::Ok(ErrorCode::Aborted),
-        1 => ::core::result::Result::Ok(ErrorCode::BadMechanism),
-        2 => ::core::result::Result::Ok(ErrorCode::InvalidCredentials),
-        3 => ::core::result::Result::Ok(ErrorCode::Failed),
+        0 => ::core::result::Result::Ok(Error::Aborted),
+        1 => ::core::result::Result::Ok(Error::BadMechanism),
+        2 => ::core::result::Result::Ok(Error::InvalidCredentials),
+        3 => ::core::result::Result::Ok(Error::Failed),
         n => ::core::result::Result::Err(::capnp::NotInSchema(n)),
       }
     }
   }
-  impl ::capnp::traits::ToU16 for ErrorCode {
+  impl ::capnp::traits::ToU16 for Error {
     #[inline]
     fn to_u16(self) -> u16 { self as u16 }
   }
-  impl ::capnp::traits::HasTypeId for ErrorCode {
+  impl ::capnp::traits::HasTypeId for Error {
     #[inline]
-    fn type_id() -> u64 { 0x80be_9646_4422_da0bu64 }
+    fn type_id() -> u64 { 0xe87e_ae86_8b88_cfc1u64 }
   }
 
-  pub mod error {
+  pub mod failed {
     #[derive(Copy, Clone)]
     pub struct Owned(());
     impl <'a> ::capnp::traits::Owned<'a> for Owned { type Reader = Reader<'a>; type Builder = Builder<'a>; }
@@ -274,7 +274,7 @@ pub mod response {
         self.reader.total_size()
       }
       #[inline]
-      pub fn get_code(self) -> ::core::result::Result<crate::schema::authenticationsystem_capnp::response::ErrorCode,::capnp::NotInSchema> {
+      pub fn get_code(self) -> ::core::result::Result<crate::schema::authenticationsystem_capnp::response::Error,::capnp::NotInSchema> {
         ::capnp::traits::FromU16::from_u16(self.reader.get_data_field::<u16>(0))
       }
       #[inline]
@@ -335,11 +335,11 @@ pub mod response {
         self.builder.into_reader().total_size()
       }
       #[inline]
-      pub fn get_code(self) -> ::core::result::Result<crate::schema::authenticationsystem_capnp::response::ErrorCode,::capnp::NotInSchema> {
+      pub fn get_code(self) -> ::core::result::Result<crate::schema::authenticationsystem_capnp::response::Error,::capnp::NotInSchema> {
         ::capnp::traits::FromU16::from_u16(self.builder.get_data_field::<u16>(0))
       }
       #[inline]
-      pub fn set_code(&mut self, value: crate::schema::authenticationsystem_capnp::response::ErrorCode)  {
+      pub fn set_code(&mut self, value: crate::schema::authenticationsystem_capnp::response::Error)  {
         self.builder.set_data_field::<u16>(0, value as u16)
       }
       #[inline]
@@ -539,7 +539,7 @@ pub mod response {
 pub mod authentication {
   #![allow(unused_variables)]
   pub type StepParams<> = ::capnp::capability::Params<crate::schema::authenticationsystem_capnp::authentication::step_params::Owned>;
-  pub type StepResults<> = ::capnp::capability::Results<crate::schema::authenticationsystem_capnp::response::Owned>;
+  pub type StepResults<> = ::capnp::capability::Results<crate::schema::authenticationsystem_capnp::authentication::step_results::Owned>;
   pub type AbortParams<> = ::capnp::capability::Params<crate::schema::authenticationsystem_capnp::authentication::abort_params::Owned>;
   pub type AbortResults<> = ::capnp::capability::Results<crate::schema::authenticationsystem_capnp::authentication::abort_results::Owned>;
 
@@ -585,7 +585,7 @@ pub mod authentication {
     }
   }
   impl  Client {
-    pub fn step_request(&self) -> ::capnp::capability::Request<crate::schema::authenticationsystem_capnp::authentication::step_params::Owned,crate::schema::authenticationsystem_capnp::response::Owned> {
+    pub fn step_request(&self) -> ::capnp::capability::Request<crate::schema::authenticationsystem_capnp::authentication::step_params::Owned,crate::schema::authenticationsystem_capnp::authentication::step_results::Owned> {
       self.client.new_call(_private::TYPE_ID, 0, None)
     }
     pub fn abort_request(&self) -> ::capnp::capability::Request<crate::schema::authenticationsystem_capnp::authentication::abort_params::Owned,crate::schema::authenticationsystem_capnp::authentication::abort_results::Owned> {
@@ -765,6 +765,144 @@ pub mod authentication {
       use capnp::private::layout;
       pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 0, pointers: 1 };
       pub const TYPE_ID: u64 = 0xcb98_01a0_63fb_684e;
+    }
+  }
+
+  pub mod step_results {
+    #[derive(Copy, Clone)]
+    pub struct Owned(());
+    impl <'a> ::capnp::traits::Owned<'a> for Owned { type Reader = Reader<'a>; type Builder = Builder<'a>; }
+    impl <'a> ::capnp::traits::OwnedStruct<'a> for Owned { type Reader = Reader<'a>; type Builder = Builder<'a>; }
+    impl ::capnp::traits::Pipelined for Owned { type Pipeline = Pipeline; }
+
+    #[derive(Clone, Copy)]
+    pub struct Reader<'a> { reader: ::capnp::private::layout::StructReader<'a> }
+
+    impl <'a,> ::capnp::traits::HasTypeId for Reader<'a,>  {
+      #[inline]
+      fn type_id() -> u64 { _private::TYPE_ID }
+    }
+    impl <'a,> ::capnp::traits::FromStructReader<'a> for Reader<'a,>  {
+      fn new(reader: ::capnp::private::layout::StructReader<'a>) -> Reader<'a,> {
+        Reader { reader,  }
+      }
+    }
+
+    impl <'a,> ::capnp::traits::FromPointerReader<'a> for Reader<'a,>  {
+      fn get_from_pointer(reader: &::capnp::private::layout::PointerReader<'a>, default: ::core::option::Option<&'a [capnp::Word]>) -> ::capnp::Result<Reader<'a,>> {
+        ::core::result::Result::Ok(::capnp::traits::FromStructReader::new(reader.get_struct(default)?))
+      }
+    }
+
+    impl <'a,> ::capnp::traits::IntoInternalStructReader<'a> for Reader<'a,>  {
+      fn into_internal_struct_reader(self) -> ::capnp::private::layout::StructReader<'a> {
+        self.reader
+      }
+    }
+
+    impl <'a,> ::capnp::traits::Imbue<'a> for Reader<'a,>  {
+      fn imbue(&mut self, cap_table: &'a ::capnp::private::layout::CapTable) {
+        self.reader.imbue(::capnp::private::layout::CapTableReader::Plain(cap_table))
+      }
+    }
+
+    impl <'a,> Reader<'a,>  {
+      pub fn reborrow(&self) -> Reader<'_,> {
+        Reader { .. *self }
+      }
+
+      pub fn total_size(&self) -> ::capnp::Result<::capnp::MessageSize> {
+        self.reader.total_size()
+      }
+      #[inline]
+      pub fn get_response(self) -> ::capnp::Result<crate::schema::authenticationsystem_capnp::response::Reader<'a>> {
+        ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(0), ::core::option::Option::None)
+      }
+      pub fn has_response(&self) -> bool {
+        !self.reader.get_pointer_field(0).is_null()
+      }
+    }
+
+    pub struct Builder<'a> { builder: ::capnp::private::layout::StructBuilder<'a> }
+    impl <'a,> ::capnp::traits::HasStructSize for Builder<'a,>  {
+      #[inline]
+      fn struct_size() -> ::capnp::private::layout::StructSize { _private::STRUCT_SIZE }
+    }
+    impl <'a,> ::capnp::traits::HasTypeId for Builder<'a,>  {
+      #[inline]
+      fn type_id() -> u64 { _private::TYPE_ID }
+    }
+    impl <'a,> ::capnp::traits::FromStructBuilder<'a> for Builder<'a,>  {
+      fn new(builder: ::capnp::private::layout::StructBuilder<'a>) -> Builder<'a, > {
+        Builder { builder,  }
+      }
+    }
+
+    impl <'a,> ::capnp::traits::ImbueMut<'a> for Builder<'a,>  {
+      fn imbue_mut(&mut self, cap_table: &'a mut ::capnp::private::layout::CapTable) {
+        self.builder.imbue(::capnp::private::layout::CapTableBuilder::Plain(cap_table))
+      }
+    }
+
+    impl <'a,> ::capnp::traits::FromPointerBuilder<'a> for Builder<'a,>  {
+      fn init_pointer(builder: ::capnp::private::layout::PointerBuilder<'a>, _size: u32) -> Builder<'a,> {
+        ::capnp::traits::FromStructBuilder::new(builder.init_struct(_private::STRUCT_SIZE))
+      }
+      fn get_from_pointer(builder: ::capnp::private::layout::PointerBuilder<'a>, default: ::core::option::Option<&'a [capnp::Word]>) -> ::capnp::Result<Builder<'a,>> {
+        ::core::result::Result::Ok(::capnp::traits::FromStructBuilder::new(builder.get_struct(_private::STRUCT_SIZE, default)?))
+      }
+    }
+
+    impl <'a,> ::capnp::traits::SetPointerBuilder for Reader<'a,>  {
+      fn set_pointer_builder<'b>(pointer: ::capnp::private::layout::PointerBuilder<'b>, value: Reader<'a,>, canonicalize: bool) -> ::capnp::Result<()> { pointer.set_struct(&value.reader, canonicalize) }
+    }
+
+    impl <'a,> Builder<'a,>  {
+      pub fn into_reader(self) -> Reader<'a,> {
+        ::capnp::traits::FromStructReader::new(self.builder.into_reader())
+      }
+      pub fn reborrow(&mut self) -> Builder<'_,> {
+        Builder { .. *self }
+      }
+      pub fn reborrow_as_reader(&self) -> Reader<'_,> {
+        ::capnp::traits::FromStructReader::new(self.builder.into_reader())
+      }
+
+      pub fn total_size(&self) -> ::capnp::Result<::capnp::MessageSize> {
+        self.builder.into_reader().total_size()
+      }
+      #[inline]
+      pub fn get_response(self) -> ::capnp::Result<crate::schema::authenticationsystem_capnp::response::Builder<'a>> {
+        ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(0), ::core::option::Option::None)
+      }
+      #[inline]
+      pub fn set_response(&mut self, value: crate::schema::authenticationsystem_capnp::response::Reader<'_>) -> ::capnp::Result<()> {
+        ::capnp::traits::SetPointerBuilder::set_pointer_builder(self.builder.get_pointer_field(0), value, false)
+      }
+      #[inline]
+      pub fn init_response(self, ) -> crate::schema::authenticationsystem_capnp::response::Builder<'a> {
+        ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(0), 0)
+      }
+      pub fn has_response(&self) -> bool {
+        !self.builder.get_pointer_field(0).is_null()
+      }
+    }
+
+    pub struct Pipeline { _typeless: ::capnp::any_pointer::Pipeline }
+    impl ::capnp::capability::FromTypelessPipeline for Pipeline {
+      fn new(typeless: ::capnp::any_pointer::Pipeline) -> Pipeline {
+        Pipeline { _typeless: typeless,  }
+      }
+    }
+    impl Pipeline  {
+      pub fn get_response(&self) -> crate::schema::authenticationsystem_capnp::response::Pipeline {
+        ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(0))
+      }
+    }
+    mod _private {
+      use capnp::private::layout;
+      pub const STRUCT_SIZE: layout::StructSize = layout::StructSize { data: 0, pointers: 1 };
+      pub const TYPE_ID: u64 = 0xa284_a41d_d880_1774;
     }
   }
 
