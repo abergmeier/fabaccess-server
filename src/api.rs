@@ -7,6 +7,9 @@ use slog::Logger;
 use std::sync::Arc;
 
 use capnp::capability::{Promise};
+use rsasl::mechname::Mechname;
+use rsasl::SASL;
+use auth::State;
 
 use crate::schema::connection_capnp;
 use crate::connection::Session;
@@ -31,99 +34,85 @@ pub struct Bootstrap {
 
     db: Databases,
     nw: Arc<Network>,
-
-    session: Rc<RefCell<Option<Session>>>,
+    ctx: SASL,
 }
 
 impl Bootstrap {
     pub fn new(log: Logger, db: Databases, nw: Arc<Network>) -> Self {
         info!(log, "Created Bootstrap");
-        let session = Rc::new(RefCell::new(None));
-        Self { session, db, nw, log }
+        let mut ctx = SASL::new();
+        ctx.install_callback(Arc::new(auth::CB::new(db.userdb.clone())));
+        Self { db, nw, log, ctx }
     }
 }
 
 use connection_capnp::{API_VERSION_MAJOR, API_VERSION_MINOR, API_VERSION_PATCH};
 use connection_capnp::bootstrap::*;
+use crate::api::auth::Auth;
 use crate::RELEASE;
 
 impl connection_capnp::bootstrap::Server for Bootstrap {
-    fn authentication_system(&mut self, 
-        _: AuthenticationSystemParams,
-        mut res: AuthenticationSystemResults
-    ) -> Promise<(), capnp::Error> {
-        // TODO: Forbid mutltiple authentication for now
-        // TODO: When should we allow multiple auth and how do me make sure that does not leak
-        // priviledges (e.g. due to previously issues caps)?
-
-        // If this Rc has a strong count of 1 then there's no other cap issued yet meaning we can
-        // safely transform the inner session with an auth.
-        if Rc::strong_count(&self.session) == 1 {
-            let session = Rc::clone(&self.session);
-            let db = self.db.clone();
-            res.get().set_authentication_system(capnp_rpc::new_client(
-                    auth::Auth::new(self.log.new(o!()), db, session))
-            );
-        }
-
-        Promise::ok(())
-    }
-
-    fn machine_system(&mut self,
-        _: MachineSystemParams,
-        mut res: MachineSystemResults
-    ) -> Promise<(), capnp::Error> {
-        if let Some(session) = self.session.borrow().deref() {
-            debug!(self.log, "Giving MachineSystem cap to user {} with perms:", session.authzid);
-            for r in session.perms.iter() {
-                debug!(session.log, "   {}", r);
-            }
-
-            // TODO actual permission check and stuff
-            //      Right now we only check that the user has authenticated at all.
-            let c = capnp_rpc::new_client(Machines::new(Rc::clone(&self.session), self.nw.clone()));
-            res.get().set_machine_system(c);
-        }
-
-        Promise::ok(())
-    }
-
-    fn user_system(
-        &mut self,
-        _: UserSystemParams,
-        mut results: UserSystemResults
-    ) -> Promise<(), capnp::Error> {
-        if self.session.borrow().is_some() {
-            // TODO actual permission check and stuff
-            //      Right now we only check that the user has authenticated at all.
-            let c = capnp_rpc::new_client(Users::new(Rc::clone(&self.session), self.db.userdb.clone()));
-            results.get().set_user_system(c);
-        }
-
-        Promise::ok(())
-    }
-
     fn get_a_p_i_version(
         &mut self,
         _: GetAPIVersionParams,
-        mut results: GetAPIVersionResults
-    ) -> Promise<(), capnp::Error> {
-        let builder = results.get();
-        let mut builder = builder.init_version();
-        builder.set_major(API_VERSION_MAJOR);
-        builder.set_minor(API_VERSION_MINOR);
-        builder.set_patch(API_VERSION_PATCH);
+        _: GetAPIVersionResults,
+    ) -> Promise<(), ::capnp::Error> {
         Promise::ok(())
     }
 
     fn get_server_release(
         &mut self,
         _: GetServerReleaseParams,
-        mut results: GetServerReleaseResults
-    ) -> Promise<(), capnp::Error> {
-        let mut builder = results.get();
-        builder.set_name("bffh");
-        builder.set_release(RELEASE);
+        mut result: GetServerReleaseResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let mut builder = result.get();
+        builder.set_name("bffhd");
+        builder.set_release(crate::RELEASE);
+        Promise::ok(())
+    }
+
+    fn mechanisms(
+        &mut self,
+        _: MechanismsParams,
+        mut result: MechanismsResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let mut builder = result.get();
+        let mechs: Vec<_> = self.ctx.server_mech_list()
+                                .into_iter()
+                                .map(|m| m.mechanism.as_str())
+                                .collect();
+        let mut mechbuilder = builder.init_mechs(mechs.len() as u32);
+        for (i,m) in mechs.iter().enumerate() {
+            mechbuilder.set(i as u32, m);
+        }
+
+        Promise::ok(())
+    }
+
+    fn create_session(
+        &mut self,
+        params: CreateSessionParams,
+        mut result: CreateSessionResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let params = pry!(params.get());
+        let mechanism: &str = pry!(params.get_mechanism());
+
+        let mechname = mechanism.as_bytes();
+        let state = if let Ok(mechname) = Mechname::new(mechname) {
+            if let Ok(session) = self.ctx.server_start(mechname) {
+                State::Running(session)
+            } else {
+                State::Aborted
+            }
+        } else {
+            State::InvalidMechanism
+        };
+
+        let auth = Auth::new(self.log.clone(), self.db.clone(), state, self.nw.clone());
+
+        let mut builder = result.get();
+        builder.set_authentication(capnp_rpc::new_client(auth));
+
         Promise::ok(())
     }
 }

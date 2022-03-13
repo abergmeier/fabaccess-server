@@ -27,59 +27,6 @@ impl Machine {
 }
 
 impl info::Server for Machine {
-    fn get_machine_info_extended(
-        &mut self,
-        _: info::GetMachineInfoExtendedParams,
-        mut results: info::GetMachineInfoExtendedResults,
-    ) -> Promise<(), capnp::Error> {
-        let machine = self.machine.get_inner();
-        let perms = self.perms.clone();
-        let f = async move {
-            if perms.manage {
-                let builder = results.get();
-                let mut extinfo = builder.init_machine_info_extended();
-                let guard = machine.lock().await;
-
-                // "previous" user
-                if let Some(user) = guard.get_previous() {
-                    let mut previous = extinfo.reborrow().init_transfer_user();
-                    previous.set_username(&user.uid);
-                }
-
-                let state = guard.read_state();
-                let state_lock = state.lock_ref();
-                match state_lock.state {
-                    Status::Free => {}
-                    Status::InUse(ref user) => if user.is_some() {
-                        let user = user.as_ref().unwrap();
-                        let mut current = extinfo.init_current_user();
-                        current.set_username(&user.uid);
-                    }
-                    Status::ToCheck(ref user) => {
-                        let mut current = extinfo.init_current_user();
-                        current.set_username(&user.uid);
-                    }
-                    Status::Blocked(ref user) => {
-                        let mut current = extinfo.init_current_user();
-                        current.set_username(&user.uid);
-                    }
-                    Status::Disabled => {}
-                    Status::Reserved(ref user) => {
-                        let mut current = extinfo.init_current_user();
-                        current.set_username(&user.uid);
-                    }
-                }
-            }
-
-            Ok(())
-        };
-
-        let g = smol::future::race(f, smol::Timer::after(Duration::from_secs(4))
-            .map(|_| Err(capnp::Error::failed("Waiting for machine lock timed out!".to_string()))));
-
-        Promise::from_future(g)
-    }
-
     fn get_reservation_list(
         &mut self,
         _: info::GetReservationListParams,
@@ -170,12 +117,6 @@ impl in_use::Server for Machine {
     }
 }
 
-impl transfer::Server for Machine {
-}
-
-impl check::Server for Machine {
-}
-
 impl manage::Server for Machine {
     fn force_free(&mut self,
         _: manage::ForceFreeParams,
@@ -229,6 +170,60 @@ impl manage::Server for Machine {
         };
         Promise::from_future(f)
     }
+
+    fn get_machine_info_extended(
+        &mut self,
+        _: manage::GetMachineInfoExtendedParams,
+        mut results: manage::GetMachineInfoExtendedResults,
+    ) -> Promise<(), capnp::Error> {
+        let machine = self.machine.get_inner();
+        let perms = self.perms.clone();
+        let f = async move {
+            if perms.manage {
+                let builder = results.get();
+                let mut extinfo = builder;
+                let guard = machine.lock().await;
+
+                // "previous" user
+                if let Some(user) = guard.get_previous() {
+                    let mut previous = extinfo.reborrow().init_last_user();
+                    previous.set_username(&user.uid);
+                }
+
+                let state = guard.read_state();
+                let state_lock = state.lock_ref();
+                match state_lock.state {
+                    Status::Free => {}
+                    Status::InUse(ref user) => if user.is_some() {
+                        let user = user.as_ref().unwrap();
+                        let mut current = extinfo.init_current_user();
+                        current.set_username(&user.uid);
+                    }
+                    Status::ToCheck(ref user) => {
+                        let mut current = extinfo.init_current_user();
+                        current.set_username(&user.uid);
+                    }
+                    Status::Blocked(ref user) => {
+                        let mut current = extinfo.init_current_user();
+                        current.set_username(&user.uid);
+                    }
+                    Status::Disabled => {}
+                    Status::Reserved(ref user) => {
+                        let mut current = extinfo.init_current_user();
+                        current.set_username(&user.uid);
+                    }
+                }
+            }
+
+            Ok(())
+        };
+
+        let g = smol::future::race(f, smol::Timer::after(Duration::from_secs(4))
+            .map(|_| Err(capnp::Error::failed("Waiting for machine lock timed out!".to_string()))));
+
+        Promise::from_future(g)
+    }
+
 }
 
 impl admin::Server for Machine {
@@ -244,6 +239,9 @@ impl admin::Server for Machine {
             APIMState::InUse => MachineState::used(Some(uid)),
             APIMState::Reserved => MachineState::reserved(uid),
             APIMState::ToCheck => MachineState::check(uid),
+            APIMState::Totakeover => return Promise::err(::capnp::Error::unimplemented(
+                "totakeover not implemented".to_string(),
+            )),
         };
         let machine = self.machine.get_inner();
         let f = async move {

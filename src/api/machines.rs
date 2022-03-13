@@ -125,7 +125,7 @@ impl machines::Server for Machines {
                 let permissions = &session.as_ref().unwrap().perms;
 
                 if let Some(machine) = network.machines.get(&id) {
-                    let mut builder = results.get().init_machine();
+                    let mut builder = results.get();
                     fill_machine_builder(
                         &mut builder,
                         &machine,
@@ -171,7 +171,7 @@ impl machines::Server for Machines {
                     let permissions = &session.as_ref().unwrap().perms;
 
                     if let Some(machine) = network.machines.get(&id) {
-                        let mut builder = results.get().init_machine();
+                        let mut builder = results.get();
                         fill_machine_builder(
                             &mut builder,
                             &machine,

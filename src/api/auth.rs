@@ -3,32 +3,35 @@
 //! Authorization is over in `access.rs`
 //! Authentication using SASL
 
-use std::sync::Arc;
-use std::rc::Rc;
 use std::cell::RefCell;
 use std::io::Cursor;
-
+use std::rc::Rc;
+use std::sync::Arc;
 
 use slog::Logger;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use capnp::capability::{Promise};
+use crate::api::machines::Machines;
+use capnp::capability::Promise;
 use rsasl::callback::Callback;
 use rsasl::error::SessionError;
 use rsasl::mechname::Mechname;
 use rsasl::property::{AuthId, Password};
-use rsasl::SASL;
+use rsasl::session::Session as RsaslSession;
 use rsasl::session::Step;
-use rsasl::validate::{Validation, validations};
+use rsasl::validate::{validations, Validation};
+use rsasl::SASL;
 
+use crate::api::users::Users;
 use crate::api::Session;
 
-pub use crate::schema::authenticationsystem_capnp as auth_system;
 use crate::db::Databases;
+pub use crate::schema::authenticationsystem_capnp as auth_system;
 
-use crate::db::user::{Internal as UserDB, User};
 use crate::db::access::AccessControl as AccessDB;
+use crate::db::user::{Internal as UserDB, User, UserId};
+use crate::network::Network;
 
 pub struct AppData {
     userdb: Arc<UserDB>,
@@ -37,7 +40,7 @@ pub struct SessionData {
     authz: Option<User>,
 }
 
-struct CB {
+pub struct CB {
     userdb: Arc<UserDB>,
 }
 impl CB {
@@ -47,168 +50,151 @@ impl CB {
 }
 
 impl Callback for CB {
-    fn validate(&self, session: &mut rsasl::session::SessionData, validation: Validation, _mechanism: &Mechname) -> Result<(), SessionError> {
+    fn validate(
+        &self,
+        session: &mut rsasl::session::SessionData,
+        validation: Validation,
+        _mechanism: &Mechname,
+    ) -> Result<(), SessionError> {
         let ret = match validation {
             validations::SIMPLE => {
-
                 let authid = session
                     .get_property::<AuthId>()
                     .ok_or(SessionError::no_property::<AuthId>())?;
 
-                let pass = session.get_property::<Password>()
-                                  .ok_or(SessionError::no_property::<Password>())?;
+                let pass = session
+                    .get_property::<Password>()
+                    .ok_or(SessionError::no_property::<Password>())?;
 
-                if self.userdb.login(authid.as_ref(), pass.as_bytes()).unwrap().is_some() {
-                    return Ok(())
+                if self
+                    .userdb
+                    .login(authid.as_ref(), pass.as_bytes())
+                    .unwrap()
+                    .is_some()
+                {
+                    return Ok(());
                 }
 
                 SessionError::AuthenticationFailure
             }
-            _ => {
-                SessionError::no_validate(validation)
-            }
+            _ => SessionError::no_validate(validation),
         };
         Err(ret)
     }
 }
 
+pub enum State {
+    InvalidMechanism,
+    Finished,
+    Aborted,
+    Running(RsaslSession),
+}
+
 pub struct Auth {
-    pub ctx: SASL,
-    session: Rc<RefCell<Option<Session>>>,
     userdb: Arc<UserDB>,
     access: Arc<AccessDB>,
+    state: State,
     log: Logger,
+    network: Arc<Network>,
 }
 
 impl Auth {
-    pub fn new(log: Logger, dbs: Databases, session: Rc<RefCell<Option<Session>>>) -> Self {
-        let mut ctx = SASL::new();
-        ctx.install_callback(Arc::new(CB::new(dbs.userdb.clone())));
+    pub fn new(log: Logger, dbs: Databases, state: State, network: Arc<Network>) -> Self {
+        Self {
+            log,
+            userdb: dbs.userdb.clone(),
+            access: dbs.access.clone(),
+            state,
+            network,
+        }
+    }
 
-        Self { log, ctx, session, userdb: dbs.userdb.clone(), access: dbs.access.clone() }
+    fn build_error(&self, response: response::Builder) {
+        use crate::schema::authenticationsystem_capnp::response::Error as ErrorCode;
+        if let State::Running(_) = self.state {
+            return;
+        }
+
+        let mut builder = response.init_failed();
+        match self.state {
+            State::InvalidMechanism => builder.set_code(ErrorCode::BadMechanism),
+            State::Finished => builder.set_code(ErrorCode::Aborted),
+            State::Aborted => builder.set_code(ErrorCode::Aborted),
+            _ => unreachable!(),
+        }
     }
 }
 
 use crate::schema::authenticationsystem_capnp::*;
-impl authentication_system::Server for Auth {
-    fn mechanisms(&mut self, 
-        _: authentication_system::MechanismsParams,
-        mut res: authentication_system::MechanismsResults
+impl authentication::Server for Auth {
+    fn step(
+        &mut self,
+        params: authentication::StepParams,
+        mut results: authentication::StepResults,
     ) -> Promise<(), capnp::Error> {
-        /*let mechs = match self.ctx.server_mech_list() {
-            Ok(m) => m,
-            Err(e) => {
-                return Promise::err(capnp::Error {
-                    kind: capnp::ErrorKind::Failed,
-                    description: format!("SASL Failure: {}", e),
-                })
-            },
-        };
+        let mut builder = results.get();
+        if let State::Running(mut session) = std::mem::replace(&mut self.state, State::Aborted) {
+            let data: &[u8] = pry!(pry!(params.get()).get_data());
+            let mut out = Cursor::new(Vec::new());
+            match session.step(Some(data), &mut out) {
+                Ok(Step::Done(data)) => {
+                    self.state = State::Finished;
 
-        let mechvec: Vec<&str> = mechs.iter().collect();
+                    let uid = pry!(session.get_property::<AuthId>().ok_or(capnp::Error::failed(
+                        "Authentication didn't provide an authid as required".to_string()
+                    )));
+                    let user = self.userdb.get_user(uid.as_str()).unwrap()
+                        .expect("Just auth'ed user was not found?!");
 
-        let mut res_mechs = res.get().init_mechs(mechvec.len() as u32);
-        for (i, m) in mechvec.into_iter().enumerate() {
-            res_mechs.set(i as u32, m);
-        }*/
-        // For now, only PLAIN
-        let mut res_mechs = res.get().init_mechs(1);
-        res_mechs.set(0, "PLAIN");
+                    let mut builder = builder.init_successful();
+                    if data.is_some() {
+                        builder.set_additional_data(out.into_inner().as_slice());
+                    }
+
+                    let mut builder = builder.init_session();
+                    let perms = pry!(self.access.collect_permrules(&user.data)
+                        .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e))));
+
+                    let session = Rc::new(RefCell::new(Some(Session::new(
+                        self.log.clone(),
+                        user.id,
+                        uid.to_string(),
+                        user.data.roles.into_boxed_slice(),
+                        perms.into_boxed_slice(),
+                    ))));
+
+                    builder.set_machine_system(capnp_rpc::new_client(Machines::new(
+                        session.clone(),
+                        self.network.clone(),
+                    )));
+                    builder.set_user_system(capnp_rpc::new_client(Users::new(
+                        session.clone(),
+                        self.userdb.clone(),
+                    )));
+                }
+                Ok(Step::NeedsMore(_)) => {
+                    self.state = State::Aborted;
+                    self.build_error(builder);
+                }
+                Err(_) => {
+                    self.state = State::Aborted;
+                    self.build_error(builder);
+                }
+            }
+        } else {
+            self.build_error(builder);
+        }
 
         Promise::ok(())
     }
 
-    // TODO: return Outcome instead of exceptions
-    fn start(&mut self,
-        params: authentication_system::StartParams,
-        mut res: authentication_system::StartResults
+    fn abort(
+        &mut self,
+        _: authentication::AbortParams,
+        _: authentication::AbortResults,
     ) -> Promise<(), capnp::Error> {
-        let req = pry!(pry!(params.get()).get_request());
-
-        // Extract the MECHANISM the client wants to use and start a session.
-        // Or fail at that and thrown an exception TODO: return Outcome
-        let mech = pry!(req.get_mechanism());
-        if pry!(req.get_mechanism()) != "PLAIN" {
-                return Promise::err(capnp::Error {
-                    kind: capnp::ErrorKind::Failed,
-                    description: format!("Invalid SASL mech"),
-                })
-        }
-
-        let mech = Mechname::new(mech.as_bytes()).unwrap();
-
-        let mut session = match self.ctx.server_start(mech) {
-            Ok(s) => s,
-            Err(e) => 
-                return Promise::err(capnp::Error {
-                    kind: capnp::ErrorKind::Failed,
-                    description: format!("SASL error: {}", e),
-                }),
-        };
-
-        let mut out = Cursor::new(Vec::new());
-
-        // If the client has provided initial data go use that
-        use request::initial_response::Which;
-        let step_res = match req.get_initial_response().which() {
-            Err(capnp::NotInSchema(_)) => 
-                return Promise::err(capnp::Error {
-                    kind: capnp::ErrorKind::Failed,
-                    description: "Initial data is badly formatted".to_string(),
-                }),
-
-            Ok(Which::None(_)) => {
-                // FIXME: Actually this needs to indicate NO data instead of SOME data of 0 length
-                session.step(Option::<&[u8]>::None, &mut out)
-            }
-            Ok(Which::Initial(data)) => {
-                session.step(Some(pry!(data)), &mut out)
-            }
-        };
-
-        // The step may either return an error, a success or the need for more data
-        // TODO: Set the session user. Needs a lookup though <.>
-
-        match step_res {
-            Ok(Step::Done(b)) => {
-                let user = session
-                    .get_property::<AuthId>()
-                    .and_then(|data| {
-                        self.userdb.get_user(data.as_str()).unwrap()
-                    })
-                    .expect("Authentication returned OK but the given AuthId is invalid");
-
-                let perms = pry!(self.access.collect_permrules(&user.data)
-                    .map_err(|e| capnp::Error::failed(format!("AccessDB lookup failed: {}", e))));
-                self.session.replace(Some(Session::new(
-                    self.log.new(o!()),
-                    user.id,
-                    "".to_string(),
-                    user.data.roles.into_boxed_slice(),
-                    perms.into_boxed_slice()
-                )));
-
-                let mut outcome = pry!(res.get().get_response()).init_outcome();
-                outcome.reborrow().set_result(response::Result::Successful);
-                if b.is_some() {
-                    outcome.init_additional_data().set_additional(&out.get_ref());
-                }
-                Promise::ok(())
-            },
-            Ok(Step::NeedsMore(b)) => {
-                if b.is_some() {
-                    pry!(res.get().get_response()).set_challence(&out.get_ref());
-                }
-                Promise::ok(())
-            }
-            Err(e) => {
-                let mut outcome = pry!(res.get().get_response()).init_outcome();
-                outcome.reborrow().set_result(response::Result::InvalidCredentials);
-                let text = format!("{}", e);
-                outcome.set_help_text(&text);
-                Promise::ok(())
-            }
-        }
+        self.state = State::Aborted;
+        Promise::ok(())
     }
 }
 
@@ -262,11 +248,11 @@ pub struct AuthenticationData {
 
 // Authentication has two parts: Granting the authentication itself and then performing the
 // authentication.
-// Granting the authentication checks if 
+// Granting the authentication checks if
 // a) the given authcid fits with the given (authMethod, kvs). In general a failure here indicates
 //    a programming failure — the authcid come from the same source as that tuple
 // b) the given authcid may authenticate as the given authzid. E.g. if a given client certificate
-//    has been configured for that user, if a GSSAPI user maps to a given user, 
+//    has been configured for that user, if a GSSAPI user maps to a given user,
 
 #[derive(Debug, Clone, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
 pub enum AuthError {
@@ -278,5 +264,4 @@ pub enum AuthError {
     MalformedAuthzid,
     /// User may not use that authorization id
     NotAllowedAuthzid,
-
 }
