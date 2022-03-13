@@ -17,8 +17,7 @@ fn loader<S: Signal<Item = State>>(cell: &Cell<Option<S>>) -> Option<S> {
 }
 
 pub struct ActorDriver<S: 'static> {
-    rx: MutableSignalRef<Cell<Option<S>>, &'static dyn Fn(&Cell<Option<S>>) -> Option<S>>,
-    signal: Option<S>,
+    signal: S,
 
     actor: Box<dyn Actor + Send + Sync>,
     future: Option<BoxFuture<'static, ()>>,
@@ -26,14 +25,11 @@ pub struct ActorDriver<S: 'static> {
 
 impl<S: Signal<Item = State>> ActorDriver<S>
 {
-    pub fn new(rx: &ReadOnlyMutable<Cell<Option<S>>>, actor: Box<dyn Actor + Send + Sync>)
+    pub fn new(signal: S, actor: Box<dyn Actor + Send + Sync>)
         -> Self
     {
-        let f: &'static dyn Fn(&Cell<Option<S>>) -> Option<S> = &loader;
-        let rx = rx.signal_ref(f);
         Self {
-            rx,
-            signal: None,
+            signal,
             actor,
             future: None,
         }
@@ -47,14 +43,6 @@ impl<S> Future for ActorDriver<S>
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Self::Output> {
-        let mut done = false; // Is the channel with new state-signals exhausted?
-
-        match Pin::new(&mut self.rx).poll_change(cx) {
-            Poll::Ready(Some(new_signal)) => { self.signal = new_signal; },
-            Poll::Ready(None) => done = true,
-            Poll::Pending => {},
-        }
-
         // Work until there is no more work to do.
         loop {
 
@@ -73,22 +61,11 @@ impl<S> Future for ActorDriver<S>
             }
 
             // Poll the signal and apply any change that happen to the inner Actuator
-            match self.signal.as_mut()
-                .map(|inner| S::poll_change(Pin::new(inner), cx))
+            match Pin::new(&mut self.signal).poll_change(cx)
             {
-                // No signal to poll
-                None => return Poll::Pending,
-                Some(Poll::Pending) => return Poll::Pending,
-                Some(Poll::Ready(None)) => {
-                    self.signal = None;
-
-                    if done {
-                        return Poll::Ready(());
-                    } else {
-                        return Poll::Pending;
-                    }
-                },
-                Some(Poll::Ready(Some(state))) => {
+                Poll::Pending => return Poll::Pending,
+                Poll::Ready(None) => return Poll::Pending,
+                Poll::Ready(Some(state)) => {
                     // This future MUST be polled before we exit from the Actor::poll because if we
                     // do not do that it will not register the dependency and thus NOT BE POLLED.
                     let f = self.actor.apply(state);
