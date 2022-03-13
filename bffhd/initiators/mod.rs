@@ -5,7 +5,7 @@ use async_channel as channel;
 use async_oneshot as oneshot;
 use futures_signals::signal::Signal;
 use futures_util::future::BoxFuture;
-use crate::resources::{Error, Update};
+use crate::resources::driver::{Error, Update};
 use crate::resources::claim::{ResourceID, UserID};
 use crate::resources::state::State;
 

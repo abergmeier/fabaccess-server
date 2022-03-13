@@ -4,23 +4,29 @@ use api::machinesystem_capnp::machine_system::{
     info, InfoParams, InfoResults, Server as MachineSystem,
 };
 use capnp::capability::Promise;
+use capnp_rpc::pry;
+use crate::capnp::machine::Machine;
+use crate::resources::Resource;
+use crate::resources::search::ResourcesHandle;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Machines {
     session: SessionHandle,
+    resources: ResourcesHandle,
 }
 
 impl Machines {
     pub fn new(session: SessionHandle) -> Self {
-        Self { session }
+        let resources = ResourcesHandle::new();
+        Self { session, resources }
     }
 }
 
 impl MachineSystem for Machines {
-    fn info(&mut self, _: InfoParams, _: InfoResults) -> Promise<(), ::capnp::Error> {
-        Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+    fn info(&mut self, _: InfoParams, mut result: InfoResults) -> Promise<(), ::capnp::Error> {
+        // TODO permission checking
+        result.get().set_info(capnp_rpc::new_client(self.clone()));
+        Promise::ok(())
     }
 }
 
@@ -28,28 +34,52 @@ impl info::Server for Machines {
     fn get_machine_list(
         &mut self,
         _: info::GetMachineListParams,
-        _: info::GetMachineListResults,
+        mut result: info::GetMachineListResults,
     ) -> Promise<(), ::capnp::Error> {
-        Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+        let machine_list: Vec<(usize, &Resource)> = self.resources.list_all()
+            .into_iter()
+            .filter(|resource| resource.visible(&self.session))
+            .enumerate()
+            .collect();
+        let mut builder = result.get().init_machine_list(machine_list.len() as u32);
+        for (i, m) in machine_list {
+            let resource = m.clone();
+            let mut mbuilder = builder.reborrow().get(i as u32);
+            Machine::build(self.session.clone(), resource, mbuilder);
+        }
+
+        Promise::ok(())
     }
+
     fn get_machine(
         &mut self,
-        _: info::GetMachineParams,
-        _: info::GetMachineResults,
+        params: info::GetMachineParams,
+        mut result: info::GetMachineResults,
     ) -> Promise<(), ::capnp::Error> {
-        Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+        let params = pry!(params.get());
+        let id = pry!(params.get_id());
+
+        if let Some(resource) = self.resources.get_by_id(id) {
+            let mut builder = result.get();
+            Machine::build(self.session.clone(), resource.clone(), builder);
+        }
+
+        Promise::ok(())
     }
+
     fn get_machine_u_r_n(
         &mut self,
-        _: info::GetMachineURNParams,
-        _: info::GetMachineURNResults,
+        params: info::GetMachineURNParams,
+        mut result: info::GetMachineURNResults,
     ) -> Promise<(), ::capnp::Error> {
-        Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+        let params = pry!(params.get());
+        let urn = pry!(params.get_urn());
+
+        if let Some(resource) = self.resources.get_by_urn(urn) {
+            let mut builder = result.get();
+            Machine::build(self.session.clone(), resource.clone(), builder);
+        }
+
+        Promise::ok(())
     }
 }

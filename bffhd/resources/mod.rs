@@ -1,145 +1,113 @@
-use std::fmt::Debug;
-use async_trait::async_trait;
+use crate::resources::modules::fabaccess::{MachineState, Status};
+use crate::resources::state::State;
+use crate::session::SessionHandle;
+use crate::users::User;
 
-use futures_signals::signal::Mutable;
-use async_oneshot::Sender;
-use async_channel::Receiver;
-
-use state::State;
-use state::db::StateAccessor;
-
-pub mod state;
 pub mod claim;
 pub mod db;
+pub mod driver;
+pub mod search;
+pub mod state;
 
+pub mod modules;
 
-/// A resources in BFFH has to contain several different parts;
-/// - Currently set state
-/// - Execution state of attached actors (⇒ BFFH's job)
-/// - Output of interal logic of a resources
-/// ⇒ Resource logic gets read access to set state and write access to output state.
-/// ⇒ state `update` happens via resources logic. This logic should do access control. If the update
-///   succeeds then BFFH stores those input parameters ("set" state) and results / output state.
-///   Storing input parameters is relevant so that BFFH can know that an "update" is a no-op
-///   without having to run the module code.
-/// ⇒ in fact actors only really care about the output state, and shouldn't (need to) see "set"
-/// state.
-/// ⇒ example reserving:
-///   - Claimant sends 'update' message with a new state
-///     - Doesn't set the state until `update` has returned Ok.
-///   - This runs the `update` function with that new state and the claimants user context returning
-///     either an Ok or an Error.
-///     - Error is returned to Claimant to show user, stop.
-///   - On ok:
-///     - Commit new "set" state, storing it and making it visible to all other claimants
-///     - Commit new output state, storing it and notifying all connected actors / Notify
-/// ⇒ BFFHs job in this whole ordeal is:
-///   - Message passing primitives so that update message are queued
-///   - As reliable as possible storage system for input and output state
-///   - Again message passing so that updates are broadcasted to all Notify and Actors.
-/// ⇒ Resource module's job is:
-///   - Validating updates semantically i.e. are the types correct
-///   - Check authorization of updates i.e. is this user allowed to do that
-#[async_trait]
-pub trait ResourceModel: Debug {
-    /// Run whatever internal logic this resources has for the given State update, and return the
-    /// new output state that this update produces.
-    async fn on_update(&mut self, input: &State) -> Result<State, Error>;
-    async fn shutdown(&mut self);
-}
+pub struct PermissionDenied;
 
-#[derive(Debug)]
-pub struct Passthrough;
-#[async_trait]
-impl ResourceModel for Passthrough {
-    async fn on_update(&mut self, input: &State) -> Result<State, Error> {
-        Ok(input.clone())
+#[derive(Clone)]
+pub struct Resource {}
+
+impl Resource {
+    pub fn get_state(&self) -> MachineState {
+        unimplemented!()
     }
 
-    async fn shutdown(&mut self) {}
-}
+    fn set_state(&self, state: MachineState) {
+        unimplemented!()
+    }
 
-/// Error type a resources implementation can produce
-#[derive(Debug)]
-pub enum Error {
-    Internal(Box<dyn std::error::Error + Send>),
-    Denied,
-}
+    fn set_previous_user(&self, user: User) {
+        unimplemented!()
+    }
 
-// TODO: more message context
-#[derive(Debug)]
-pub struct Update {
-    pub state: State,
-    pub errchan: Sender<Error>,
-}
+    pub async fn try_update(&self, session: SessionHandle, new: MachineState) {
+        let old = self.get_state();
+        let user = session.get_user();
 
-#[derive(Debug)]
-pub struct ResourceDriver {
-    // putput
-    res: Box<dyn ResourceModel>,
+        if session.has_manage(self) // Default allow for managers
 
-    // input
-    rx: Receiver<Update>,
+            || (session.has_write(self) // Decision tree for writers
+                && match (old.state, &new.state) {
+                // Going from available to used by the person requesting is okay.
+                (Status::Free, Status::InUse(who))
+                // Check that the person requesting does not request for somebody else.
+                // *That* is manage privilege.
+                if who == &user => true,
 
-    // output
-    db: StateAccessor,
+                // Reserving things for ourself is okay.
+                (Status::Free, Status::Reserved(whom))
+                if &user == whom => true,
 
-    signal: Mutable<State>,
-}
+                // Returning things we've been using is okay. This includes both if
+                // they're being freed or marked as to be checked.
+                (Status::InUse(who), Status::Free | Status::ToCheck(_))
+                if who == user => true,
 
-impl ResourceDriver {
-    pub async fn drive_to_end(&mut self) {
-        while let Ok(update) = self.rx.recv().await {
-            let state = update.state;
-            let mut errchan = update.errchan;
+                // Un-reserving things we reserved is okay
+                (Status::Reserved(whom), Status::Free)
+                if user == whom => true,
+                // Using things that we've reserved is okay. But the person requesting
+                // that has to be the person that reserved the machine. Otherwise
+                // somebody could make a machine reserved by a different user as used by
+                // that different user but use it themself.
+                (Status::Reserved(whom), Status::InUse(who))
+                if user == whom && who == &whom => true,
 
-            match self.res.on_update(&state).await {
-                Ok(outstate) => {
-                    // FIXME: Send any error here to some global error collector. A failed write to
-                    //  the DB is not necessarily fatal, but it means that BFFH is now in an
-                    //  inconsistent state until a future update succeeds with writing to the DB.
-                    //  Not applying the new state isn't correct either since we don't know what the
-                    //  internal logic of the resources has done to make this happen.
-                    //  Another half right solution is to unwrap and recreate everything.
-                    //  "Best" solution would be to tell the resources to rollback their interal
-                    //  changes on a fatal failure and then notify the Claimant, while simply trying
-                    //  again for temporary failures.
-                    let _ = self.db.set(&state, &outstate);
-                    self.signal.set(outstate);
-                },
-                Err(e) => {
-                    let _ = errchan.send(e);
-                }
+                // Default is deny.
+                _ => false
+            })
+
+            // Default permissions everybody has
+            || match (old.state, &new.state) {
+                // Returning things we've been using is okay. This includes both if
+                // they're being freed or marked as to be checked.
+                (Status::InUse(who), Status::Free | Status::ToCheck(_)) if who == user => true,
+
+                // Un-reserving things we reserved is okay
+                (Status::Reserved(whom), Status::Free) if user == whom => true,
+
+                // Default is deny.
+                _ => false,
+            }
+        {
+            self.set_state(new);
+        }
+    }
+
+    pub async fn give_back(&self, session: SessionHandle) {
+        if let Status::InUse(user) = self.get_state().state {
+            if user == session.get_user() {
+                self.set_state(MachineState::free());
+                self.set_previous_user(user);
             }
         }
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use std::pin::Pin;
-    use std::task::Poll;
-    use std::future::Future;
-    use super::*;
-
-    #[futures_test::test]
-    async fn test_passthrough_is_id() {
-        let inp = state::tests::gen_random();
-
-        let mut res = Passthrough;
-        let out = res.on_update(&inp).await.unwrap();
-        assert_eq!(inp, out);
+    pub async fn force_set(&self, new: MachineState) {
+        unimplemented!()
     }
 
-    #[test]
-    fn test_passthrough_is_always_ready() {
-        let inp = State::build().finish();
+    pub fn visible(&self, session: &SessionHandle) -> bool {
+        session.has_disclose(self) || self.is_owned_by(session.get_user())
+    }
 
-        let mut res = Passthrough;
-        let mut cx = futures_test::task::panic_context();
-        if let Poll::Ready(_) = Pin::new(&mut res.on_update(&inp)).poll(&mut cx) {
-            return;
+    pub fn is_owned_by(&self, owner: User) -> bool {
+        match self.get_state().state {
+            Status::Free | Status::Disabled => false,
+
+            Status::InUse(user)
+            | Status::ToCheck(user)
+            | Status::Blocked(user)
+            | Status::Reserved(user) => user == owner,
         }
-        panic!("Passthrough returned Poll::Pending")
     }
 }

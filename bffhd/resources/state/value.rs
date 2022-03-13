@@ -1,24 +1,21 @@
-use std::{
-    fmt,
-    ptr,
-    any::Any,
-    hash::Hash,
-    str::FromStr,
-};
+use std::{any::Any, fmt, hash::Hash, ptr, str::FromStr};
 
-use rkyv::{Archive, Archived, Serialize, Deserialize, out_field, Fallible, DeserializeUnsized, ArchivePointee, ArchiveUnsized, ArchivedMetadata, SerializeUnsized, };
-use rkyv_dyn::{DynSerializer, DynError, DynDeserializer};
-use rkyv_typename::TypeName;
 use ptr_meta::{DynMetadata, Pointee};
+use rkyv::{
+    out_field, Archive, ArchivePointee, ArchiveUnsized, Archived, ArchivedMetadata, Deserialize,
+    DeserializeUnsized, Fallible, Serialize, SerializeUnsized,
+};
+use rkyv_dyn::{DynDeserializer, DynError, DynSerializer};
+use rkyv_typename::TypeName;
 
-use inventory;
 use crate::utils::oid::ObjectIdentifier;
-use rkyv::ser::{Serializer, ScratchSpace};
-use std::collections::HashMap;
-use std::alloc::Layout;
-use serde::ser::SerializeMap;
-use std::fmt::Formatter;
+use inventory;
+use rkyv::ser::{ScratchSpace, Serializer};
 use serde::de::Error as SerdeError;
+use serde::ser::SerializeMap;
+use std::alloc::Layout;
+use std::collections::HashMap;
+use std::fmt::Formatter;
 use std::mem::MaybeUninit;
 
 /// Adding a custom type to BFFH state management:
@@ -28,7 +25,7 @@ use std::mem::MaybeUninit;
 /// 2. Implement rkyv's [`Serialize`](rkyv::Serialize).
 /// 3. Implement TypeOid on your Archived type (i.e. `<T as Archive>::Archived`)
 /// 4. Implement this
-pub trait Value: Any + fmt::Debug + erased_serde::Serialize  + Sync {
+pub trait Value: Any + fmt::Debug + erased_serde::Serialize + Sync {
     /// Initialize `&mut self` from `deserializer`
     ///
     /// At the point this is called &mut self is of undefined value but guaranteed to be well
@@ -37,8 +34,10 @@ pub trait Value: Any + fmt::Debug + erased_serde::Serialize  + Sync {
     /// To this end you *must* initialize `self` **completely**. Serde will do the right thing if
     /// you directly deserialize the type you're implementing `Value` for, but for manual
     /// implementations this is important to keep in mind.
-    fn deserialize_init<'de>(&mut self, deserializer: &mut dyn erased_serde::Deserializer<'de>)
-                                     -> Result<(), erased_serde::Error>;
+    fn deserialize_init<'de>(
+        &mut self,
+        deserializer: &mut dyn erased_serde::Deserializer<'de>,
+    ) -> Result<(), erased_serde::Error>;
 
     /// Implement `PartialEq` dynamically.
     ///
@@ -55,19 +54,27 @@ erased_serde::serialize_trait_object!(SerializeValue);
 erased_serde::serialize_trait_object!(DeserializeValue);
 
 impl<T> Value for T
-    where T: Any + fmt::Debug + PartialEq + Sync
-           + erased_serde::Serialize
-           + for<'de> serde::Deserialize<'de>
+where
+    T: Any
+        + fmt::Debug
+        + PartialEq
+        + Sync
+        + erased_serde::Serialize
+        + for<'de> serde::Deserialize<'de>,
 {
-    fn deserialize_init<'de>(&mut self, deserializer: &mut dyn erased_serde::Deserializer<'de>)
-                                     -> Result<(), erased_serde::Error>
-    {
+    fn deserialize_init<'de>(
+        &mut self,
+        deserializer: &mut dyn erased_serde::Deserializer<'de>,
+    ) -> Result<(), erased_serde::Error> {
         *self = erased_serde::deserialize(deserializer)?;
         Ok(())
     }
 
     fn dyn_eq(&self, other: &dyn Value) -> bool {
-        other.as_any().downcast_ref().map_or(false, |other: &T| other == self)
+        other
+            .as_any()
+            .downcast_ref()
+            .map_or(false, |other: &T| other == self)
     }
 
     fn as_value(&self) -> &dyn Value {
@@ -89,7 +96,8 @@ impl PartialEq for dyn Value {
 pub(super) struct DynVal<'a>(pub &'a dyn SerializeValue);
 impl<'a> serde::Serialize for DynVal<'a> {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: serde::Serializer
+    where
+        S: serde::Serializer,
     {
         let mut ser = serializer.serialize_map(Some(1))?;
         let oid = self.0.archived_type_oid();
@@ -101,7 +109,8 @@ impl<'a> serde::Serialize for DynVal<'a> {
 pub(super) struct DynOwnedVal(pub Box<dyn SerializeValue>);
 impl<'de> serde::Deserialize<'de> for DynOwnedVal {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
-        where D: serde::Deserializer<'de>
+    where
+        D: serde::Deserializer<'de>,
     {
         deserializer.deserialize_map(DynValVisitor)
     }
@@ -116,22 +125,21 @@ impl<'de> serde::de::Visitor<'de> for DynValVisitor {
         write!(formatter, "an one entry map from OID to some value object")
     }
 
-    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error>
-    {
+    fn visit_map<A: serde::de::MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error> {
         // Bad magic code. Problem we have to solve: We only know how to parse whatever comes
         // after the OID after having looked at the OID. We have zero static type info available
         // during deserialization. So:
 
         // Get OID first. That's easy, we know it's the key, we know how to read it.
-        let oid: ObjectIdentifier = map.next_key()?
-            .ok_or(A::Error::missing_field("oid"))?;
+        let oid: ObjectIdentifier = map.next_key()?.ok_or(A::Error::missing_field("oid"))?;
 
         // Get the Value vtable for that OID. Or fail because we don't know that OID, either works.
-        let valimpl = IMPL_REGISTRY.get(ImplId::from_type_oid(&oid))
-            .ok_or(serde::de::Error::invalid_value(
+        let valimpl = IMPL_REGISTRY.get(ImplId::from_type_oid(&oid)).ok_or(
+            serde::de::Error::invalid_value(
                 serde::de::Unexpected::Other("unknown oid"),
                 &"oid an implementation was registered for",
-            ))?;
+            ),
+        )?;
 
         // Casting random usize you find on the side of the road as vtable on unchecked pointers.
         // What could possibly go wrong? >:D
@@ -151,9 +159,7 @@ impl<'de> serde::de::Visitor<'de> for DynValVisitor {
             // validate in any other way if this is sane?
             // Well...
             let ptr: *mut () = std::alloc::alloc(layout).cast::<()>();
-            let b = Box::from_raw(ptr_meta::from_raw_parts_mut(
-                ptr,
-                meta));
+            let b = Box::from_raw(ptr_meta::from_raw_parts_mut(ptr, meta));
 
             // We make this a MaybeUninit so `Drop` is never called on the uninitialized value
             MaybeUninit::new(b)
@@ -173,7 +179,8 @@ impl<'de> serde::de::DeserializeSeed<'de> for InitIntoSelf {
     type Value = Box<dyn SerializeValue>;
 
     fn deserialize<D>(mut self, deserializer: D) -> Result<Self::Value, D::Error>
-        where D: serde::Deserializer<'de>
+    where
+        D: serde::Deserializer<'de>,
     {
         let mut deser = <dyn erased_serde::Deserializer>::erase(deserializer);
 
@@ -182,8 +189,9 @@ impl<'de> serde::de::DeserializeSeed<'de> for InitIntoSelf {
         let selfptr = unsafe { &mut *self.0.as_mut_ptr() };
 
         // Hey, better initialize late than never.
-        selfptr.deserialize_init(&mut deser).map_err(|e|
-            D::Error::custom(e))?;
+        selfptr
+            .deserialize_init(&mut deser)
+            .map_err(|e| D::Error::custom(e))?;
 
         // Assuming `deserialize_init` didn't error and did its job this is now safe.
         unsafe { Ok(self.0.assume_init()) }
@@ -208,7 +216,6 @@ impl<S: ScratchSpace + Serializer + ?Sized> SerializeUnsized<S> for dyn Serializ
     }
 }
 
-
 /// Serialize dynamic types by storing an OID alongside
 pub trait SerializeDynOid {
     fn serialize_dynoid(&self, serializer: &mut dyn DynSerializer) -> Result<usize, DynError>;
@@ -216,8 +223,9 @@ pub trait SerializeDynOid {
 }
 
 impl<T> SerializeDynOid for T
-    where T: for<'a> Serialize<dyn DynSerializer + 'a>,
-          T::Archived: TypeOid,
+where
+    T: for<'a> Serialize<dyn DynSerializer + 'a>,
+    T::Archived: TypeOid,
 {
     fn serialize_dynoid(&self, serializer: &mut dyn DynSerializer) -> Result<usize, DynError> {
         serializer.serialize_value(self)
@@ -247,8 +255,8 @@ pub trait SerializeValue: Value + SerializeDynOid {
 }
 
 impl<T: Archive + Value + SerializeDynOid + Clone> SerializeValue for T
-    where
-        T::Archived: RegisteredImpl
+where
+    T::Archived: RegisteredImpl,
 {
     fn dyn_clone(&self) -> Box<dyn SerializeValue> {
         Box::new(self.clone())
@@ -278,17 +286,21 @@ impl ArchivePointee for dyn DeserializeValue {
     }
 }
 impl<D: Fallible + ?Sized> DeserializeUnsized<dyn SerializeValue, D> for dyn DeserializeValue {
-    unsafe fn deserialize_unsized(&self,
-                                  mut deserializer: &mut D,
-                                  mut alloc: impl FnMut(Layout) -> *mut u8
+    unsafe fn deserialize_unsized(
+        &self,
+        mut deserializer: &mut D,
+        mut alloc: impl FnMut(Layout) -> *mut u8,
     ) -> Result<*mut (), D::Error> {
-        self.deserialize_dynoid(&mut deserializer, &mut alloc).map_err(|e| *e.downcast().unwrap())
+        self.deserialize_dynoid(&mut deserializer, &mut alloc)
+            .map_err(|e| *e.downcast().unwrap())
     }
 
-    fn deserialize_metadata(&self, mut deserializer: &mut D)
-        -> Result<<dyn SerializeValue as Pointee>::Metadata, D::Error>
-    {
-        self.deserialize_dynoid_metadata(&mut deserializer).map_err(|e| *e.downcast().unwrap())
+    fn deserialize_metadata(
+        &self,
+        mut deserializer: &mut D,
+    ) -> Result<<dyn SerializeValue as Pointee>::Metadata, D::Error> {
+        self.deserialize_dynoid_metadata(&mut deserializer)
+            .map_err(|e| *e.downcast().unwrap())
     }
 }
 
@@ -296,7 +308,12 @@ impl ArchiveUnsized for dyn SerializeValue {
     type Archived = dyn DeserializeValue;
     type MetadataResolver = <ObjectIdentifier as Archive>::Resolver;
 
-    unsafe fn resolve_metadata(&self, pos: usize, resolver: Self::MetadataResolver, out: *mut ArchivedMetadata<Self>) {
+    unsafe fn resolve_metadata(
+        &self,
+        pos: usize,
+        resolver: Self::MetadataResolver,
+        out: *mut ArchivedMetadata<Self>,
+    ) {
         let (oid_pos, oid) = out_field!(out.type_oid);
         let type_oid = self.archived_type_oid();
         type_oid.resolve(pos + oid_pos, resolver, oid);
@@ -316,10 +333,14 @@ impl ArchivedValueMetadata {
 
     pub fn vtable(&self) -> usize {
         IMPL_REGISTRY
-            .get(ImplId::from_type_oid(&self.type_oid)).expect(&format!("Unregistered \
+            .get(ImplId::from_type_oid(&self.type_oid))
+            .expect(&format!(
+                "Unregistered \
             type \
             oid \
-            {:?}", self.type_oid))
+            {:?}",
+                self.type_oid
+            ))
             .vtable
     }
 
@@ -342,7 +363,7 @@ impl<'a> ImplId<'a> {
 impl ImplId<'static> {
     fn new<T: TypeOid>() -> Self {
         Self {
-            type_oid: &T::type_oid()
+            type_oid: &T::type_oid(),
         }
     }
 }
@@ -361,15 +382,6 @@ pub struct ImplDebugInfo {
     pub file: &'static str,
     pub line: u32,
     pub column: u32,
-}
-macro_rules! debug_info {
-    () => {
-        ImplDebugInfo {
-            file: core::file!(),
-            line: core::line!(),
-            column: core::column!(),
-        }
-    }
 }
 
 impl ImplData<'_> {
@@ -407,7 +419,9 @@ struct ImplRegistry {
 
 impl ImplRegistry {
     fn new() -> Self {
-        Self { oid_to_data: HashMap::new() }
+        Self {
+            oid_to_data: HashMap::new(),
+        }
     }
 
     fn add_entry(&mut self, entry: &'static ImplEntry) {
@@ -415,10 +429,14 @@ impl ImplRegistry {
 
         if let Some(old) = old_val {
             eprintln!("Value impl oid conflict for {:?}", entry.id.type_oid);
-            eprintln!("Existing impl registered at {}:{}:{}",
-                old.info.file, old.info.line, old.info.column);
-            eprintln!("New impl registered at {}:{}:{}",
-                entry.data.info.file, entry.data.info.line, entry.data.info.column);
+            eprintln!(
+                "Existing impl registered at {}:{}:{}",
+                old.info.file, old.info.line, old.info.column
+            );
+            eprintln!(
+                "New impl registered at {}:{}:{}",
+                entry.data.info.file, entry.data.info.line, entry.data.info.column
+            );
         }
         assert!(old_val.is_none());
     }
@@ -444,64 +462,89 @@ pub unsafe trait RegisteredImpl {
     fn debug_info() -> ImplDebugInfo;
 }
 
-macro_rules! oiddeser {
-    ( $y:ty, $z:ty ) => {
-        impl DeserializeDynOid for $y
-            where $y: for<'a> Deserialize<$z, (dyn DynDeserializer + 'a)>
-        {
-            unsafe fn deserialize_dynoid(&self, deserializer: &mut dyn DynDeserializer, alloc: &mut dyn FnMut(Layout) -> *mut u8) -> Result<*mut (), DynError> {
-                let ptr = alloc(Layout::new::<$z>()).cast::<$z>();
-                ptr.write(self.deserialize(deserializer)?);
-                Ok(ptr as *mut ())
+#[macro_use]
+pub mod macros {
+    #[macro_export]
+    macro_rules! debug_info {
+        () => {
+            $crate::resources::state::value::ImplDebugInfo {
+                file: ::core::file!(),
+                line: ::core::line!(),
+                column: ::core::column!(),
             }
+        };
+    }
+    #[macro_export]
+    macro_rules! oiddeser {
+        ( $y:ty, $z:ty ) => {
+            impl $crate::resources::state::value::DeserializeDynOid for $y
+            where
+                $y: for<'a> ::rkyv::Deserialize<$z, (dyn ::rkyv_dyn::DynDeserializer + 'a)>,
+            {
+                unsafe fn deserialize_dynoid(
+                    &self,
+                    deserializer: &mut dyn ::rkyv_dyn::DynDeserializer,
+                    alloc: &mut dyn FnMut(::core::alloc::Layout) -> *mut u8,
+                ) -> Result<*mut (), ::rkyv_dyn::DynError> {
+                    let ptr = alloc(::core::alloc::Layout::new::<$z>()).cast::<$z>();
+                    ptr.write(self.deserialize(deserializer)?);
+                    Ok(ptr as *mut ())
+                }
 
-            fn deserialize_dynoid_metadata(&self, _: &mut dyn DynDeserializer) -> Result<<dyn
-            SerializeValue as Pointee>::Metadata, DynError> {
-                unsafe {
-                    Ok(core::mem::transmute(ptr_meta::metadata(
-                        core::ptr::null::<$z>() as *const dyn SerializeValue
-                    )))
+                fn deserialize_dynoid_metadata(
+                    &self,
+                    _: &mut dyn ::rkyv_dyn::DynDeserializer,
+                ) -> ::std::result::Result<<dyn $crate::resources::state::value::SerializeValue
+                as
+                ::ptr_meta::Pointee>::Metadata, ::rkyv_dyn::DynError> {
+                    unsafe {
+                        Ok(core::mem::transmute(ptr_meta::metadata(
+                            ::core::ptr::null::<$z>() as *const dyn $crate::resources::state::value::SerializeValue,
+                        )))
+                    }
                 }
             }
-        }
+        };
     }
-}
-macro_rules! oidvalue {
-    ( $x:ident, $y:ty ) => {
-        oidvalue! {$x, $y, $y}
-    };
-    ( $x:ident, $y:ty, $z:ty ) => {
-        oiddeser! {$z, $y}
+    #[macro_export]
+    macro_rules! oidvalue {
+        ( $x:ident, $y:ty ) => {
+            $crate::oidvalue! {$x, $y, $y}
+        };
+        ( $x:ident, $y:ty, $z:ty ) => {
+            $crate::oiddeser! {$z, $y}
 
-        impl TypeOid for $z {
-            fn type_oid() -> &'static ObjectIdentifier {
-                &$x
-            }
+            impl $crate::resources::state::value::TypeOid for $z {
+                fn type_oid() -> &'static $crate::utils::oid::ObjectIdentifier {
+                    &$x
+                }
 
-            fn type_name() -> &'static str {
-                stringify!($y)
-            }
+                fn type_name() -> &'static str {
+                    stringify!($y)
+                }
 
-            fn type_desc() -> &'static str {
-                "builtin"
-            }
-        }
-        unsafe impl RegisteredImpl for $z {
-            fn vtable() -> usize {
-                unsafe {
-                    core::mem::transmute(ptr_meta::metadata(
-                        core::ptr::null::<$z>() as *const dyn DeserializeValue
-                    ))
+                fn type_desc() -> &'static str {
+                    "builtin"
                 }
             }
-            fn debug_info() -> ImplDebugInfo {
-                debug_info!()
+            unsafe impl $crate::resources::state::value::RegisteredImpl for $z {
+                fn vtable() -> usize {
+                    unsafe {
+                        ::core::mem::transmute(ptr_meta::metadata(
+                            ::core::ptr::null::<$z>() as *const dyn $crate::resources::state::value::DeserializeValue
+                        ))
+                    }
+                }
+                fn debug_info() -> $crate::resources::state::value::ImplDebugInfo {
+                    $crate::debug_info!()
+                }
             }
-        }
 
-        inventory::submit! {ImplEntry::new::<$z>()}
+            ::inventory::submit! {$crate::resources::state::value::ImplEntry::new::<$z>()}
+        };
     }
 }
+use macros::*;
 
 lazy_static::lazy_static! {
     pub static ref OID_BOOL: ObjectIdentifier = {
@@ -563,9 +606,20 @@ oidvalue!(OID_I32, i32);
 oidvalue!(OID_I64, i64);
 oidvalue!(OID_I128, i128);
 
-#[derive(serde::Serialize, serde::Deserialize)]
-#[derive(Debug, Copy, Clone, PartialEq, Eq, Hash, rkyv::Archive, rkyv::Serialize, rkyv::Deserialize)]
-#[archive_attr(derive(TypeName, Debug, PartialEq, serde::Serialize, serde::Deserialize))]
+#[derive(
+    serde::Serialize,
+    serde::Deserialize,
+    Debug,
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Hash,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+)]
+#[archive_attr(derive(Debug, PartialEq, serde::Serialize, serde::Deserialize))]
 pub struct Vec3u8 {
     pub a: u8,
     pub b: u8,
@@ -576,9 +630,9 @@ oidvalue!(OID_VEC3U8, Vec3u8, ArchivedVec3u8);
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rand::Rng;
     use rand::distributions::Standard;
     use rand::prelude::Distribution;
+    use rand::Rng;
 
     impl Distribution<Vec3u8> for Standard {
         fn sample<R: Rng + ?Sized>(&self, rng: &mut R) -> Vec3u8 {

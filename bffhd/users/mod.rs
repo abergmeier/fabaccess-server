@@ -14,24 +14,43 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
+use rkyv::{Archive, Deserialize, Infallible, Serialize};
 use std::ops::Deref;
 use std::sync::Arc;
-use rkyv::{Archive, Serialize, Deserialize, Infallible};
 
-mod db;
+pub mod db;
 
-pub use db::UserDB;
 pub use crate::authentication::db::PassDB;
+use crate::authorization::roles::Role;
 
-#[derive(Debug, Clone, Archive, Serialize, Deserialize, serde::Serialize, serde::Deserialize)]
+#[derive(
+    Copy,
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    Archive,
+    Serialize,
+    Deserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
+#[archive_attr(derive(Debug, PartialEq, serde::Serialize, serde::Deserialize))]
 pub struct User {
-    id: u128,
-    username: String,
-    roles: Vec<String>,
+    id: u64
 }
 
 impl User {
-    pub fn new(id: u128, username: String, roles: Vec<String>) -> Self {
-        User { id, username, roles }
+    pub fn new(id: u64) -> Self {
+        User { id }
+    }
+
+    pub fn get_username(&self) -> &str {
+        unimplemented!()
+    }
+
+    pub fn get_roles(&self) -> impl IntoIterator<Item=Role> {
+        unimplemented!();
+        []
     }
 }

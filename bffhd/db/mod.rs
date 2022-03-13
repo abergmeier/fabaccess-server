@@ -43,7 +43,7 @@ use rkyv::Deserialize;
 use rkyv::ser::serializers::AlignedSerializer;
 use std::sync::Arc;
 use std::path::Path;
-use crate::users::{User, UserDB};
+use crate::users::db::{User, UserDB};
 use std::collections::HashMap;
 use crate::resources::state::{OwnedEntry, State, db::StateDB};
 use std::iter::FromIterator;

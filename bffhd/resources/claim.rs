@@ -1,7 +1,7 @@
 use std::sync::Arc;
 use async_channel::Sender;
 use lmdb::Environment;
-use crate::resources::Update;
+use crate::resources::driver::Update;
 
 #[derive(Clone, Debug)]
 /// Database of currently valid claims, interests and notify, as far as applicable

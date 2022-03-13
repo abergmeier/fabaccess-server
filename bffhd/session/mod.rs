@@ -1,4 +1,7 @@
 use std::sync::Arc;
+use crate::authorization::roles::Role;
+use crate::resources::Resource;
+use crate::users::User;
 
 struct Inner {
 
@@ -29,4 +32,20 @@ pub struct SessionHandle {
 }
 
 impl SessionHandle {
+    pub fn get_user(&self) -> User {
+        unimplemented!()
+    }
+
+    pub fn has_disclose(&self, resource: &Resource) -> bool {
+        unimplemented!()
+    }
+    pub fn has_read(&self, resource: &Resource) -> bool {
+        unimplemented!()
+    }
+    pub fn has_write(&self, resource: &Resource) -> bool {
+        unimplemented!()
+    }
+    pub fn has_manage(&self, resource: &Resource) -> bool {
+        unimplemented!()
+    }
 }
