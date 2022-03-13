@@ -8,7 +8,7 @@ use std::fmt::Formatter;
 use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
 use std::str::FromStr;
 use serde::de::Error;
-use crate::authorization::permissions::PermRule;
+use crate::authorization::permissions::{PermRule, PrivilegesBuf};
 use crate::authorization::roles::RoleIdentifier;
 
 type Result<T> = std::result::Result<T, serde_dhall::Error>;
@@ -19,13 +19,38 @@ pub fn read(path: &Path) -> Result<Config> {
         .map_err(Into::into)
 }
 
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
+/// A description of a machine
+///
+/// This is the struct that a machine is serialized to/from.
+/// Combining this with the actual state of the system will return a machine
+pub struct MachineDescription {
+    /// The name of the machine. Doesn't need to be unique but is what humans will be presented.
+    pub name: String,
+
+    /// An optional description of the Machine.
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
+    pub description: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
+    pub wiki: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
+    pub category: Option<String>,
+
+    /// The permission required
+    #[serde(flatten)]
+    pub privs: PrivilegesBuf,
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
     /// A list of address/port pairs to listen on.
     pub listens: Vec<Listen>,
 
     /// Machine descriptions to load
-    //pub machines: HashMap<MachineIdentifier, MachineDescription>,
+    pub machines: HashMap<String, MachineDescription>,
 
     /// Actors to load and their configuration options
     pub actors: HashMap<String, ModuleConfig>,
@@ -136,6 +161,7 @@ impl Default for Config {
     fn default() -> Self {
         let mut actors: HashMap::<String, ModuleConfig> = HashMap::new();
         let mut initiators: HashMap::<String, ModuleConfig> = HashMap::new();
+        let mut machines = HashMap::new();
 
         actors.insert("Actor".to_string(), ModuleConfig {
             module: "Shelly".to_string(),
@@ -155,6 +181,7 @@ impl Default for Config {
             ],
             actors,
             initiators,
+            machines,
             mqtt_url: "tcp://localhost:1883".to_string(),
             actor_connections: vec![
                 ("Testmachine".to_string(), "Actor".to_string()),
