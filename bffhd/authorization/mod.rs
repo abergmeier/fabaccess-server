@@ -27,8 +27,9 @@ impl AuthorizationHandle {
         }
     }
 
-    pub fn lookup_user(&self, uid: impl AsRef<str>) -> Option<User> {
-        unimplemented!()
+    pub fn get_user_roles(&self, uid: impl AsRef<str>) -> Option<impl IntoIterator<Item=Role>> {
+        unimplemented!();
+        Some([])
     }
 
     pub fn is_permitted<'a>(&self, roles: impl IntoIterator<Item=&'a Role>, perm: impl AsRef<Permission>) -> bool {

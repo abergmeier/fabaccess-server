@@ -62,6 +62,8 @@ use crate::resources::search::ResourcesHandle;
 use crate::resources::state::db::StateDB;
 use crate::session::SessionManager;
 use crate::tls::TlsConfig;
+use crate::users::db::UserDB;
+use crate::users::Users;
 
 pub const RELEASE_STRING: &'static str = env!("BFFHD_RELEASE_STRING");
 
@@ -82,8 +84,12 @@ impl Diflouroborane {
         tracing::info!(version=RELEASE_STRING, "Starting");
     }
 
-    pub fn setup(&mut self, config: &Config) -> anyhow::Result<()> {
+    pub fn init_logging(config: &Config) {
         logging::init(&config);
+    }
+
+    pub fn setup(&mut self, config: &Config) -> anyhow::Result<()> {
+        Self::init_logging(config);
 
         let span = tracing::info_span!("setup");
         let _guard = span.enter();
@@ -96,8 +102,12 @@ impl Diflouroborane {
             SIGTERM,
         ]).context("Failed to construct signal handler")?;
 
-        let statedb = StateDB::create(&config.db_path).context("Failed to open state DB")?;
-        let statedb = Arc::new(statedb);
+        let env = StateDB::open_env(&config.db_path)?;
+        let statedb = Arc::new(StateDB::create_with_env(env.clone())
+            .context("Failed to open state DB file")?);
+
+        let userdb = Users::new(env.clone()).context("Failed to open users DB file")?;
+
         let resources = ResourcesHandle::new(config.machines.iter().map(|(id, desc)| {
             Resource::new(Arc::new(resources::Inner::new(id.to_string(), statedb.clone(), desc.clone())))
         }));
@@ -110,7 +120,7 @@ impl Diflouroborane {
         let acceptor = tlsconfig.make_tls_acceptor(&config.tlsconfig)?;
 
         let sessionmanager = SessionManager::new();
-        let authentication = AuthenticationHandle::new();
+        let authentication = AuthenticationHandle::new(userdb.clone());
 
         let mut apiserver = self.executor.run(APIServer::bind(self.executor.clone(), &config.listens, acceptor, sessionmanager, authentication))?;
 

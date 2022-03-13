@@ -112,7 +112,7 @@ impl Resource {
         if session.has_manage(self) // Default allow for managers
 
             || (session.has_write(self) // Decision tree for writers
-                && match (old.state, &new) {
+                && match (&old.state, &new) {
                 // Going from available to used by the person requesting is okay.
                 (Status::Free, Status::InUse(who))
                 // Check that the person requesting does not request for somebody else.
@@ -126,30 +126,30 @@ impl Resource {
                 // Returning things we've been using is okay. This includes both if
                 // they're being freed or marked as to be checked.
                 (Status::InUse(who), Status::Free | Status::ToCheck(_))
-                if who == user => true,
+                if who == &user => true,
 
                 // Un-reserving things we reserved is okay
                 (Status::Reserved(whom), Status::Free)
-                if user == whom => true,
+                if whom == &user => true,
                 // Using things that we've reserved is okay. But the person requesting
                 // that has to be the person that reserved the machine. Otherwise
                 // somebody could make a machine reserved by a different user as used by
                 // that different user but use it themself.
                 (Status::Reserved(whom), Status::InUse(who))
-                if user == whom && who == &whom => true,
+                if whom == &user && who == whom => true,
 
                 // Default is deny.
                 _ => false
             })
 
             // Default permissions everybody has
-            || match (old.state, &new) {
+            || match (&old.state, &new) {
                 // Returning things we've been using is okay. This includes both if
                 // they're being freed or marked as to be checked.
-                (Status::InUse(who), Status::Free | Status::ToCheck(_)) if who == user => true,
+                (Status::InUse(who), Status::Free | Status::ToCheck(_)) if who == &user => true,
 
                 // Un-reserving things we reserved is okay
-                (Status::Reserved(whom), Status::Free) if user == whom => true,
+                (Status::Reserved(whom), Status::Free) if whom == &user => true,
 
                 // Default is deny.
                 _ => false,

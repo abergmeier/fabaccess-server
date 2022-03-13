@@ -41,7 +41,7 @@ pub struct StateDB {
 }
 
 impl StateDB {
-    fn open_env<P: AsRef<Path>>(path: P) -> lmdb::Result<Environment> {
+    pub fn open_env<P: AsRef<Path>>(path: P) -> lmdb::Result<Arc<Environment>> {
         Environment::new()
             .set_flags( EnvironmentFlags::WRITE_MAP 
                       | EnvironmentFlags::NO_SUB_DIR 
@@ -49,10 +49,11 @@ impl StateDB {
                       | EnvironmentFlags::NO_READAHEAD)
             .set_max_dbs(2)
             .open(path.as_ref())
+            .map(Arc::new)
     }
 
-    fn new(env: Environment, input: DB<StateAdapter>, output: DB<StateAdapter>) -> Self {
-        Self { env: Arc::new(env), input, output }
+    fn new(env: Arc<Environment>, input: DB<StateAdapter>, output: DB<StateAdapter>) -> Self {
+        Self { env: env, input, output }
     }
 
     pub fn open<P: AsRef<Path>>(path: P) -> lmdb::Result<Self> {
@@ -63,13 +64,17 @@ impl StateDB {
         Ok(Self::new(env, input, output))
     }
 
-    pub fn create<P: AsRef<Path>>(path: P) -> lmdb::Result<Self> {
+    pub fn create_with_env(env: Arc<Environment>) -> lmdb::Result<Self> {
         let flags = DatabaseFlags::empty();
-        let env = Self::open_env(path)?;
         let input = unsafe { DB::create(&env, Some("input"), flags)?  };
         let output = unsafe { DB::create(&env, Some("output"), flags)?  };
 
         Ok(Self::new(env, input, output))
+    }
+
+    pub fn create<P: AsRef<Path>>(path: P) -> lmdb::Result<Self> {
+        let env = Self::open_env(path)?;
+        Self::create_with_env(env)
     }
 
     fn update_txn(&self, txn: &mut RwTransaction, key: impl AsRef<[u8]>, input: &State, output: &State)

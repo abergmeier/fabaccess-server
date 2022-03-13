@@ -773,6 +773,7 @@ dependencies = [
  "signal-hook",
  "signal-hook-async-std",
  "tempfile",
+ "toml",
  "tracing",
  "tracing-futures",
  "tracing-subscriber 0.2.25",

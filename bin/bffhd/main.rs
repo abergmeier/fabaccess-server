@@ -5,8 +5,11 @@ use std::net::ToSocketAddrs;
 use std::os::unix::prelude::AsRawFd;
 use std::str::FromStr;
 use std::{env, io, io::Write, path::PathBuf};
+use std::sync::Arc;
 use anyhow::Context;
+use lmdb::{Environment, EnvironmentFlags};
 use nix::NixPath;
+use diflouroborane::users::Users;
 
 fn main() -> anyhow::Result<()> {
     // Argument parsing
@@ -60,6 +63,7 @@ fn main() -> anyhow::Result<()> {
             Arg::new("load")
                 .help("Load values into the internal databases")
                 .long("load")
+                .takes_value(true)
                 .conflicts_with("dump"),
         )
         .arg(Arg::new("keylog")
@@ -103,10 +107,25 @@ fn main() -> anyhow::Result<()> {
                 std::process::exit(-1);
             }
         }
-    } else if matches.is_present("dump") {
+    }
+
+    let mut config = config::read(&PathBuf::from_str(configpath).unwrap()).unwrap();
+
+    if matches.is_present("dump") {
         unimplemented!()
     } else if matches.is_present("load") {
-        unimplemented!()
+        Diflouroborane::init_logging(&config);
+        let env = Environment::new()
+                .set_flags( EnvironmentFlags::WRITE_MAP
+                    | EnvironmentFlags::NO_SUB_DIR
+                    | EnvironmentFlags::NO_TLS
+                    | EnvironmentFlags::NO_READAHEAD)
+                .set_max_dbs(2)
+                .open(config.db_path.as_ref())
+                .map(Arc::new)?;
+        let userdb = Users::new(env).context("Failed to open users DB file")?;
+        userdb.load_file(matches.value_of("load").unwrap());
+        return Ok(())
     } else {
         let keylog = matches.value_of("keylog");
         // When passed an empty string (i.e no value) take the value from the env
@@ -120,8 +139,6 @@ fn main() -> anyhow::Result<()> {
         } else {
             keylog.map(PathBuf::from)
         };
-
-        let mut config = config::read(&PathBuf::from_str(configpath).unwrap()).unwrap();
 
         config.tlskeylog = keylog;
         config.verbosity = matches.occurrences_of("verbosity") as isize;

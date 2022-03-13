@@ -1,10 +1,12 @@
 use crate::db::{AllocAdapter, Environment, RawDB, Result, DB};
 use crate::db::{DatabaseFlags, LMDBorrow, RoTransaction, WriteFlags};
 use lmdb::{RwTransaction, Transaction};
-use std::collections::HashSet;
+use std::collections::{HashMap, HashSet};
+use std::path::Path;
 use std::sync::Arc;
 
 use rkyv::{Archived, Deserialize};
+use crate::authorization::roles::RoleIdentifier;
 
 #[derive(
     Clone,
@@ -18,9 +20,45 @@ use rkyv::{Archived, Deserialize};
     serde::Deserialize,
 )]
 pub struct User {
-    id: u128,
-    username: String,
-    roles: Vec<String>,
+    pub id: String,
+    pub userdata: UserData,
+}
+
+#[derive(
+Clone,
+PartialEq,
+Eq,
+Debug,
+rkyv::Archive,
+rkyv::Serialize,
+rkyv::Deserialize,
+serde::Serialize,
+serde::Deserialize,
+)]
+/// Data on an user to base decisions on
+///
+/// This of course includes authorization data, i.e. that users set roles
+pub struct UserData {
+    /// A Person has N ≥ 0 roles.
+    /// Persons are only ever given roles, not permissions directly
+    pub roles: Vec<String>,
+
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[serde(default)]
+    pub passwd: Option<String>,
+
+    /// Additional data storage
+    #[serde(flatten, skip_serializing_if = "HashMap::is_empty")]
+    kv: HashMap<String, String>,
+}
+
+impl UserData {
+    pub fn new(roles: Vec<String>) -> Self {
+        Self { roles, kv: HashMap::new(), passwd: None }
+    }
+    pub fn new_with_kv(roles: Vec<String>, kv: HashMap<String, String>) -> Self {
+        Self { roles, kv, passwd: None }
+    }
 }
 
 type Adapter = AllocAdapter<User>;

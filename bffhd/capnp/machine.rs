@@ -240,9 +240,13 @@ impl AdminServer for Machine {
                     "totakeover not implemented".to_string(),
                 )),
         };
-        self.resource.force_set(state);
-        Promise::ok(())
+        let resource = self.resource.clone();
+        Promise::from_future(async move {
+            resource.force_set(state).await;
+            Ok(())
+        })
     }
+
     fn force_set_user(
         &mut self,
         _: admin::ForceSetUserParams,
@@ -252,6 +256,7 @@ impl AdminServer for Machine {
             "method not implemented".to_string(),
         ))
     }
+
     fn get_admin_property_list(
         &mut self,
         _: admin::GetAdminPropertyListParams,

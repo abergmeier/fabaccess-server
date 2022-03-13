@@ -13,7 +13,6 @@ use crate::users::User;
 
 /// Status of a Machine
 #[derive(
-    Copy,
     Clone,
     PartialEq,
     Eq,
@@ -24,7 +23,7 @@ use crate::users::User;
     serde::Serialize,
     serde::Deserialize,
 )]
-#[archive_attr(derive(Debug, PartialEq, serde::Serialize, serde::Deserialize))]
+#[archive_attr(derive(Debug, PartialEq))]
 pub enum Status {
     /// Not currently used by anybody
     Free,
@@ -41,7 +40,6 @@ pub enum Status {
 }
 
 #[derive(
-    Copy,
     Clone,
     PartialEq,
     Eq,
@@ -115,7 +113,7 @@ impl MachineState {
 
     pub fn check(user: User) -> Self {
         Self {
-            state: Status::ToCheck(user),
+            state: Status::ToCheck(user.clone()),
             previous: Some(user),
         }
     }

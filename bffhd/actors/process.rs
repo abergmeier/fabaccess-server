@@ -42,19 +42,19 @@ impl Actor for Process {
             Status::Free => {
                 command.arg("free");
             }
-            Status::InUse(by) => {
+            Status::InUse(ref by) => {
                 command.arg("inuse").arg(format!("{}", by.get_username()));
             }
-            Status::ToCheck(by) => {
+            Status::ToCheck(ref by) => {
                 command.arg("tocheck")
                        .arg(format!("{}", by.get_username()));
             }
-            Status::Blocked(by) => {
+            Status::Blocked(ref by) => {
                 command.arg("blocked")
                        .arg(format!("{}", by.get_username()));
             }
             Status::Disabled => { command.arg("disabled"); },
-            Status::Reserved(by) => {
+            Status::Reserved(ref by) => {
                 command.arg("reserved")
                        .arg(format!("{}", by.get_username()));
             }
