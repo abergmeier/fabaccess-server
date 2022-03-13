@@ -89,6 +89,11 @@ rustls = "0.20"
 rustls-pemfile = "0.3.0"
 futures-rustls = "0.22"
 
+rumqttc = "0.11.0"
+async-compat = "0.2.1"
+url = "2.2.2"
+rustls-native-certs = "0.6.1"
+
 [dev-dependencies]
 futures-test = "0.3.16"
 tempfile = "3.2"

@@ -24,7 +24,7 @@ pub struct PermissionDenied;
 pub(crate) struct Inner {
     id: String,
     db: Arc<StateDB>,
-    signal: Mutable<MachineState>,
+    signal: Mutable<State>,
     desc: MachineDescription,
 }
 impl Inner {
@@ -37,12 +37,12 @@ impl Inner {
             tracing::info!(%id, "No previous state, defaulting to `free`");
             MachineState::free(None)
         };
-        let signal = Mutable::new(state);
+        let signal = Mutable::new(state.to_state());
 
         Self { id, db, signal, desc }
     }
 
-    pub fn signal(&self) -> impl Signal<Item=MachineState> {
+    pub fn signal(&self) -> impl Signal<Item=State> {
         Box::pin(self.signal.signal_cloned().dedupe_cloned())
     }
 
@@ -62,7 +62,7 @@ impl Inner {
         let update = state.to_state();
         self.db.update(self.id.as_bytes(), &update, &update).unwrap();
         tracing::trace!("Updated DB, sending update signal");
-        self.signal.set(state);
+        self.signal.set(update);
         tracing::trace!("Sent update signal");
     }
 }
@@ -87,6 +87,10 @@ impl Resource {
 
     pub fn get_id(&self) -> &str {
         &self.inner.id
+    }
+
+    pub fn get_signal(&self) -> impl Signal<Item=State> {
+        self.inner.signal()
     }
 
     fn set_state(&self, state: MachineState) {

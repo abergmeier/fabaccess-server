@@ -39,10 +39,12 @@ mod logging;
 mod audit;
 mod session;
 
+use std::collections::HashMap;
 use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use anyhow::Context;
 use futures_rustls::TlsAcceptor;
 use futures_util::StreamExt;
@@ -101,7 +103,6 @@ impl Diflouroborane {
         }));
         RESOURCES.set(resources);
 
-
         let tlsconfig = TlsConfig::new(config.tlskeylog.as_ref(), !config.is_quiet())?;
         let acceptor = tlsconfig.make_tls_acceptor(&config.tlsconfig)?;
 
@@ -128,3 +129,4 @@ impl Diflouroborane {
         Ok(())
     }
 }
+
