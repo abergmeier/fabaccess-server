@@ -3,6 +3,7 @@ use std::sync::Arc;
 use futures_signals::signal::{Mutable, Signal, SignalExt};
 use lmdb::RoTransaction;
 use rkyv::Archived;
+use crate::config::MachineDescription;
 use crate::db::LMDBorrow;
 use crate::resources::modules::fabaccess::{MachineState, Status};
 use crate::resources::state::db::StateDB;
@@ -22,11 +23,12 @@ pub struct PermissionDenied;
 
 pub(crate) struct Inner {
     id: String,
-    db: StateDB,
+    db: Arc<StateDB>,
     signal: Mutable<MachineState>,
+    desc: MachineDescription,
 }
 impl Inner {
-    pub fn new(id: String, db: StateDB) -> Self {
+    pub fn new(id: String, db: Arc<StateDB>, desc: MachineDescription) -> Self {
         let state = if let Some(previous) = db.get_output(id.as_bytes()).unwrap() {
             let state = MachineState::from(&previous);
             tracing::info!(%id, ?state, "Found previous state");
@@ -37,7 +39,7 @@ impl Inner {
         };
         let signal = Mutable::new(state);
 
-        Self { id, db, signal }
+        Self { id, db, signal, desc }
     }
 
     pub fn signal(&self) -> impl Signal<Item=MachineState> {

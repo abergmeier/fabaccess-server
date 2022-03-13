@@ -46,6 +46,7 @@ use std::sync::Arc;
 use anyhow::Context;
 use futures_rustls::TlsAcceptor;
 use futures_util::StreamExt;
+use once_cell::sync::OnceCell;
 use rustls::{Certificate, KeyLogFile, PrivateKey, ServerConfig};
 use rustls::server::NoClientAuth;
 use signal_hook::consts::signal::*;
@@ -54,6 +55,9 @@ use crate::authentication::AuthenticationHandle;
 use crate::capnp::APIServer;
 use crate::config::{Config, TlsListen};
 use crate::resources::modules::fabaccess::MachineState;
+use crate::resources::Resource;
+use crate::resources::search::ResourcesHandle;
+use crate::resources::state::db::StateDB;
 use crate::session::SessionManager;
 use crate::tls::TlsConfig;
 
@@ -62,6 +66,8 @@ pub const RELEASE_STRING: &'static str = env!("BFFHD_RELEASE_STRING");
 pub struct Diflouroborane {
     executor: Executor<'static>,
 }
+
+pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 
 impl Diflouroborane {
     pub fn new() -> Self {
@@ -88,8 +94,12 @@ impl Diflouroborane {
             SIGTERM,
         ]).context("Failed to construct signal handler")?;
 
-        // - Load Machines from config
-        // - Load states from DB
+        let statedb = StateDB::create(&config.db_path).context("Failed to open state DB")?;
+        let statedb = Arc::new(statedb);
+        let resources = ResourcesHandle::new(config.machines.iter().map(|(id, desc)| {
+            Resource::new(Arc::new(resources::Inner::new(id.to_string(), statedb.clone(), desc.clone())))
+        }));
+        RESOURCES.set(resources);
         // - Connect modules to machines
 
         let tlsconfig = TlsConfig::new(config.tlskeylog.as_ref(), !config.is_quiet())?;

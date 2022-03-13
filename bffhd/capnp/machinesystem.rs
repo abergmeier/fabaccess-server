@@ -6,6 +6,7 @@ use api::machinesystem_capnp::machine_system::{
 use capnp::capability::Promise;
 use capnp_rpc::pry;
 use crate::capnp::machine::Machine;
+use crate::RESOURCES;
 use crate::resources::Resource;
 use crate::resources::search::ResourcesHandle;
 
@@ -17,8 +18,8 @@ pub struct Machines {
 
 impl Machines {
     pub fn new(session: SessionHandle) -> Self {
-        let resources = ResourcesHandle::new();
-        Self { session, resources }
+        // FIXME no unwrap bad
+        Self { session, resources: RESOURCES.get().unwrap().clone() }
     }
 }
 
