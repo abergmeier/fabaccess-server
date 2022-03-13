@@ -138,6 +138,7 @@ impl authentication::Server for Auth {
             let mut out = Cursor::new(Vec::new());
             match session.step(Some(data), &mut out) {
                 Ok(Step::Done(data)) => {
+                    trace!(self.log, "Authentication done!");
                     self.state = State::Finished;
 
                     let uid = pry!(session.get_property::<AuthId>().ok_or(capnp::Error::failed(
@@ -173,10 +174,12 @@ impl authentication::Server for Auth {
                     )));
                 }
                 Ok(Step::NeedsMore(_)) => {
+                    trace!(self.log, "Authentication wants more data");
                     self.state = State::Aborted;
                     self.build_error(builder);
                 }
-                Err(_) => {
+                Err(error) => {
+                    trace!(self.log, "Authentication errored: {}", error);
                     self.state = State::Aborted;
                     self.build_error(builder);
                 }

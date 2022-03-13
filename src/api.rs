@@ -99,12 +99,18 @@ impl connection_capnp::bootstrap::Server for Bootstrap {
 
         let mechname = mechanism.as_bytes();
         let state = if let Ok(mechname) = Mechname::new(mechname) {
-            if let Ok(session) = self.ctx.server_start(mechname) {
-                State::Running(session)
-            } else {
-                State::Aborted
+            match self.ctx.server_start(mechname) {
+                Ok(session) => {
+                    debug!(self.log, "Starting session using {}", mechname);
+                    State::Running(session)
+                },
+                Err(error) => {
+                    debug!(self.log, "Session start failed {:?}", error);
+                    State::Aborted
+                }
             }
         } else {
+            debug!(self.log, "Invalid mechname {:?}", mechname);
             State::InvalidMechanism
         };
 
