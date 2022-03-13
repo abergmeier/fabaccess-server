@@ -1,4 +1,4 @@
-use crate::resources::modules::fabaccess::MachineState;
+use crate::resources::modules::fabaccess::{MachineState, Status};
 use crate::resources::Resource;
 use crate::session::SessionHandle;
 use api::machine_capnp::machine::{
@@ -49,7 +49,7 @@ impl UseServer for Machine {
         let session = self.session.clone();
         Promise::from_future(async move {
             let user = session.get_user();
-            resource.try_update(session, MachineState::used(user)).await;
+            resource.try_update(session, Status::InUse(user)).await;
             Ok(())
         })
     }
@@ -64,7 +64,7 @@ impl UseServer for Machine {
         Promise::from_future(async move {
             let user = session.get_user();
             resource
-                .try_update(session, MachineState::reserved(user))
+                .try_update(session, Status::Reserved(user))
                 .await;
             Ok(())
         })
@@ -166,7 +166,7 @@ impl ManageServer for Machine {
         let session = self.session.clone();
         Promise::from_future(async move {
             resource
-                .force_set(MachineState::used(session.get_user()))
+                .force_set(Status::InUse(session.get_user()))
                 .await;
             Ok(())
         })
@@ -180,7 +180,7 @@ impl ManageServer for Machine {
         let resource = self.resource.clone();
         let session = self.session.clone();
         Promise::from_future(async move {
-            resource.force_set(MachineState::free()).await;
+            resource.force_set(Status::Free).await;
             Ok(())
         })
     }
@@ -203,7 +203,7 @@ impl ManageServer for Machine {
         let session = self.session.clone();
         Promise::from_future(async move {
             resource
-                .force_set(MachineState::blocked(session.get_user()))
+                .force_set(Status::Blocked(session.get_user()))
                 .await;
             Ok(())
         })
@@ -215,7 +215,7 @@ impl ManageServer for Machine {
     ) -> Promise<(), ::capnp::Error> {
         let mut resource = self.resource.clone();
         Promise::from_future(async move {
-            resource.force_set(MachineState::disabled()).await;
+            resource.force_set(Status::Disabled).await;
             Ok(())
         })
     }
@@ -230,12 +230,12 @@ impl AdminServer for Machine {
         use api::schema::machine_capnp::machine::MachineState as APIMState;
         let user = self.session.get_user();
         let state = match pry!(pry!(params.get()).get_state()) {
-            APIMState::Free => MachineState::free(),
-            APIMState::Blocked => MachineState::blocked(user),
-            APIMState::Disabled => MachineState::disabled(),
-            APIMState::InUse => MachineState::used(user),
-            APIMState::Reserved => MachineState::reserved(user),
-            APIMState::ToCheck => MachineState::check(user),
+            APIMState::Free => Status::Free,
+            APIMState::Blocked => Status::Blocked(user),
+            APIMState::Disabled => Status::Disabled,
+            APIMState::InUse => Status::InUse(user),
+            APIMState::Reserved => Status::Reserved(user),
+            APIMState::ToCheck => Status::ToCheck(user),
             APIMState::Totakeover => return Promise::err(::capnp::Error::unimplemented(
                     "totakeover not implemented".to_string(),
                 )),

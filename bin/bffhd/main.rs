@@ -1,5 +1,5 @@
 use clap::{Arg, Command};
-use diflouroborane::db::{Databases, Dump};
+use diflouroborane::db::Dump;
 use diflouroborane::{config, Diflouroborane, error::Error};
 use std::net::ToSocketAddrs;
 use std::os::unix::prelude::AsRawFd;

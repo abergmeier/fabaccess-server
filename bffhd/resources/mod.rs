@@ -1,4 +1,11 @@
+use std::ops::Deref;
+use std::sync::Arc;
+use futures_signals::signal::{Mutable, Signal, SignalExt};
+use lmdb::RoTransaction;
+use rkyv::Archived;
+use crate::db::LMDBorrow;
 use crate::resources::modules::fabaccess::{MachineState, Status};
+use crate::resources::state::db::StateDB;
 use crate::resources::state::State;
 use crate::session::SessionHandle;
 use crate::users::User;
@@ -13,15 +20,78 @@ pub mod modules;
 
 pub struct PermissionDenied;
 
-#[derive(Clone)]
-pub struct Resource {}
+pub(crate) struct Inner {
+    id: String,
+    db: StateDB,
+    signal: Mutable<MachineState>,
+}
+impl Inner {
+    pub fn new(id: String, db: StateDB) -> Self {
+        let state = if let Some(previous) = db.get_output(id.as_bytes()).unwrap() {
+            let state = MachineState::from(&previous);
+            tracing::info!(%id, ?state, "Found previous state");
+            state
+        } else {
+            tracing::info!(%id, "No previous state, defaulting to `free`");
+            MachineState::free(None)
+        };
+        let signal = Mutable::new(state);
 
-impl Resource {
-    pub fn get_state(&self) -> MachineState {
-        unimplemented!()
+        Self { id, db, signal }
+    }
+
+    pub fn signal(&self) -> impl Signal<Item=MachineState> {
+        Box::pin(self.signal.signal_cloned().dedupe_cloned())
+    }
+
+    fn get_state(&self) -> MachineState {
+        MachineState::from(&self.db.get_output(self.id.as_bytes()).unwrap().unwrap())
+    }
+
+    fn get_raw_state(&self) -> Option<LMDBorrow<RoTransaction, Archived<State>>> {
+        self.db.get_output(self.id.as_bytes()).unwrap()
     }
 
     fn set_state(&self, state: MachineState) {
+        let span = tracing::debug_span!("set", id = %self.id, ?state, "Updating state");
+        let _guard = span.enter();
+        tracing::debug!("Updating state");
+        tracing::trace!("Updating DB");
+        let update = state.to_state();
+        self.db.update(self.id.as_bytes(), &update, &update).unwrap();
+        tracing::trace!("Updated DB, sending update signal");
+        self.signal.set(state);
+        tracing::trace!("Sent update signal");
+    }
+}
+
+#[derive(Clone)]
+pub struct Resource {
+    inner: Arc<Inner>
+}
+
+impl Resource {
+    pub(crate) fn new(inner: Arc<Inner>) -> Self {
+        Self { inner }
+    }
+
+    pub fn get_raw_state(&self) -> Option<LMDBorrow<RoTransaction, Archived<State>>> {
+        self.inner.get_raw_state()
+    }
+
+    pub fn get_state(&self) -> MachineState {
+        self.inner.get_state()
+    }
+
+    pub fn get_id(&self) -> &str {
+        &self.inner.id
+    }
+
+    fn set_state(&self, state: MachineState) {
+
+    }
+
+    fn set_status(&self, state: Status) {
         unimplemented!()
     }
 
@@ -29,14 +99,14 @@ impl Resource {
         unimplemented!()
     }
 
-    pub async fn try_update(&self, session: SessionHandle, new: MachineState) {
+    pub async fn try_update(&self, session: SessionHandle, new: Status) {
         let old = self.get_state();
         let user = session.get_user();
 
         if session.has_manage(self) // Default allow for managers
 
             || (session.has_write(self) // Decision tree for writers
-                && match (old.state, &new.state) {
+                && match (old.state, &new) {
                 // Going from available to used by the person requesting is okay.
                 (Status::Free, Status::InUse(who))
                 // Check that the person requesting does not request for somebody else.
@@ -67,7 +137,7 @@ impl Resource {
             })
 
             // Default permissions everybody has
-            || match (old.state, &new.state) {
+            || match (old.state, &new) {
                 // Returning things we've been using is okay. This includes both if
                 // they're being freed or marked as to be checked.
                 (Status::InUse(who), Status::Free | Status::ToCheck(_)) if who == user => true,
@@ -79,20 +149,19 @@ impl Resource {
                 _ => false,
             }
         {
-            self.set_state(new);
+            self.set_status(new);
         }
     }
 
     pub async fn give_back(&self, session: SessionHandle) {
         if let Status::InUse(user) = self.get_state().state {
             if user == session.get_user() {
-                self.set_state(MachineState::free());
-                self.set_previous_user(user);
+                self.set_state(MachineState::free(Some(user)));
             }
         }
     }
 
-    pub async fn force_set(&self, new: MachineState) {
+    pub async fn force_set(&self, new: Status) {
         unimplemented!()
     }
 

@@ -16,159 +16,72 @@ use rkyv::{
     out_field,
     Serialize,
 };
-use serde::de::{Error, MapAccess};
+use serde::de::{Error, MapAccess, Unexpected};
 use serde::Deserializer;
 use serde::ser::SerializeMap;
 
 use value::{RegisteredImpl, SerializeValue};
+use crate::MachineState;
+use crate::resources::modules::fabaccess::OID_VALUE;
 
 use crate::utils::oid::ObjectIdentifier;
-use crate::resources::state::value::{DynOwnedVal, DynVal, TypeOid, };
+use crate::resources::state::value::{DynOwnedVal, DynVal, TypeOid, Value};
 
 pub mod value;
 pub mod db;
 
-#[derive(serde::Serialize, serde::Deserialize)]
 #[derive(Archive, Serialize, Deserialize)]
-#[derive(Clone, PartialEq)]
+#[derive(Clone, PartialEq, Eq)]
 #[archive_attr(derive(Debug))]
-/// State object of a resources
-///
-/// This object serves three functions:
-/// 1. it is constructed by modification via Claims or via internal resources logic
-/// 2. it is serializable and storable in the database
-/// 3. it is sendable and forwarded to all Actors and Notifys
 pub struct State {
-    pub hash: u64,
-    pub inner: Vec<OwnedEntry>,
+    pub inner: MachineState,
 }
-
-impl State {
-    pub fn build() -> StateBuilder {
-        StateBuilder::new()
-    }
-    pub fn hash(&self) -> u64 {
-        self.hash
-    }
-}
-
-impl PartialEq<Archived<State>> for State {
-    fn eq(&self, other: &Archived<Self>) -> bool {
-        self.hash == other.hash
-    }
-}
-
-impl Eq for State {}
 
 impl fmt::Debug for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut sf = f.debug_struct("State");
-        for OwnedEntry { oid, val } in self.inner.iter() {
-            let k: String = oid.into();
-            sf.field(k.as_ref(), val);
-        }
+        //for Entry { oid, val } in self.inner.iter() {
+        let k: String = OID_VALUE.deref().into();
+        sf.field(k.as_ref(), &self.inner);
+        //}
         sf.finish()
     }
 }
 
-#[derive(Debug)]
-pub struct StateBuilder {
-    hasher: DefaultHasher,
-    inner: Vec<OwnedEntry>
-}
-
-impl StateBuilder {
-    pub fn new() -> Self {
-        let hasher = DefaultHasher::new();
-        Self { inner: Vec::new(), hasher }
-    }
-
-    pub fn finish(self) -> State {
-        State {
-            hash: self.hasher.finish(),
-            inner: self.inner,
-        }
-    }
-
-    /// Add key-value pair to the State being built.
-    ///
-    /// We have to use this split system here because type erasure prevents us from limiting values
-    /// to `Hash`. Specifically, you can't have a trait object of `Hash` because `Hash` depends on
-    /// `Self`. In this function however the compiler still knows the exact type of `V` and can
-    /// call statically call its `hash` method.
-    pub fn add<V>(mut self, oid: ObjectIdentifier, val: Box<V>) -> Self
-        where V: SerializeValue + Hash + Archive,
-              Archived<V>: TypeOid + RegisteredImpl,
-    {
-    // Hash before creating the StateEntry struct which removes the type information
-        oid.hash(&mut self.hasher);
-        val.hash(&mut self.hasher);
-        self.inner.push(OwnedEntry { oid, val });
-
-        self
-    }
-}
-
-#[derive(Debug)]
-pub struct Entry<'a> {
-    pub oid: &'a ObjectIdentifier,
-    pub val: &'a dyn SerializeValue,
-}
-
-#[derive(Debug, Clone, Archive, Serialize, Deserialize)]
-#[archive_attr(derive(Debug))]
-pub struct OwnedEntry {
-    pub oid: ObjectIdentifier,
-    pub val: Box<dyn SerializeValue>,
-}
-
-impl PartialEq for OwnedEntry {
-    fn eq(&self, other: &Self) -> bool {
-        self.oid == other.oid && self.val.dyn_eq(other.val.as_value())
-    }
-}
-
-impl<'a> serde::Serialize for Entry<'a> {
+impl serde::Serialize for State {
     fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
         where S: serde::Serializer
     {
         let mut ser = serializer.serialize_map(Some(1))?;
-        ser.serialize_entry(&self.oid, &DynVal(self.val))?;
+        ser.serialize_entry(OID_VALUE.deref(), &self.inner)?;
         ser.end()
     }
 }
-
-impl serde::Serialize for OwnedEntry {
-    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
-        where S: serde::Serializer
-    {
-        let mut ser = serializer.serialize_map(Some(1))?;
-        ser.serialize_entry(&self.oid, &DynVal(self.val.deref()))?;
-        ser.end()
-    }
-}
-impl<'de> serde::Deserialize<'de> for OwnedEntry {
+impl<'de> serde::Deserialize<'de> for State {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
         where D: Deserializer<'de>
     {
-        deserializer.deserialize_map(OwnedEntryVisitor)
+        deserializer.deserialize_map(StateVisitor)
     }
 }
 
-struct OwnedEntryVisitor;
-impl<'de> serde::de::Visitor<'de> for OwnedEntryVisitor {
-    type Value = OwnedEntry;
+struct StateVisitor;
+impl<'de> serde::de::Visitor<'de> for StateVisitor {
+    type Value = State;
 
     fn expecting(&self, formatter: &mut Formatter) -> fmt::Result {
-        write!(formatter, "an one entry map from OID to some value object")
+        write!(formatter, "a map from OIDs to value objects")
     }
 
     fn visit_map<A: MapAccess<'de>>(self, mut map: A) -> Result<Self::Value, A::Error>
     {
         let oid: ObjectIdentifier = map.next_key()?
             .ok_or(A::Error::missing_field("oid"))?;
-        let val: DynOwnedVal = map.next_value()?;
-        Ok(OwnedEntry { oid, val: val.0 })
+        if oid != *OID_VALUE.deref() {
+            return Err(A::Error::invalid_value(Unexpected::Other("Unknown OID"), &"OID of fabaccess state"))
+        }
+        let val: MachineState = map.next_value()?;
+        Ok(State { inner: val })
     }
 }
 

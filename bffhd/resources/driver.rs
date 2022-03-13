@@ -4,9 +4,9 @@ use async_trait::async_trait;
 use futures_signals::signal::Mutable;
 use async_oneshot::Sender;
 use async_channel::Receiver;
+use crate::resources::state::db::StateDB;
 
 use super::state::State;
-use super::state::db::StateAccessor;
 
 /// A resources in BFFH has to contain several different parts;
 /// - Currently set state
@@ -77,7 +77,8 @@ pub struct ResourceDriver {
     rx: Receiver<Update>,
 
     // output
-    db: StateAccessor,
+    db: StateDB,
+    key: String,
 
     signal: Mutable<State>,
 }
@@ -99,7 +100,7 @@ impl ResourceDriver {
                     //  "Best" solution would be to tell the resources to rollback their interal
                     //  changes on a fatal failure and then notify the Claimant, while simply trying
                     //  again for temporary failures.
-                    let _ = self.db.set(&state, &outstate);
+                    let _ = self.db.update(self.key.as_bytes(), &state, &outstate);
                     self.signal.set(outstate);
                 },
                 Err(e) => {

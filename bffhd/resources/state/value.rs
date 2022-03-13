@@ -276,8 +276,8 @@ impl Clone for Box<dyn SerializeValue> {
 }
 
 #[ptr_meta::pointee]
-pub trait DeserializeValue: Value + DeserializeDynOid {}
-impl<T: Value + DeserializeDynOid> DeserializeValue for T {}
+pub trait DeserializeValue: DeserializeDynOid {}
+impl<T: DeserializeDynOid> DeserializeValue for T {}
 impl ArchivePointee for dyn DeserializeValue {
     type ArchivedMetadata = ArchivedValueMetadata;
 

@@ -29,7 +29,7 @@ use crate::resources::state::State;
 type StateAdapter = AllocAdapter<State>;
 
 /// State Database containing the currently set state
-#[derive(Clone, Debug)]
+#[derive(Debug)]
 pub struct StateDB {
     /// The environment for all the databases below
     env: Arc<Environment>,
@@ -55,18 +55,6 @@ impl StateDB {
         Self { env: Arc::new(env), input, output }
     }
 
-    pub fn init<P: AsRef<Path>>(path: P) -> lmdb::Result<Self> {
-        let env = Self::open_env(path)?;
-        let input = unsafe {
-            DB::create(&env, Some("input"), DatabaseFlags::INTEGER_KEY)?
-        };
-        let output = unsafe {
-            DB::create(&env, Some("output"), DatabaseFlags::INTEGER_KEY)?
-        };
-
-        Ok(Self::new(env, input, output))
-    }
-
     pub fn open<P: AsRef<Path>>(path: P) -> lmdb::Result<Self> {
         let env = Self::open_env(path)?;
         let input = unsafe { DB::open(&env, Some("input"))?  };
@@ -84,17 +72,17 @@ impl StateDB {
         Ok(Self::new(env, input, output))
     }
 
-    fn update_txn(&self, txn: &mut RwTransaction, key: u64, input: &State, output: &State)
+    fn update_txn(&self, txn: &mut RwTransaction, key: impl AsRef<[u8]>, input: &State, output: &State)
         -> Result<(), DBError>
     {
         let flags = WriteFlags::empty();
-        let k = key.to_ne_bytes();
+        let k = key.as_ref();
         self.input.put(txn, &k, input, flags)?;
         self.output.put(txn, &k, output, flags)?;
         Ok(())
     }
 
-    pub fn update(&self, key: u64, input: &State, output: &State) 
+    pub fn update(&self, key: impl AsRef<[u8]>, input: &State, output: &State)
         -> Result<(), DBError>
     {
         let mut txn = self.env.begin_rw_txn().map_err(StateAdapter::from_db_err)?;
@@ -103,11 +91,11 @@ impl StateDB {
         txn.commit().map_err(StateAdapter::from_db_err)
     }
 
-    fn get(&self, db: &DB<StateAdapter>, key: u64)
+    fn get(&self, db: &DB<StateAdapter>, key: impl AsRef<[u8]>)
         -> Result<Option<LMDBorrow<RoTransaction, Archived<State>>>, DBError> 
     {
         let txn = self.env.begin_ro_txn().map_err(StateAdapter::from_db_err)?;
-        if let Some(state) = db.get(&txn, &key.to_ne_bytes())? {
+        if let Some(state) = db.get(&txn, &key.as_ref())? {
             let ptr = state.into();
             Ok(Some(unsafe { LMDBorrow::new(ptr, txn) }))
         } else {
@@ -116,46 +104,14 @@ impl StateDB {
     }
 
     #[inline(always)]
-    pub fn get_input(&self, key: u64)
+    pub fn get_input(&self, key: impl AsRef<[u8]>)
         -> Result<Option<LMDBorrow<RoTransaction, Archived<State>>>, DBError> 
     { self.get(&self.input, key) }
 
     #[inline(always)]
-    pub fn get_output(&self, key: u64)
+    pub fn get_output(&self, key: impl AsRef<[u8]>)
         -> Result<Option<LMDBorrow<RoTransaction, Archived<State>>>, DBError> 
     { self.get(&self.output, key) }
-
-    pub fn accessor(&self, key: u64) -> StateAccessor {
-        StateAccessor::new(key, self.clone())
-    }
-}
-
-#[derive(Debug)]
-pub struct StateAccessor {
-    key: u64,
-    db: StateDB
-}
-
-impl StateAccessor {
-    pub fn new(key: u64, db: StateDB) -> Self {
-        Self { key, db }
-    }
-
-    pub fn get_input(&self)
-        -> Result<Option<LMDBorrow<RoTransaction, Archived<State>>>, DBError>
-    {
-        self.db.get_input(self.key)
-    }
-
-    pub fn get_output(&self)
-        -> Result<Option<LMDBorrow<RoTransaction, Archived<State>>>, DBError>
-    {
-        self.db.get_output(self.key)
-    }
-
-    pub fn set(&self, input: &State, output: &State) -> Result<(), DBError> {
-        self.db.update(self.key, input, output)
-    }
 }
 
 #[cfg(test)]
@@ -171,7 +127,7 @@ mod tests {
         let tmpdir = tempfile::tempdir().unwrap();
         let mut tmppath = tmpdir.path().to_owned();
         tmppath.push("db");
-        let db = StateDB::init(tmppath).unwrap();
+        let db = StateDB::create(tmppath).unwrap();
         let b = State::build()
             .add(OID_COLOUR.clone(), Box::new(Vec3u8 { a: 1, b: 2, c: 3}))
             .add(OID_POWERED.clone(), Box::new(true))

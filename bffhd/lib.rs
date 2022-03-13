@@ -53,6 +53,7 @@ use executor::pool::Executor;
 use crate::authentication::AuthenticationHandle;
 use crate::capnp::APIServer;
 use crate::config::{Config, TlsListen};
+use crate::resources::modules::fabaccess::MachineState;
 use crate::session::SessionManager;
 use crate::tls::TlsConfig;
 
@@ -87,7 +88,9 @@ impl Diflouroborane {
             SIGTERM,
         ]).context("Failed to construct signal handler")?;
 
-
+        // - Load Machines from config
+        // - Load states from DB
+        // - Connect modules to machines
 
         let tlsconfig = TlsConfig::new(config.tlskeylog.as_ref(), !config.is_quiet())?;
         let acceptor = tlsconfig.make_tls_acceptor(&config.tlsconfig)?;
