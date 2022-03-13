@@ -39,7 +39,9 @@ impl Shelly {
 
 impl Actor for Shelly {
     fn apply(&mut self, state: State) -> BoxFuture<'static, ()> {
-        tracing::debug!(?state, "Shelly changing state");
+        tracing::debug!(?state, name=%self.name,
+            "Shelly changing state"
+        );
         let pl = match state.inner.state {
             Status::InUse(_) => "on",
             _ => "off",

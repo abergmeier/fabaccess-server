@@ -18,8 +18,12 @@ use anyhow::Context as _;
 use once_cell::sync::Lazy;
 use rustls::{Certificate, RootCertStore};
 use url::Url;
+use crate::actors::dummy::Dummy;
+use crate::actors::process::Process;
 
 mod shelly;
+mod process;
+mod dummy;
 
 pub trait Actor {
     fn apply(&mut self, state: State) -> BoxFuture<'static, ()>;
@@ -245,8 +249,8 @@ fn load_single(
 ) -> Option<Box<dyn Actor + Sync + Send>> {
     tracing::info!(%name, %module_name, ?params, "Loading actor");
     match module_name.as_ref() {
-        //"Dummy" => Some(Box::new(Dummy::new())),
-        //"Process" => Process::new(name.clone(), params).map(|a| a.into_boxed_actuator()),
+        "Dummy" => Some(Box::new(Dummy::new(name.clone(), params.clone()))),
+        "Process" => Process::new(name.clone(), params).map(|a| a.into_boxed_actuator()),
         "Shelly" => Some(Box::new(Shelly::new(name.clone(), client, params))),
         _ => {
             None

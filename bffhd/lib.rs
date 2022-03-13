@@ -101,7 +101,10 @@ impl Diflouroborane {
         let resources = ResourcesHandle::new(config.machines.iter().map(|(id, desc)| {
             Resource::new(Arc::new(resources::Inner::new(id.to_string(), statedb.clone(), desc.clone())))
         }));
-        RESOURCES.set(resources);
+        RESOURCES.set(resources.clone());
+
+        actors::load(self.executor.clone(), &config, resources.clone())?;
+
 
         let tlsconfig = TlsConfig::new(config.tlskeylog.as_ref(), !config.is_quiet())?;
         let acceptor = tlsconfig.make_tls_acceptor(&config.tlsconfig)?;
