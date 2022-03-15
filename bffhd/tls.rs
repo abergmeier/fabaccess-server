@@ -3,13 +3,13 @@ use std::io;
 use std::io::BufReader;
 use std::path::Path;
 use std::sync::Arc;
-use anyhow::anyhow;
+
 use futures_rustls::TlsAcceptor;
 use rustls::{Certificate, PrivateKey, ServerConfig, SupportedCipherSuite};
 use rustls::version::{TLS12, TLS13};
-use tracing::{Level, Span};
+use tracing::{Level};
 use crate::config;
-use crate::config::Listen;
+
 use crate::keylog::KeyLogFile;
 
 fn lookup_cipher_suite(name: &str) -> Option<SupportedCipherSuite> {
@@ -84,11 +84,11 @@ impl TlsConfig {
             }
         };
 
-        let mut tls_builder = ServerConfig::builder()
+        let tls_builder = ServerConfig::builder()
             .with_safe_default_cipher_suites()
             .with_safe_default_kx_groups();
 
-        let mut tls_builder = if let Some(ref min) = config.tls_min_version {
+        let tls_builder = if let Some(ref min) = config.tls_min_version {
             match min.as_str() {
                 "tls12" => tls_builder.with_protocol_versions(&[&TLS12]),
                 "tls13" => tls_builder.with_protocol_versions(&[&TLS13]),

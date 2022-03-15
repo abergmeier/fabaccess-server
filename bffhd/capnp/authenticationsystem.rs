@@ -2,10 +2,10 @@ use capnp::capability::Promise;
 use capnp::Error;
 use capnp_rpc::pry;
 use rsasl::property::AuthId;
-use rsasl::session::{Session, Step, StepResult};
+use rsasl::session::{Session, Step};
 use std::io::Cursor;
 
-use crate::authorization::AuthorizationHandle;
+
 use crate::capnp::session::APISession;
 use crate::session::SessionManager;
 use api::authenticationsystem_capnp::authentication::{

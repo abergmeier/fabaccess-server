@@ -39,24 +39,24 @@ mod logging;
 mod audit;
 mod session;
 
-use std::collections::HashMap;
-use std::fs::File;
-use std::io::BufReader;
-use std::path::Path;
-use std::sync::{Arc, Mutex};
-use std::time::Duration;
+
+
+
+
+use std::sync::{Arc};
+
 use anyhow::Context;
-use futures_rustls::TlsAcceptor;
+
 use futures_util::StreamExt;
 use once_cell::sync::OnceCell;
-use rustls::{Certificate, KeyLogFile, PrivateKey, ServerConfig};
-use rustls::server::NoClientAuth;
+
+
 use signal_hook::consts::signal::*;
 use executor::pool::Executor;
 use crate::authentication::AuthenticationHandle;
 use crate::authorization::roles::Roles;
 use crate::capnp::APIServer;
-use crate::config::{Config, TlsListen};
+use crate::config::{Config};
 use crate::resources::modules::fabaccess::MachineState;
 use crate::resources::Resource;
 use crate::resources::search::ResourcesHandle;
@@ -121,7 +121,7 @@ impl Diflouroborane {
         let sessionmanager = SessionManager::new(self.users.clone(), self.roles.clone());
         let authentication = AuthenticationHandle::new(self.users.clone());
 
-        let mut apiserver = self.executor.run(APIServer::bind(self.executor.clone(), &self.config.listens, acceptor, sessionmanager, authentication))?;
+        let apiserver = self.executor.run(APIServer::bind(self.executor.clone(), &self.config.listens, acceptor, sessionmanager, authentication))?;
 
         let (mut tx, rx) = async_oneshot::oneshot();
 

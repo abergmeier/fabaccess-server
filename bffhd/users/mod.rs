@@ -25,8 +25,8 @@ use std::sync::Arc;
 
 pub mod db;
 
-use crate::authorization::roles::Role;
-use crate::db::LMDBorrow;
+
+
 use crate::users::db::UserData;
 use crate::UserDB;
 
@@ -93,7 +93,7 @@ impl Users {
 
     pub fn load_file<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
         let f = std::fs::read(path)?;
-        let mut map: HashMap<String, UserData> = toml::from_slice(&f)?;
+        let map: HashMap<String, UserData> = toml::from_slice(&f)?;
 
         for (uid, mut userdata) in map {
             userdata.passwd = userdata.passwd.map(|pw| {

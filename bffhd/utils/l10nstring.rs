@@ -1,7 +1,7 @@
 use std::collections::HashMap;
-use capnp::capability::Promise;
-use capnp::Error;
-use capnp_rpc::pry;
+
+
+
 use once_cell::sync::Lazy;
 
 struct Locales {

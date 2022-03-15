@@ -53,7 +53,7 @@ impl bootstrap::Server for BootCap {
 
     fn mechanisms(
         &mut self,
-        params: bootstrap::MechanismsParams,
+        _params: bootstrap::MechanismsParams,
         mut result: bootstrap::MechanismsResults,
     ) -> Promise<(), ::capnp::Error> {
         let span = tracing::trace_span!("mechanisms", peer_addr=%self.peer_addr);
@@ -61,7 +61,7 @@ impl bootstrap::Server for BootCap {
 
         tracing::trace!("mechanisms");
 
-        let mut builder = result.get();
+        let builder = result.get();
         let mechs: Vec<_> = self.authentication.list_available_mechs()
             .into_iter()
             .map(|m| m.as_str())

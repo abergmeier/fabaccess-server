@@ -1,4 +1,4 @@
-use crate::authorization::AuthorizationHandle;
+
 use crate::session::SessionHandle;
 use api::machinesystem_capnp::machine_system::{
     info, InfoParams, InfoResults, Server as MachineSystem,
@@ -45,7 +45,7 @@ impl info::Server for Machines {
         let mut builder = result.get().init_machine_list(machine_list.len() as u32);
         for (i, m) in machine_list {
             let resource = m.clone();
-            let mut mbuilder = builder.reborrow().get(i as u32);
+            let mbuilder = builder.reborrow().get(i as u32);
             Machine::build(self.session.clone(), resource, mbuilder);
         }
 
@@ -61,7 +61,7 @@ impl info::Server for Machines {
         let id = pry!(params.get_id());
 
         if let Some(resource) = self.resources.get_by_id(id) {
-            let mut builder = result.get();
+            let builder = result.get();
             Machine::build(self.session.clone(), resource.clone(), builder);
         }
 
@@ -77,7 +77,7 @@ impl info::Server for Machines {
         let urn = pry!(params.get_urn());
 
         if let Some(resource) = self.resources.get_by_urn(urn) {
-            let mut builder = result.get();
+            let builder = result.get();
             Machine::build(self.session.clone(), resource.clone(), builder);
         }
 

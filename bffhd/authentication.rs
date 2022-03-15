@@ -1,11 +1,11 @@
-use crate::users::db::UserDB;
+
 use crate::users::Users;
-use rsasl::error::{SASLError, SessionError};
+use rsasl::error::{SessionError};
 use rsasl::mechname::Mechname;
 use rsasl::property::{AuthId, Password};
 use rsasl::session::{Session, SessionData};
 use rsasl::validate::{validations, Validation};
-use rsasl::{Property, SASL};
+use rsasl::{SASL};
 use std::sync::Arc;
 
 struct Callback {
@@ -21,7 +21,7 @@ impl rsasl::callback::Callback for Callback {
         &self,
         session: &mut SessionData,
         validation: Validation,
-        mechanism: &Mechname,
+        _mechanism: &Mechname,
     ) -> Result<(), SessionError> {
         match validation {
             validations::SIMPLE => {
@@ -38,7 +38,7 @@ impl rsasl::callback::Callback for Callback {
 
                 if user
                     .check_password(passwd.as_bytes())
-                    .map_err(|e| SessionError::AuthenticationFailure)?
+                    .map_err(|_e| SessionError::AuthenticationFailure)?
                 {
                     Ok(())
                 } else {

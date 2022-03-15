@@ -6,7 +6,7 @@ use rkyv::{
     DeserializeUnsized, Fallible, Serialize, SerializeUnsized,
 };
 use rkyv_dyn::{DynDeserializer, DynError, DynSerializer};
-use rkyv_typename::TypeName;
+
 
 use crate::utils::oid::ObjectIdentifier;
 use inventory;
@@ -544,7 +544,7 @@ pub mod macros {
         };
     }
 }
-use macros::*;
+
 
 lazy_static::lazy_static! {
     pub static ref OID_BOOL: ObjectIdentifier = {

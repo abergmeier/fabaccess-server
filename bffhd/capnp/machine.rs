@@ -1,4 +1,4 @@
-use crate::resources::modules::fabaccess::{MachineState, Status};
+use crate::resources::modules::fabaccess::{Status};
 use crate::resources::Resource;
 use crate::session::SessionHandle;
 use api::machine_capnp::machine::{
@@ -17,7 +17,7 @@ pub struct Machine {
 
 impl Machine {
     /// Builds a machine into the given builder. Re
-    pub fn build(session: SessionHandle, resource: Resource, builder: Builder) {
+    pub fn build(session: SessionHandle, resource: Resource, _builder: Builder) {
         if resource.visible(&session) {}
     }
 }
@@ -178,7 +178,7 @@ impl ManageServer for Machine {
         _: manage::ForceFreeResults,
     ) -> Promise<(), ::capnp::Error> {
         let resource = self.resource.clone();
-        let session = self.session.clone();
+        let _session = self.session.clone();
         Promise::from_future(async move {
             resource.force_set(Status::Free).await;
             Ok(())
@@ -213,7 +213,7 @@ impl ManageServer for Machine {
         _: manage::DisabledParams,
         _: manage::DisabledResults,
     ) -> Promise<(), ::capnp::Error> {
-        let mut resource = self.resource.clone();
+        let resource = self.resource.clone();
         Promise::from_future(async move {
             resource.force_set(Status::Disabled).await;
             Ok(())

@@ -3,20 +3,20 @@ use crate::resources::state::State;
 use crate::{Config, ResourcesHandle};
 use async_compat::CompatExt;
 use executor::pool::Executor;
-use futures_signals::signal::{MutableSignalRef, ReadOnlyMutable, Signal};
+use futures_signals::signal::{Signal};
 use futures_util::future::BoxFuture;
 use rumqttc::{AsyncClient, ConnectionError, Event, Incoming, MqttOptions};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::future::Future;
-use std::ops::Deref;
+
 use std::pin::Pin;
-use std::sync::Mutex;
+
 use std::task::{Context, Poll};
 use std::time::Duration;
-use anyhow::Context as _;
+
 use once_cell::sync::Lazy;
-use rustls::{Certificate, RootCertStore};
+use rustls::{RootCertStore};
 use url::Url;
 use crate::actors::dummy::Dummy;
 use crate::actors::process::Process;

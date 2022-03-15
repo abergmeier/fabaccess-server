@@ -2,13 +2,13 @@ use std::default::Default;
 use std::path::{Path, PathBuf};
 use std::collections::HashMap;
 
-use serde::{Serialize, Deserialize, Deserializer, Serializer};
+use serde::{Serialize, Deserialize};
 
 use std::fmt::Formatter;
-use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
-use std::str::FromStr;
-use serde::de::Error;
-use crate::authorization::permissions::{PermRule, PrivilegesBuf};
+use std::net::{ToSocketAddrs};
+
+
+use crate::authorization::permissions::{PrivilegesBuf};
 use crate::authorization::roles::Role;
 
 type Result<T> = std::result::Result<T, serde_dhall::Error>;
@@ -153,7 +153,7 @@ impl Default for Config {
     fn default() -> Self {
         let mut actors: HashMap::<String, ModuleConfig> = HashMap::new();
         let mut initiators: HashMap::<String, ModuleConfig> = HashMap::new();
-        let mut machines = HashMap::new();
+        let machines = HashMap::new();
 
         actors.insert("Actor".to_string(), ModuleConfig {
             module: "Shelly".to_string(),

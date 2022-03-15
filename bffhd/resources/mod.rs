@@ -1,4 +1,4 @@
-use std::ops::Deref;
+
 use std::sync::Arc;
 use futures_signals::signal::{Mutable, Signal, SignalExt};
 use lmdb::RoTransaction;

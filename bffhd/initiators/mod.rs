@@ -148,7 +148,7 @@ impl<S: Signal<Item=ResourceSink> + Unpin, I: Initiator + Unpin> Future for Init
                         // TODO: Log initiator error here
                     }
                 }
-            } else if let Some(ref mut resource) = self.resource {
+            } else if let Some(ref mut _resource) = self.resource {
                 let mut s = self.update_sink.clone();
                 let f = self.initiator.run(&mut s);
                 self.initiator_future.replace(f);

@@ -1,8 +1,8 @@
 use crate::db::{AllocAdapter, Environment, RawDB, Result, DB};
 use crate::db::{DatabaseFlags, LMDBorrow, RoTransaction, WriteFlags};
-use lmdb::{RwTransaction, Transaction};
-use std::collections::{HashMap, HashSet};
-use std::path::Path;
+use lmdb::{Transaction};
+use std::collections::{HashMap};
+
 use std::sync::Arc;
 use anyhow::Context;
 

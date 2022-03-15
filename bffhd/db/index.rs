@@ -1,13 +1,13 @@
-use std::{fs, io};
+use std::{fs};
 use std::collections::HashMap;
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Write;
 use std::path::Path;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::{Mutex, RwLock};
+use std::sync::{RwLock};
 use anyhow::Context;
-use lmdb::Environment;
-use rkyv::{Archive, Serialize, Deserialize, AlignedVec, Archived, with::Lock, Infallible, Fallible, ArchiveUnsized, SerializeUnsized};
+
+use rkyv::{Archive, Serialize, Deserialize, AlignedVec, Archived, with::Lock, Fallible};
 use rkyv::de::deserializers::SharedDeserializeMap;
 use rkyv::ser::Serializer;
 use rkyv::ser::serializers::{AlignedSerializer, AllocScratch, AllocScratchError, AllocSerializer, CompositeSerializer, CompositeSerializerError, FallbackScratch, HeapScratch, ScratchTracker, SharedSerializeMap, SharedSerializeMapError};
@@ -131,7 +131,7 @@ impl<I> DbIndexManager<I>
         let mut serializer = Ser::default();
         tracing::trace!(?serializer, "serializing db index");
         let root = serializer.serialize_value(self).context("serializing database index failed")?;
-        let (s, c, h) = serializer.0.into_components();
+        let (s, c, _h) = serializer.0.into_components();
         let v = s.into_inner();
         tracing::trace!(%root,
             len = v.len(),

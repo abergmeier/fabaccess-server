@@ -1,8 +1,8 @@
-use tracing_subscriber::{EnvFilter, fmt};
+use tracing_subscriber::{EnvFilter};
 use crate::Config;
 
 pub fn init(config: &Config) {
-    let mut builder = tracing_subscriber::fmt()
+    let builder = tracing_subscriber::fmt()
         .with_env_filter(EnvFilter::from_default_env());
     let format = config.log_format.to_lowercase();
     match format.as_str() {
