@@ -4,6 +4,7 @@
 //! Authentication using SASL
 
 use std::cell::RefCell;
+use std::convert::TryFrom;
 use std::io::Cursor;
 use std::rc::Rc;
 use std::sync::Arc;
@@ -18,10 +19,10 @@ use rsasl::callback::Callback;
 use rsasl::error::SessionError;
 use rsasl::mechname::Mechname;
 use rsasl::property::{AuthId, Password};
+use rsasl::{Property, SASL};
 use rsasl::session::Session as RsaslSession;
 use rsasl::session::Step;
 use rsasl::validate::{validations, Validation};
-use rsasl::SASL;
 
 use crate::api::users::Users;
 use crate::api::Session;
@@ -32,6 +33,10 @@ pub use crate::schema::authenticationsystem_capnp as auth_system;
 use crate::db::access::AccessControl as AccessDB;
 use crate::db::user::{Internal as UserDB, User, UserId};
 use crate::network::Network;
+
+mod fabfire;
+pub use fabfire::FABFIRE;
+use crate::api::auth::fabfire::FabFireCardKey;
 
 pub struct AppData {
     userdb: Arc<UserDB>,
@@ -58,6 +63,7 @@ impl Callback for CB {
     ) -> Result<(), SessionError> {
         let ret = match validation {
             validations::SIMPLE => {
+
                 let authid = session
                     .get_property::<AuthId>()
                     .ok_or(SessionError::no_property::<AuthId>())?;
@@ -80,6 +86,30 @@ impl Callback for CB {
             _ => SessionError::no_validate(validation),
         };
         Err(ret)
+    }
+
+    fn provide_prop(
+        &self,
+        session: &mut rsasl::session::SessionData,
+        property: Property,
+    ) -> Result<(), SessionError> {
+        match property {
+            fabfire::FABFIRECARDKEY => {
+                // Access the authentication id, i.e. the username to check the password for
+                let authcid = session.get_property_or_callback::<AuthId>()?;
+                println!("auth'ing user {:?}", authcid);
+                self.userdb.get_user(authcid.unwrap().as_ref()).map(|user| {
+                    let kvs= user.unwrap().data.kv;
+                    println!("kvs: {:?}", kvs);
+                    kvs.get("cardkey").map(|key| {
+                        session.set_property::<FabFireCardKey>(Arc::new(<[u8; 16]>::try_from(hex::decode(key).unwrap()).unwrap()));
+                    });
+                }).ok();
+
+                Ok(())
+            }
+            _ => Err(SessionError::NoProperty { property }),
+        }
     }
 }
 

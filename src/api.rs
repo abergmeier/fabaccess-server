@@ -41,6 +41,7 @@ impl Bootstrap {
     pub fn new(log: Logger, db: Databases, nw: Arc<Network>) -> Self {
         info!(log, "Created Bootstrap");
         let mut ctx = SASL::new();
+        ctx.register(&FABFIRE);
         ctx.install_callback(Arc::new(auth::CB::new(db.userdb.clone())));
         Self { db, nw, log, ctx }
     }
@@ -48,7 +49,7 @@ impl Bootstrap {
 
 use connection_capnp::{API_VERSION_MAJOR, API_VERSION_MINOR, API_VERSION_PATCH};
 use connection_capnp::bootstrap::*;
-use crate::api::auth::Auth;
+use crate::api::auth::{Auth, FABFIRE};
 use crate::RELEASE;
 
 impl connection_capnp::bootstrap::Server for Bootstrap {

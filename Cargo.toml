@@ -47,8 +47,8 @@ uuid = { version = "0.8.2", features = ["serde", "v4"] }
 clap = "2.33.3"
 
 # TODO update this if bindgen breaks (again)
-rsasl = "2.0.0-preview2"
-#rsasl = { path = "../../rsasl" }
+rsasl = { version = "2.0.0-preview2", features = ["unstable_custom_mechanism", "registry_static"]  }
+#rsasl = { path = "../../rsasl", features = ["unstable_custom_mechanism", "registry_static"]  }
 
 rumqttc = { version = "0.10", features = ["url"] }
 async-compat = "0.2.1"
@@ -74,6 +74,11 @@ genawaiter = "0.99.1"
 rustls = "0.20"
 rustls-pemfile = "0.2"
 futures-rustls = "0.22.0"
+
+# Desfire
+desfire = "0.2.0-alpha1"
+hex = { version = "0.4.3", features = ["serde"] }
+linkme = "0.2"
 
 [build-dependencies]
 capnpc = "0.14.4"
