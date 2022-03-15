@@ -97,8 +97,8 @@ fn main() -> anyhow::Result<()> {
         return Ok(());
     } else if matches.is_present("check config") {
         match config::read(&PathBuf::from_str(configpath).unwrap()) {
-            Ok(_) => {
-                //TODO: print a normalized version of the supplied config
+            Ok(c) => {
+                println!("{:#?}", c);
                 println!("config is valid");
                 std::process::exit(0);
             }
@@ -114,17 +114,8 @@ fn main() -> anyhow::Result<()> {
     if matches.is_present("dump") {
         unimplemented!()
     } else if matches.is_present("load") {
-        Diflouroborane::init_logging(&config);
-        let env = Environment::new()
-                .set_flags( EnvironmentFlags::WRITE_MAP
-                    | EnvironmentFlags::NO_SUB_DIR
-                    | EnvironmentFlags::NO_TLS
-                    | EnvironmentFlags::NO_READAHEAD)
-                .set_max_dbs(2)
-                .open(config.db_path.as_ref())
-                .map(Arc::new)?;
-        let userdb = Users::new(env).context("Failed to open users DB file")?;
-        userdb.load_file(matches.value_of("load").unwrap());
+        let bffh = Diflouroborane::new(config)?;
+        bffh.users.load_file(matches.value_of("load").unwrap());
         return Ok(())
     } else {
         let keylog = matches.value_of("keylog");
@@ -147,8 +138,8 @@ fn main() -> anyhow::Result<()> {
         }
         config.log_format = matches.value_of("log format").unwrap_or("Full").to_string();
 
-        let mut bffh = Diflouroborane::new();
-        bffh.setup(&config)?;
+        let mut bffh = Diflouroborane::new(config)?;
+        bffh.run()?;
     }
 
     Ok(())

@@ -54,6 +54,7 @@ use rustls::server::NoClientAuth;
 use signal_hook::consts::signal::*;
 use executor::pool::Executor;
 use crate::authentication::AuthenticationHandle;
+use crate::authorization::roles::Roles;
 use crate::capnp::APIServer;
 use crate::config::{Config, TlsListen};
 use crate::resources::modules::fabaccess::MachineState;
@@ -68,61 +69,59 @@ use crate::users::Users;
 pub const RELEASE_STRING: &'static str = env!("BFFHD_RELEASE_STRING");
 
 pub struct Diflouroborane {
+    config: Config,
     executor: Executor<'static>,
+    pub statedb: Arc<StateDB>,
+    pub users: Users,
+    pub roles: Roles,
+    pub resources: ResourcesHandle,
 }
 
 pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 
 impl Diflouroborane {
-    pub fn new() -> Self {
-        let executor = Executor::new();
-
-        Self { executor }
-    }
-
-    fn log_version_number(&self) {
-        tracing::info!(version=RELEASE_STRING, "Starting");
-    }
-
-    pub fn init_logging(config: &Config) {
+    pub fn new(config: Config) -> anyhow::Result<Self> {
         logging::init(&config);
-    }
-
-    pub fn setup(&mut self, config: &Config) -> anyhow::Result<()> {
-        Self::init_logging(config);
+        tracing::info!(version=RELEASE_STRING, "Starting");
 
         let span = tracing::info_span!("setup");
         let _guard = span.enter();
 
-        self.log_version_number();
-
-        let mut signals = signal_hook_async_std::Signals::new(&[
-            SIGINT,
-            SIGQUIT,
-            SIGTERM,
-        ]).context("Failed to construct signal handler")?;
+        let executor = Executor::new();
 
         let env = StateDB::open_env(&config.db_path)?;
         let statedb = Arc::new(StateDB::create_with_env(env.clone())
             .context("Failed to open state DB file")?);
 
-        let userdb = Users::new(env.clone()).context("Failed to open users DB file")?;
+        let users = Users::new(env.clone()).context("Failed to open users DB file")?;
+        let roles = Roles::new(config.roles.clone());
 
         let resources = ResourcesHandle::new(config.machines.iter().map(|(id, desc)| {
             Resource::new(Arc::new(resources::Inner::new(id.to_string(), statedb.clone(), desc.clone())))
         }));
         RESOURCES.set(resources.clone());
 
-        actors::load(self.executor.clone(), &config, resources.clone())?;
+
+        Ok(Self { config, executor, statedb, users, roles, resources })
+    }
+
+    pub fn run(&mut self) -> anyhow::Result<()> {
+        let mut signals = signal_hook_async_std::Signals::new(&[
+            SIGINT,
+            SIGQUIT,
+            SIGTERM,
+        ]).context("Failed to construct signal handler")?;
+
+        actors::load(self.executor.clone(), &self.config, self.resources.clone())?;
 
 
-        let tlsconfig = TlsConfig::new(config.tlskeylog.as_ref(), !config.is_quiet())?;
-        let acceptor = tlsconfig.make_tls_acceptor(&config.tlsconfig)?;
+        let tlsconfig = TlsConfig::new(self.config.tlskeylog.as_ref(), !self.config.is_quiet())?;
+        let acceptor = tlsconfig.make_tls_acceptor(&self.config.tlsconfig)?;
 
-        let sessionmanager = SessionManager::new(userdb.clone());
-        let authentication = AuthenticationHandle::new(userdb.clone());
+        let sessionmanager = SessionManager::new(self.users.clone(), self.roles.clone());
+        let authentication = AuthenticationHandle::new(self.users.clone());
 
-        let mut apiserver = self.executor.run(APIServer::bind(self.executor.clone(), &config.listens, acceptor, sessionmanager, authentication))?;
+        let mut apiserver = self.executor.run(APIServer::bind(self.executor.clone(), &self.config.listens, acceptor, sessionmanager, authentication))?;
 
         let (mut tx, rx) = async_oneshot::oneshot();
 
