@@ -14,20 +14,22 @@
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
 
-use std::collections::HashMap;
+use anyhow::Context;
+use lmdb::Environment;
+use once_cell::sync::OnceCell;
 use rkyv::{Archive, Deserialize, Infallible, Serialize};
+use std::collections::HashMap;
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
-use anyhow::Context;
-use lmdb::Environment;
 
 pub mod db;
 
 pub use crate::authentication::db::PassDB;
 use crate::authorization::roles::{Role, RoleIdentifier};
-use crate::UserDB;
+use crate::db::LMDBorrow;
 use crate::users::db::UserData;
+use crate::UserDB;
 
 #[derive(
     Clone,
@@ -53,28 +55,37 @@ impl User {
     pub fn get_username(&self) -> &str {
         self.id.as_str()
     }
-
-    pub fn get_roles(&self) -> impl IntoIterator<Item=Role> {
-        unimplemented!();
-        []
-    }
 }
 
-pub struct Inner {
-    userdb: UserDB,
-    //passdb: PassDB,
-}
+static USERDB: OnceCell<UserDB> = OnceCell::new();
 
-#[derive(Clone)]
+#[derive(Copy, Clone)]
+#[repr(transparent)]
 pub struct Users {
-    inner: Arc<Inner>
+    userdb: &'static UserDB,
 }
 
 impl Users {
     pub fn new(env: Arc<Environment>) -> anyhow::Result<Self> {
-        let userdb = unsafe { UserDB::create(env.clone()).unwrap() };
-        //let passdb = unsafe { PassDB::create(env).unwrap() };
-        Ok(Self { inner: Arc::new(Inner { userdb }) })
+        let span = tracing::debug_span!("users", ?env, "Creating Users handle");
+        let _guard = span.enter();
+
+        let userdb = USERDB
+            .get_or_try_init(|| {
+                tracing::debug!("Global resource not yet initialized, initializing…");
+                unsafe { UserDB::create(env.clone()) }
+            })
+            .context("Failed to open userdb")?;
+
+        Ok(Self { userdb })
+    }
+
+    pub fn get_user(&self, uid: &str) -> Option<db::User> {
+        tracing::trace!(uid, "Looking up user");
+        self.userdb
+            .get(uid)
+            .unwrap()
+            .map(|user| Deserialize::<db::User, _>::deserialize(user.deref(), &mut Infallible).unwrap())
     }
 
     pub fn load_file<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
@@ -82,20 +93,25 @@ impl Users {
         let mut map: HashMap<String, UserData> = toml::from_slice(&f)?;
 
         for (uid, mut userdata) in map {
-            userdata.passwd = userdata.passwd.map(|pw| if !pw.starts_with("$argon2") {
-                let config = argon2::Config::default();
-                let salt: [u8; 16] = rand::random();
-                let hash = argon2::hash_encoded(pw.as_bytes(), &salt, &config)
-                    .expect(&format!("Failed to hash password for {}: ", uid));
-                tracing::debug!("Hashed pw for {} to {}", uid, hash);
+            userdata.passwd = userdata.passwd.map(|pw| {
+                if !pw.starts_with("$argon2") {
+                    let config = argon2::Config::default();
+                    let salt: [u8; 16] = rand::random();
+                    let hash = argon2::hash_encoded(pw.as_bytes(), &salt, &config)
+                        .expect(&format!("Failed to hash password for {}: ", uid));
+                    tracing::debug!("Hashed pw for {} to {}", uid, hash);
 
-                hash
-            } else {
-                pw
+                    hash
+                } else {
+                    pw
+                }
             });
-            let user = db::User { id: uid.clone(), userdata };
+            let user = db::User {
+                id: uid.clone(),
+                userdata,
+            };
             tracing::trace!(%uid, ?user, "Storing user object");
-            self.inner.userdb.put(uid.as_str(), &user);
+            self.userdb.put(uid.as_str(), &user);
         }
 
         Ok(())

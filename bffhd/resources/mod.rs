@@ -94,15 +94,13 @@ impl Resource {
     }
 
     fn set_state(&self, state: MachineState) {
-
+        self.inner.set_state(state)
     }
 
     fn set_status(&self, state: Status) {
-        unimplemented!()
-    }
-
-    fn set_previous_user(&self, user: User) {
-        unimplemented!()
+        let old = self.inner.get_state();
+        let new = MachineState { state, .. old };
+        self.set_state(new);
     }
 
     pub async fn try_update(&self, session: SessionHandle, new: Status) {
@@ -168,7 +166,7 @@ impl Resource {
     }
 
     pub async fn force_set(&self, new: Status) {
-        unimplemented!()
+        self.set_status(new);
     }
 
     pub fn visible(&self, session: &SessionHandle) -> bool {
