@@ -10,7 +10,7 @@ use api::usersystem_capnp::user_system::{
 use crate::authorization::AuthorizationHandle;
 use crate::session::SessionHandle;
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct Users {
     session: SessionHandle,
 }

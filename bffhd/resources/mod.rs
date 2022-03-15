@@ -3,6 +3,7 @@ use std::sync::Arc;
 use futures_signals::signal::{Mutable, Signal, SignalExt};
 use lmdb::RoTransaction;
 use rkyv::Archived;
+use crate::authorization::permissions::PrivilegesBuf;
 use crate::config::MachineDescription;
 use crate::db::LMDBorrow;
 use crate::resources::modules::fabaccess::{MachineState, Status};
@@ -91,6 +92,10 @@ impl Resource {
 
     pub fn get_signal(&self) -> impl Signal<Item=State> {
         self.inner.signal()
+    }
+
+    pub fn get_required_privs(&self) -> &PrivilegesBuf {
+        &self.inner.desc.privs
     }
 
     fn set_state(&self, state: MachineState) {

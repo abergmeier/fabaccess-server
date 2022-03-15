@@ -1,7 +1,8 @@
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::fmt;
 use once_cell::sync::OnceCell;
-use crate::authorization::permissions::PermRule;
+use crate::authorization::permissions::{Permission, PermRule};
+use crate::users::db::UserData;
 
 static ROLES: OnceCell<HashMap<String, Role>> = OnceCell::new();
 
@@ -24,6 +25,78 @@ impl Roles {
 
     pub fn get(self, roleid: &str) -> Option<&Role> {
         self.roles.get(roleid)
+    }
+
+
+    /// Tally a role dependency tree into a set
+    ///
+    /// A Default implementation exists which adapter may overwrite with more efficient
+    /// implementations.
+    fn tally_role(&self, roles: &mut HashMap<String, Role>, role_id: &String) {
+        if let Some(role) = self.get(role_id) {
+            // Only check and tally parents of a role at the role itself if it's the first time we
+            // see it
+            if !roles.contains_key(role_id) {
+                for parent in role.parents.iter() {
+                    self.tally_role(roles, parent);
+                }
+
+                roles.insert(role_id.clone(), role.clone());
+            }
+        }
+    }
+
+    fn collect_permrules(&self, user: &UserData) -> Vec<PermRule> {
+        let mut roleset = HashMap::new();
+        for role_id in user.roles.iter() {
+            self.tally_role(&mut roleset, role_id);
+        }
+
+        let mut output = Vec::new();
+
+        // Iter all unique role->permissions we've found and early return on match.
+        for (_roleid, role) in roleset.iter() {
+            output.extend(role.permissions.iter().cloned())
+        }
+
+        output
+    }
+
+    fn permitted_tally(&self,
+                       roles: &mut HashSet<String>,
+                       role_id: &String,
+                       perm: &Permission
+    ) -> bool {
+        if let Some(role) = self.get(role_id) {
+            // Only check and tally parents of a role at the role itself if it's the first time we
+            // see it
+            if !roles.contains(role_id) {
+                for perm_rule in role.permissions.iter() {
+                    if perm_rule.match_perm(perm) {
+                        return true;
+                    }
+                }
+                for parent in role.parents.iter() {
+                    if self.permitted_tally(roles, parent, perm) {
+                        return true;
+                    }
+                }
+
+                roles.insert(role_id.clone());
+            }
+        }
+
+        false
+    }
+
+    pub fn is_permitted(&self, user: &UserData, perm: impl AsRef<Permission>) -> bool {
+        let mut seen = HashSet::new();
+        for role_id in user.roles.iter() {
+            if self.permitted_tally(&mut seen, role_id, perm.as_ref()) {
+                return true;
+            }
+        }
+        false
     }
 }
 
