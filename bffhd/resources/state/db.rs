@@ -43,8 +43,8 @@ pub struct StateDB {
 impl StateDB {
     pub fn open_env<P: AsRef<Path>>(path: P) -> lmdb::Result<Arc<Environment>> {
         Environment::new()
-            .set_flags( EnvironmentFlags::WRITE_MAP 
-                      | EnvironmentFlags::NO_SUB_DIR 
+            .set_flags( EnvironmentFlags::WRITE_MAP
+                      | EnvironmentFlags::NO_SUB_DIR
                       | EnvironmentFlags::NO_TLS
                       | EnvironmentFlags::NO_READAHEAD)
             .set_max_dbs(4)

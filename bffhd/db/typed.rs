@@ -144,6 +144,7 @@ impl<A: Adapter> DB<A>
         -> Result<Option<&'txn Archived<A::Value>>, A::Error>
     {
         if let Some(buf) = self.db.get(txn, key).map_err(A::from_db_err)? {
+            tracing::trace!(?buf, ptr=?buf.as_ptr(), "db read");
             Ok(Some(unsafe { archived_root::<A::Value>(buf.as_ref()) }))
         } else {
             Ok(None)
@@ -171,9 +172,18 @@ impl<'a, A> DB<A>
         let pos = serializer.serialize_value(val)
             .map_err(A::from_ser_err)?;
 
+
         let buf = serializer.into_slice();
-        self.db.put(txn, key, &buf, flags)
+        let buf = buf.as_ref();
+        println!("{:?}", buf);
+
+        tracing::trace!(len=buf.len(), pos, "writing value into db");
+
+        let mut stor = self.db.reserve(txn, key, buf.len(), flags)
             .map_err(A::from_db_err)?;
+
+        tracing::trace!(store=?stor.as_ptr(), "store");
+        stor.copy_from_slice(&buf[..]);
 
         Ok(pos)
     }

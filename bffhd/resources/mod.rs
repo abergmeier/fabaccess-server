@@ -36,7 +36,11 @@ impl Inner {
             state
         } else {
             tracing::info!(%id, "No previous state, defaulting to `free`");
-            MachineState::free(None)
+            let state = MachineState::used(UserRef::new("test".to_string()), Some(UserRef::new
+                ("prev".to_string())));
+            let update = state.to_state();
+            db.update(id.as_bytes(), &update, &update).unwrap();
+            state
         };
         let signal = Mutable::new(state.to_state());
 
