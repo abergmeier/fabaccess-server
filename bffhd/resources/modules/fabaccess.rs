@@ -9,7 +9,7 @@ use crate::oidvalue;
 use crate::resources::state::{State};
 use crate::resources::state::value::Value;
 use crate::session::SessionHandle;
-use crate::users::User;
+use crate::users::UserRef;
 
 /// Status of a Machine
 #[derive(
@@ -28,15 +28,15 @@ pub enum Status {
     /// Not currently used by anybody
     Free,
     /// Used by somebody
-    InUse(User),
+    InUse(UserRef),
     /// Was used by somebody and now needs to be checked for cleanliness
-    ToCheck(User),
+    ToCheck(UserRef),
     /// Not used by anybody but also can not be used. E.g. down for maintenance
-    Blocked(User),
+    Blocked(UserRef),
     /// Disabled for some other reason
     Disabled,
     /// Reserved
-    Reserved(User),
+    Reserved(UserRef),
 }
 
 #[derive(
@@ -54,7 +54,7 @@ pub enum Status {
 /// The status of the machine
 pub struct MachineState {
     pub state: Status,
-    pub previous: Option<User>,
+    pub previous: Option<UserRef>,
 }
 
 impl MachineState {
@@ -76,42 +76,42 @@ impl MachineState {
         }
     }
 
-    pub fn free(previous: Option<User>) -> Self {
+    pub fn free(previous: Option<UserRef>) -> Self {
         Self {
             state: Status::Free,
             previous,
         }
     }
 
-    pub fn used(user: User, previous: Option<User>) -> Self {
+    pub fn used(user: UserRef, previous: Option<UserRef>) -> Self {
         Self {
             state: Status::InUse(user),
             previous,
         }
     }
 
-    pub fn blocked(user: User, previous: Option<User>) -> Self {
+    pub fn blocked(user: UserRef, previous: Option<UserRef>) -> Self {
         Self {
             state: Status::Blocked(user),
             previous,
         }
     }
 
-    pub fn disabled(previous: Option<User>) -> Self {
+    pub fn disabled(previous: Option<UserRef>) -> Self {
         Self {
             state: Status::Disabled,
             previous,
         }
     }
 
-    pub fn reserved(user: User, previous: Option<User>) -> Self {
+    pub fn reserved(user: UserRef, previous: Option<UserRef>) -> Self {
         Self {
             state: Status::Reserved(user),
             previous,
         }
     }
 
-    pub fn check(user: User) -> Self {
+    pub fn check(user: UserRef) -> Self {
         Self {
             state: Status::ToCheck(user.clone()),
             previous: Some(user),

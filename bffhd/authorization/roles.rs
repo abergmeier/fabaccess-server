@@ -1,5 +1,31 @@
+use std::collections::HashMap;
 use std::fmt;
+use once_cell::sync::OnceCell;
 use crate::authorization::permissions::PermRule;
+
+static ROLES: OnceCell<HashMap<String, Role>> = OnceCell::new();
+
+#[derive(Copy, Clone)]
+pub struct Roles {
+    roles: &'static HashMap<String, Role>,
+}
+
+impl Roles {
+    pub fn new(roles: HashMap<String, Role>) -> Self {
+        let span = tracing::debug_span!("roles", "Creating Roles handle");
+        let _guard = span.enter();
+
+        let this = ROLES.get_or_init(|| {
+            tracing::debug!("Initializing global roles…");
+            roles
+        });
+        Self { roles: this }
+    }
+
+    pub fn get(self, roleid: &str) -> Option<&Role> {
+        self.roles.get(roleid)
+    }
+}
 
 /// A "Role" from the Authorization perspective
 ///
@@ -22,7 +48,7 @@ pub struct Role {
     /// This makes situations where different levels of access are required easier: Each higher
     /// level of access sets the lower levels of access as parent, inheriting their permission; if
     /// you are allowed to manage a machine you are then also allowed to use it and so on
-    parents: Vec<RoleIdentifier>,
+    parents: Vec<String>,
 
     // If a role doesn't define permissions, default to an empty Vec.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
@@ -30,7 +56,7 @@ pub struct Role {
 }
 
 impl Role {
-    pub fn new(parents: Vec<RoleIdentifier>, permissions: Vec<PermRule>) -> Self {
+    pub fn new(parents: Vec<String>, permissions: Vec<PermRule>) -> Self {
         Self { parents, permissions }
     }
 }
@@ -57,90 +83,5 @@ impl fmt::Display for Role {
         }
 
         Ok(())
-    }
-}
-
-type SourceID = String;
-
-fn split_once(s: &str, split: char) -> Option<(&str, &str)> {
-    s
-        .find(split)
-        .map(|idx| (&s[..idx], &s[(idx+1)..]))
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
-#[serde(try_from = "String")]
-#[serde(into = "String")]
-/// Universal (relative) id of a role
-pub struct RoleIdentifier {
-    /// Locally unique name for the role. No other role at this instance no matter the source
-    /// may have the same name
-    name: String,
-    /// Role Source, i.e. the database the role comes from
-    source: SourceID,
-}
-
-impl RoleIdentifier {
-    pub fn new<>(name: &str, source: &str) -> Self {
-        Self { name: name.to_string(), source: source.to_string() }
-    }
-    pub fn from_strings(name: String, source: String) -> Self {
-        Self { name, source }
-    }
-}
-
-impl fmt::Display for RoleIdentifier {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        if self.source != "" {
-            write!(f, "{}/{}", self.name, self.source)
-        } else {
-            write!(f, "{}", self.name)
-        }
-    }
-}
-
-impl std::str::FromStr for RoleIdentifier {
-    type Err = RoleFromStrError;
-
-    fn from_str(s: &str) -> std::result::Result<Self, Self::Err> {
-        if let Some((name, source)) = split_once(s, '/') {
-            Ok(RoleIdentifier { name: name.to_string(), source: source.to_string() })
-        } else {
-            Ok(RoleIdentifier { name: s.to_string(), source: String::new() })
-        }
-    }
-}
-
-impl TryFrom<String> for RoleIdentifier {
-    type Error = RoleFromStrError;
-
-    fn try_from(s: String) -> std::result::Result<Self, Self::Error> {
-        <RoleIdentifier as std::str::FromStr>::from_str(&s)
-    }
-}
-impl Into<String> for RoleIdentifier {
-    fn into(self) -> String {
-        format!("{}", self)
-    }
-}
-
-impl RoleIdentifier {
-    pub fn local_from_str(source: String, name: String) -> Self {
-        RoleIdentifier { name, source }
-    }
-}
-
-#[derive(Debug, Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
-pub enum RoleFromStrError {
-    /// No '@' or '%' found. That's strange, huh?
-    Invalid
-}
-
-impl fmt::Display for RoleFromStrError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            RoleFromStrError::Invalid
-            => write!(f, "Rolename are of form 'name%source' or 'name@realm'."),
-        }
     }
 }

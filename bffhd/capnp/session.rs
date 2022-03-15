@@ -5,7 +5,7 @@ use crate::capnp::machinesystem::Machines;
 use crate::capnp::permissionsystem::Permissions;
 use crate::capnp::user_system::Users;
 use crate::session::{SessionHandle, SessionManager};
-use crate::users::User;
+use crate::users::UserRef;
 
 #[derive(Debug, Clone)]
 pub struct APISession;

@@ -26,7 +26,7 @@ use std::sync::Arc;
 pub mod db;
 
 pub use crate::authentication::db::PassDB;
-use crate::authorization::roles::{Role, RoleIdentifier};
+use crate::authorization::roles::Role;
 use crate::db::LMDBorrow;
 use crate::users::db::UserData;
 use crate::UserDB;
@@ -43,13 +43,13 @@ use crate::UserDB;
     serde::Deserialize,
 )]
 #[archive_attr(derive(Debug, PartialEq))]
-pub struct User {
+pub struct UserRef {
     id: String,
 }
 
-impl User {
+impl UserRef {
     pub fn new(id: String) -> Self {
-        User { id }
+        UserRef { id }
     }
 
     pub fn get_username(&self) -> &str {
@@ -73,7 +73,7 @@ impl Users {
         let userdb = USERDB
             .get_or_try_init(|| {
                 tracing::debug!("Global resource not yet initialized, initializing…");
-                unsafe { UserDB::create(env.clone()) }
+                unsafe { UserDB::create(env) }
             })
             .context("Failed to open userdb")?;
 

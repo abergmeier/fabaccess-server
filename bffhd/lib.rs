@@ -119,7 +119,7 @@ impl Diflouroborane {
         let tlsconfig = TlsConfig::new(config.tlskeylog.as_ref(), !config.is_quiet())?;
         let acceptor = tlsconfig.make_tls_acceptor(&config.tlsconfig)?;
 
-        let sessionmanager = SessionManager::new();
+        let sessionmanager = SessionManager::new(userdb.clone());
         let authentication = AuthenticationHandle::new(userdb.clone());
 
         let mut apiserver = self.executor.run(APIServer::bind(self.executor.clone(), &config.listens, acceptor, sessionmanager, authentication))?;

@@ -4,9 +4,9 @@ use lmdb::{RwTransaction, Transaction};
 use std::collections::{HashMap, HashSet};
 use std::path::Path;
 use std::sync::Arc;
+use anyhow::Context;
 
 use rkyv::{Archived, Deserialize};
-use crate::authorization::roles::RoleIdentifier;
 
 #[derive(
     Clone,
@@ -22,6 +22,17 @@ use crate::authorization::roles::RoleIdentifier;
 pub struct User {
     pub id: String,
     pub userdata: UserData,
+}
+
+impl User {
+    pub fn check_password(&self, pwd: &[u8]) -> anyhow::Result<bool> {
+        if let Some(ref encoded) = self.userdata.passwd {
+            argon2::verify_encoded(encoded, pwd)
+                .context("Stored password is an invalid string")
+        } else {
+            Ok(false)
+        }
+    }
 }
 
 #[derive(

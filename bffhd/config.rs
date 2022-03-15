@@ -9,7 +9,6 @@ use std::net::{SocketAddr, IpAddr, ToSocketAddrs};
 use std::str::FromStr;
 use serde::de::Error;
 use crate::authorization::permissions::{PermRule, PrivilegesBuf};
-use crate::authorization::roles::RoleIdentifier;
 
 type Result<T> = std::result::Result<T, serde_dhall::Error>;
 
@@ -66,7 +65,7 @@ pub struct Config {
     pub db_path: PathBuf,
     pub auditlog_path: PathBuf,
 
-    pub roles: HashMap<RoleIdentifier, RoleConfig>,
+    pub roles: HashMap<String, RoleConfig>,
 
     #[serde(flatten)]
     pub tlsconfig: TlsListen,
@@ -90,7 +89,7 @@ impl Config {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RoleConfig {
     #[serde(default = "Vec::new")]
-    pub parents: Vec<RoleIdentifier>,
+    pub parents: Vec<String>,
     #[serde(default = "Vec::new")]
     pub permissions: Vec<PermRule>,
 }

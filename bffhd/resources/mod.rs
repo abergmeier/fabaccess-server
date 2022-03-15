@@ -9,7 +9,7 @@ use crate::resources::modules::fabaccess::{MachineState, Status};
 use crate::resources::state::db::StateDB;
 use crate::resources::state::State;
 use crate::session::SessionHandle;
-use crate::users::User;
+use crate::users::UserRef;
 
 pub mod claim;
 pub mod db;
@@ -173,7 +173,7 @@ impl Resource {
         session.has_disclose(self) || self.is_owned_by(session.get_user())
     }
 
-    pub fn is_owned_by(&self, owner: User) -> bool {
+    pub fn is_owned_by(&self, owner: UserRef) -> bool {
         match self.get_state().state {
             Status::Free | Status::Disabled => false,
 
