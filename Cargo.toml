@@ -36,6 +36,9 @@ async-net = "1.6.1"
 anyhow = "1.0.56"
 toml = "0.5.8"
 
+# Well-known paths/dirs for e.g. cache
+dirs = "4.0.0"
+
 # Runtime
 executor = { path = "runtime/executor" }
 
@@ -48,7 +51,7 @@ clap = { version = "3.1.6", features = ["cargo"] }
 
 # Internal Databases
 lmdb-rkv = "0.14.0"
-rkyv = "0.7"
+rkyv = { version = "0.7", features = [] }
 ptr_meta = "0.1"
 rkyv_typename = "0.7"
 rkyv_dyn = "0.7"

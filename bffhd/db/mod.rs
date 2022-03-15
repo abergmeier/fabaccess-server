@@ -44,6 +44,7 @@ use std::sync::Arc;
 use std::path::Path;
 use crate::users::db::{User, UserDB};
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter};
 use rkyv::Infallible;
 use crate::resources::state::{State, db::StateDB};
 use std::iter::FromIterator;
@@ -58,6 +59,15 @@ pub enum DBError {
     LMDB(lmdb::Error),
     RKYV(<AllocSerializer<1024> as Fallible>::Error),
 }
+impl Display for DBError {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::LMDB(e) => write!(f, "LMDB error: {}", e),
+            Self::RKYV(e) => write!(f, "rkyv error: {}", e),
+        }
+    }
+}
+impl std::error::Error for DBError { }
 
 pub(crate) type Result<T> = std::result::Result<T, DBError>;
 
