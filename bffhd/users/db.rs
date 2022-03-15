@@ -110,6 +110,7 @@ impl UserDB {
         let mut txn = self.env.begin_rw_txn()?;
         let flags = WriteFlags::empty();
         self.db.put(&mut txn, &uid.as_bytes(), user, flags)?;
+        txn.commit()?;
         Ok(())
     }
 
