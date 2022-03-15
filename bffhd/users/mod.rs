@@ -25,7 +25,6 @@ use std::sync::Arc;
 
 pub mod db;
 
-pub use crate::authentication::db::PassDB;
 use crate::authorization::roles::Role;
 use crate::db::LMDBorrow;
 use crate::users::db::UserData;
@@ -78,6 +77,10 @@ impl Users {
             .context("Failed to open userdb")?;
 
         Ok(Self { userdb })
+    }
+
+    pub(crate) fn into_inner(self) -> &'static UserDB {
+        self.userdb
     }
 
     pub fn get_user(&self, uid: &str) -> Option<db::User> {

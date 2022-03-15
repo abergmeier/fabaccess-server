@@ -16,7 +16,9 @@ use std::fs::File;
 use std::future::Future;
 use std::io;
 use std::io::BufReader;
+use std::net::SocketAddr;
 use std::sync::Arc;
+use nix::sys::socket::SockAddr;
 use crate::authentication::AuthenticationHandle;
 use crate::authorization::AuthorizationHandle;
 
@@ -107,6 +109,8 @@ impl APIServer {
             .collect()
             .await;
 
+        tracing::info!("listening on {:?}", sockets);
+
         if sockets.is_empty() {
             tracing::warn!("No usable listen addresses configured for the API server!");
         }
@@ -123,16 +127,25 @@ impl APIServer {
         .take_until(stop)
         .for_each(|stream| async {
             match stream {
-                Ok(stream) => self.handle(self.acceptor.accept(stream)),
+                Ok(stream) => {
+                    if let Ok(peer_addr) = stream.peer_addr() {
+                        self.handle(peer_addr, self.acceptor.accept(stream))
+                    } else {
+                        tracing::error!(?stream, "failing a TCP connection with no peer addr");
+                    }
+                },
                 Err(e) => tracing::warn!("Failed to accept stream: {}", e),
             }
-        });
+        }).await;
+        tracing::info!("closing down API handler");
     }
 
     fn handle<IO: 'static + Unpin + AsyncRead + AsyncWrite>(
         &self,
+        peer_addr: SocketAddr,
         stream: impl Future<Output = io::Result<TlsStream<IO>>>,
     ) {
+        tracing::debug!("handling new API connection");
         let f = async move {
             let stream = match stream.await {
                 Ok(stream) => stream,
@@ -144,7 +157,7 @@ impl APIServer {
             let (rx, tx) = futures_lite::io::split(stream);
             let vat = VatNetwork::new(rx, tx, Side::Server, Default::default());
 
-            let bootstrap: connection::Client = capnp_rpc::new_client(connection::BootCap::new(self.authentication.clone(), self.sessionmanager.clone()));
+            let bootstrap: connection::Client = capnp_rpc::new_client(connection::BootCap::new(peer_addr, self.authentication.clone(), self.sessionmanager.clone()));
 
             if let Err(e) = RpcSystem::new(Box::new(vat), Some(bootstrap.client)).await {
                 tracing::error!("Error during RPC handling: {}", e);

@@ -22,8 +22,4 @@ impl AuthorizationHandle {
         let user = self.users.get_user(uid.as_ref())?;
         Some(user.userdata.roles.clone())
     }
-
-    pub fn is_permitted<'a>(&self, roles: impl IntoIterator<Item=&'a Role>, perm: impl AsRef<Permission>) -> bool {
-        unimplemented!()
-    }
 }

@@ -54,6 +54,8 @@ enum State {
 
 impl AuthenticationSystem for Authentication {
     fn step(&mut self, params: StepParams, mut results: StepResults) -> Promise<(), Error> {
+        let span = tracing::trace_span!("step");
+        let _guard = span.enter();
         let mut builder = results.get();
         if let State::Running(mut session, manager) =
             std::mem::replace(&mut self.state, State::Aborted)

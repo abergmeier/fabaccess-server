@@ -47,7 +47,7 @@ impl StateDB {
                       | EnvironmentFlags::NO_SUB_DIR 
                       | EnvironmentFlags::NO_TLS
                       | EnvironmentFlags::NO_READAHEAD)
-            .set_max_dbs(2)
+            .set_max_dbs(4)
             .open(path.as_ref())
             .map(Arc::new)
     }

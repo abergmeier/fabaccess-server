@@ -49,10 +49,10 @@ use rkyv::Infallible;
 use crate::resources::state::{State, db::StateDB};
 use std::iter::FromIterator;
 use std::ops::Deref;
-use crate::authentication::db::PassDB;
 use crate::resources::search::ResourcesHandle;
 use crate::utils::oid::{ArchivedObjectIdentifier, ObjectIdentifier};
 use crate::resources::state::value::SerializeValue;
+use crate::Users;
 
 #[derive(Debug)]
 pub enum DBError {
@@ -130,14 +130,12 @@ impl<V: Serialize<AlignedSerializer<AlignedVec>>> Adapter for AlignedAdapter<V> 
 #[derive(Debug, serde::Serialize)]
 pub struct Dump {
     users: HashMap<String, User>,
-    passwds: HashMap<String, String>,
     states: HashMap<String, State>,
 }
 
 impl Dump {
-    pub fn new(userdb: UserDB, passdb: PassDB, resources: ResourcesHandle) -> Result<Self> {
-        let users = HashMap::from_iter(userdb.get_all()?.into_iter());
-        let passwds = HashMap::from_iter(passdb.get_all()?.into_iter());
+    pub fn new(userdb: Users, resources: ResourcesHandle) -> Result<Self> {
+        let users = HashMap::from_iter(userdb.into_inner().get_all()?.into_iter());
         let mut states = HashMap::new();
         for resource in resources.list_all().into_iter() {
             if let Some(output) = resource.get_raw_state() {
@@ -147,6 +145,6 @@ impl Dump {
             }
         }
 
-        Ok(Self { users, passwds, states })
+        Ok(Self { users, states })
     }
 }

@@ -1,3 +1,4 @@
+use std::net::SocketAddr;
 pub use api::connection_capnp::bootstrap::Client;
 use api::connection_capnp::bootstrap;
 
@@ -10,13 +11,16 @@ use crate::session::SessionManager;
 
 /// Cap'n Proto API Handler
 pub struct BootCap {
+    peer_addr: SocketAddr,
     authentication: AuthenticationHandle,
     sessionmanager: SessionManager,
 }
 
 impl BootCap {
-    pub fn new(authentication: AuthenticationHandle, sessionmanager: SessionManager) -> Self {
+    pub fn new(peer_addr: SocketAddr, authentication: AuthenticationHandle, sessionmanager: SessionManager) -> Self {
+        tracing::trace!(%peer_addr, "bootstrapping RPC");
         Self {
+            peer_addr,
             authentication,
             sessionmanager,
         }
@@ -29,6 +33,8 @@ impl bootstrap::Server for BootCap {
         _: bootstrap::GetAPIVersionParams,
         _: bootstrap::GetAPIVersionResults,
     ) -> Promise<(), ::capnp::Error> {
+        let span = tracing::trace_span!("get_api_version", peer_addr=%self.peer_addr);
+        let _guard = span.enter();
         Promise::ok(())
     }
 
@@ -37,6 +43,8 @@ impl bootstrap::Server for BootCap {
         _: bootstrap::GetServerReleaseParams,
         mut result: bootstrap::GetServerReleaseResults,
     ) -> Promise<(), ::capnp::Error> {
+        let span = tracing::trace_span!("get_server_release", peer_addr=%self.peer_addr);
+        let _guard = span.enter();
         let mut builder = result.get();
         builder.set_name("bffhd");
         builder.set_release(crate::RELEASE_STRING);
@@ -45,9 +53,14 @@ impl bootstrap::Server for BootCap {
 
     fn mechanisms(
         &mut self,
-        _: bootstrap::MechanismsParams,
+        params: bootstrap::MechanismsParams,
         mut result: bootstrap::MechanismsResults,
     ) -> Promise<(), ::capnp::Error> {
+        let span = tracing::trace_span!("mechanisms", peer_addr=%self.peer_addr);
+        let _guard = span.enter();
+
+        tracing::trace!("mechanisms");
+
         let mut builder = result.get();
         let mechs: Vec<_> = self.authentication.list_available_mechs()
             .into_iter()
@@ -66,8 +79,13 @@ impl bootstrap::Server for BootCap {
         params: bootstrap::CreateSessionParams,
         mut result: bootstrap::CreateSessionResults,
     ) -> Promise<(), ::capnp::Error> {
+        let span = tracing::trace_span!("create_session", peer_addr=%self.peer_addr);
+        let _guard = span.enter();
+
         let params = pry!(params.get());
         let mechanism: &str = pry!(params.get_mechanism());
+
+        tracing::trace!(mechanism);
 
         let mechname = Mechname::new(mechanism.as_bytes());
         let auth = if let Ok(mechname) = mechname {
