@@ -8,8 +8,6 @@ use rsasl::validate::{validations, Validation};
 use rsasl::{Property, SASL};
 use std::sync::Arc;
 
-pub mod db;
-
 struct Callback {
     users: Users,
 }
