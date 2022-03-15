@@ -21,7 +21,6 @@ use crate::db::{
     RoTransaction,
     RwTransaction,
 
-    LMDBorrow,
 };
 
 use crate::resources::state::State;

@@ -5,7 +5,6 @@ use lmdb::RoTransaction;
 use rkyv::Archived;
 use crate::authorization::permissions::PrivilegesBuf;
 use crate::config::MachineDescription;
-use crate::db::LMDBorrow;
 use crate::resources::modules::fabaccess::{MachineState, Status};
 use crate::resources::state::db::StateDB;
 use crate::resources::state::State;

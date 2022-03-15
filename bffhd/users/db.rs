@@ -1,5 +1,5 @@
 use crate::db::{AllocAdapter, Environment, RawDB, Result, DB};
-use crate::db::{DatabaseFlags, LMDBorrow, RoTransaction, WriteFlags};
+use crate::db::{DatabaseFlags, RoTransaction, WriteFlags};
 use lmdb::{Transaction};
 use std::collections::{HashMap};
 

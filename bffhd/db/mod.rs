@@ -17,26 +17,6 @@ use rkyv::{Fallible, Serialize, ser::serializers::AllocSerializer, AlignedVec};
 mod raw;
 pub use raw::RawDB;
 
-mod typed;
-// re-exports
-pub use typed::{
-    DB,
-    TypedCursor,
-
-    Adapter,
-    OutputBuffer,
-};
-
-mod hash;
-pub use hash::{
-    HashDB,
-};
-
-mod fix;
-
-pub mod index;
-pub use fix::LMDBorrow;
-
 use lmdb::Error;
 use rkyv::Deserialize;
 use rkyv::ser::serializers::AlignedSerializer;
@@ -53,79 +33,6 @@ use crate::resources::search::ResourcesHandle;
 
 
 use crate::Users;
-
-#[derive(Debug)]
-pub enum DBError {
-    LMDB(lmdb::Error),
-    RKYV(<AllocSerializer<1024> as Fallible>::Error),
-}
-impl Display for DBError {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        match self {
-            Self::LMDB(e) => write!(f, "LMDB error: {}", e),
-            Self::RKYV(e) => write!(f, "rkyv error: {}", e),
-        }
-    }
-}
-impl std::error::Error for DBError { }
-
-pub(crate) type Result<T> = std::result::Result<T, DBError>;
-
-impl From<lmdb::Error> for DBError {
-    fn from(e: lmdb::Error) -> Self {
-        Self::LMDB(e)
-    }
-}
-
-type Ser = AllocSerializer<1024>;
-#[derive(Clone)]
-pub struct AllocAdapter<V> {
-    phantom: PhantomData<V>,
-}
-
-impl<V> Fallible for AllocAdapter<V> {
-    type Error = DBError;
-}
-
-impl<V: Serialize<Ser>> Adapter for AllocAdapter<V> {
-    type Serializer = Ser;
-    type Value = V;
-
-    fn new_serializer() -> Self::Serializer {
-        Self::Serializer::default()
-    }
-
-    fn from_ser_err(e: <Self::Serializer as Fallible>::Error) -> Self::Error {
-        DBError::RKYV(e)
-    }
-    fn from_db_err(e: lmdb::Error) -> Self::Error {
-        e.into()
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-pub struct AlignedAdapter<V> {
-    phantom: PhantomData<V>,
-}
-impl<V> Fallible for AlignedAdapter<V> {
-    type Error = lmdb::Error;
-}
-impl<V: Serialize<AlignedSerializer<AlignedVec>>> Adapter for AlignedAdapter<V> {
-    type Serializer = AlignedSerializer<AlignedVec>;
-    type Value = V;
-
-    fn new_serializer() -> Self::Serializer {
-        Self::Serializer::default()
-    }
-
-    fn from_ser_err(_: <Self::Serializer as Fallible>::Error) -> <Self as Fallible>::Error {
-        unreachable!()
-    }
-
-    fn from_db_err(e: Error) -> <Self as Fallible>::Error {
-        e
-    }
-}
 
 #[derive(Debug, serde::Serialize)]
 pub struct Dump {
