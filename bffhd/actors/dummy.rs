@@ -1,7 +1,9 @@
 use std::collections::HashMap;
 use futures_util::future;
 use futures_util::future::BoxFuture;
+use rkyv::Archived;
 use crate::actors::Actor;
+use crate::db::ArchivedValue;
 use crate::resources::state::State;
 
 pub struct Dummy {
@@ -16,7 +18,7 @@ impl Dummy {
 }
 
 impl Actor for Dummy {
-    fn apply(&mut self, state: State) -> BoxFuture<'static, ()> {
+    fn apply(&mut self, state: ArchivedValue<State>) -> BoxFuture<'static, ()> {
         tracing::info!(name=%self.name, params=?self.params, ?state, "dummy actor updating state");
         Box::pin(future::ready(()))
     }

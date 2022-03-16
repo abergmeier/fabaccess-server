@@ -1,12 +1,15 @@
-use crate::db::{AllocAdapter, Environment, RawDB, Result, DB};
-use crate::db::{DatabaseFlags, RoTransaction, WriteFlags};
-use lmdb::{Transaction};
+use lmdb::{DatabaseFlags, Environment, Transaction, WriteFlags};
 use std::collections::{HashMap};
+use rkyv::Infallible;
 
 use std::sync::Arc;
 use anyhow::Context;
 
 use rkyv::{Archived, Deserialize};
+use rkyv::ser::Serializer;
+use rkyv::ser::serializers::AllocSerializer;
+use crate::db;
+use crate::db::{AlignedAdapter, ArchivedValue, DB, RawDB};
 
 #[derive(
     Clone,
@@ -72,58 +75,55 @@ impl UserData {
     }
 }
 
-type Adapter = AllocAdapter<User>;
 #[derive(Clone, Debug)]
 pub struct UserDB {
     env: Arc<Environment>,
-    db: DB<Adapter>,
+    db: DB<AlignedAdapter<User>>,
 }
 
 impl UserDB {
     pub unsafe fn new(env: Arc<Environment>, db: RawDB) -> Self {
-        let db = DB::new_unchecked(db);
+        let db = DB::new(db);
         Self { env, db }
     }
 
-    pub unsafe fn open(env: Arc<Environment>) -> Result<Self> {
+    pub unsafe fn open(env: Arc<Environment>) -> Result<Self, db::Error> {
         let db = RawDB::open(&env, Some("user"))?;
         Ok(Self::new(env, db))
     }
 
-    pub unsafe fn create(env: Arc<Environment>) -> Result<Self> {
+    pub unsafe fn create(env: Arc<Environment>) -> Result<Self, db::Error> {
         let flags = DatabaseFlags::empty();
         let db = RawDB::create(&env, Some("user"), flags)?;
         Ok(Self::new(env, db))
     }
 
-    pub fn get(&self, uid: &str) -> Result<Option<LMDBorrow<RoTransaction, Archived<User>>>> {
+    pub fn get(&self, uid: &str) -> Result<Option<ArchivedValue<User>>, db::Error> {
         let txn = self.env.begin_ro_txn()?;
-        if let Some(state) = self.db.get(&txn, &uid.as_bytes())? {
-            let ptr = state.into();
-            Ok(Some(unsafe { LMDBorrow::new(ptr, txn) }))
-        } else {
-            Ok(None)
-        }
+        self.db.get(&txn, &uid.as_bytes())
     }
 
-    pub fn put(&self, uid: &str, user: &User) -> Result<()> {
+    pub fn put(&self, uid: &str, user: &User) -> Result<(), db::Error> {
+        let mut serializer = AllocSerializer::<1024>::default();
+        let pos = serializer.serialize_value(user).expect("rkyv error");
+        assert_eq!(pos, 0);
+        let v = serializer.into_serializer().into_inner();
+        let value = ArchivedValue::new(v);
+
         let mut txn = self.env.begin_rw_txn()?;
         let flags = WriteFlags::empty();
-        self.db.put(&mut txn, &uid.as_bytes(), user, flags)?;
+        self.db.put(&mut txn, &uid.as_bytes(), &value, flags)?;
         txn.commit()?;
         Ok(())
     }
 
-    pub fn get_all(&self) -> Result<Vec<(String, User)>> {
+    pub fn get_all(&self) -> Result<Vec<(String, User)>, db::Error> {
         let txn = self.env.begin_ro_txn()?;
-        let mut cursor = self.db.open_ro_cursor(&txn)?;
-        let iter = cursor.iter_start();
+        let mut iter = self.db.get_all(&txn)?;
         let mut out = Vec::new();
-        let mut deserializer = rkyv::Infallible;
-        for user in iter {
-            let (uid, user) = user?;
+        for (uid, user) in iter {
             let uid = unsafe { std::str::from_utf8_unchecked(uid).to_string() };
-            let user: User = user.deserialize(&mut deserializer).unwrap();
+            let user: User = Deserialize::<User, _>::deserialize(user.as_ref(), &mut Infallible).unwrap();
             out.push((uid, user));
         }
 

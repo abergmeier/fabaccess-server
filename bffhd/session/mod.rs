@@ -5,13 +5,9 @@
 use once_cell::sync::OnceCell;
 use crate::authorization::roles::{Roles};
 use crate::resources::Resource;
-use crate::session::db::SessionCache;
 use crate::Users;
 use crate::users::UserRef;
 
-mod db;
-
-static SESSION_CACHE: OnceCell<SessionCache> = OnceCell::new();
 
 #[derive(Clone)]
 pub struct SessionManager {

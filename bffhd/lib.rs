@@ -25,8 +25,6 @@ pub mod resources;
 
 pub mod actors;
 
-pub mod initiators;
-
 pub mod sensors;
 
 pub mod capnp;
@@ -71,7 +69,7 @@ pub const RELEASE_STRING: &'static str = env!("BFFHD_RELEASE_STRING");
 pub struct Diflouroborane {
     config: Config,
     executor: Executor<'static>,
-    pub statedb: Arc<StateDB>,
+    pub statedb: StateDB,
     pub users: Users,
     pub roles: Roles,
     pub resources: ResourcesHandle,
@@ -90,8 +88,8 @@ impl Diflouroborane {
         let executor = Executor::new();
 
         let env = StateDB::open_env(&config.db_path)?;
-        let statedb = Arc::new(StateDB::create_with_env(env.clone())
-            .context("Failed to open state DB file")?);
+        let statedb = StateDB::create_with_env(env.clone())
+            .context("Failed to open state DB file")?;
 
         let users = Users::new(env.clone()).context("Failed to open users DB file")?;
         let roles = Roles::new(config.roles.clone());

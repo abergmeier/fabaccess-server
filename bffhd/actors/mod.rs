@@ -20,17 +20,14 @@ use rustls::{RootCertStore};
 use url::Url;
 use crate::actors::dummy::Dummy;
 use crate::actors::process::Process;
+use crate::db::ArchivedValue;
 
 mod shelly;
 mod process;
 mod dummy;
 
 pub trait Actor {
-    fn apply(&mut self, state: State) -> BoxFuture<'static, ()>;
-}
-
-fn loader<S: Signal<Item = State>>(cell: &Cell<Option<S>>) -> Option<S> {
-    cell.take()
+    fn apply(&mut self, state: ArchivedValue<State>) -> BoxFuture<'static, ()>;
 }
 
 pub struct ActorDriver<S: 'static> {
@@ -40,7 +37,7 @@ pub struct ActorDriver<S: 'static> {
     future: Option<BoxFuture<'static, ()>>,
 }
 
-impl<S: Signal<Item = State>> ActorDriver<S> {
+impl<S: Signal<Item = ArchivedValue<State>>> ActorDriver<S> {
     pub fn new(signal: S, actor: Box<dyn Actor + Send + Sync>) -> Self {
         Self {
             signal,
@@ -52,7 +49,7 @@ impl<S: Signal<Item = State>> ActorDriver<S> {
 
 impl<S> Future for ActorDriver<S>
 where
-    S: Signal<Item = State> + Unpin + Send,
+    S: Signal<Item = ArchivedValue<State>> + Unpin + Send,
 {
     type Output = ();
 

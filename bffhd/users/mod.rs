@@ -43,7 +43,18 @@ use crate::UserDB;
 )]
 #[archive_attr(derive(Debug, PartialEq))]
 pub struct UserRef {
-    id: String,
+    pub id: String,
+}
+
+impl PartialEq<ArchivedUserRef> for UserRef {
+    fn eq(&self, other: &ArchivedUserRef) -> bool {
+        self.id == other.id
+    }
+}
+impl PartialEq<UserRef> for ArchivedUserRef {
+    fn eq(&self, other: &UserRef) -> bool {
+        self.id == other.id
+    }
 }
 
 impl UserRef {
@@ -88,7 +99,7 @@ impl Users {
         self.userdb
             .get(uid)
             .unwrap()
-            .map(|user| Deserialize::<db::User, _>::deserialize(user.deref(), &mut Infallible).unwrap())
+            .map(|user| Deserialize::<db::User, _>::deserialize(user.as_ref(), &mut Infallible).unwrap())
     }
 
     pub fn load_file<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {

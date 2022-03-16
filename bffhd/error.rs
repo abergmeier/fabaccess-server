@@ -1,7 +1,9 @@
 use std::io;
 use std::fmt;
 use rsasl::error::SessionError;
-use crate::db::DBError;
+use crate::db;
+
+type DBError = db::Error;
 
 #[derive(Debug)]
 /// Shared error type

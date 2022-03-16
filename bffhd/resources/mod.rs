@@ -1,19 +1,21 @@
-
+use std::convert::Infallible;
+use std::ops::Deref;
 use std::sync::Arc;
 use futures_signals::signal::{Mutable, Signal, SignalExt};
 use lmdb::RoTransaction;
-use rkyv::Archived;
+use rkyv::{Archived, Deserialize};
+use rkyv::ser::Serializer;
+use rkyv::ser::serializers::AllocSerializer;
 use crate::authorization::permissions::PrivilegesBuf;
 use crate::config::MachineDescription;
-use crate::resources::modules::fabaccess::{MachineState, Status};
+use crate::db::ArchivedValue;
+use crate::resources::modules::fabaccess::{MachineState, Status, ArchivedStatus};
 use crate::resources::state::db::StateDB;
 use crate::resources::state::State;
 use crate::session::SessionHandle;
 use crate::users::UserRef;
 
-pub mod claim;
 pub mod db;
-pub mod driver;
 pub mod search;
 pub mod state;
 
@@ -23,50 +25,56 @@ pub struct PermissionDenied;
 
 pub(crate) struct Inner {
     id: String,
-    db: Arc<StateDB>,
-    signal: Mutable<State>,
+    db: StateDB,
+    signal: Mutable<ArchivedValue<State>>,
     desc: MachineDescription,
 }
 impl Inner {
-    pub fn new(id: String, db: Arc<StateDB>, desc: MachineDescription) -> Self {
-        let state = if let Some(previous) = db.get_output(id.as_bytes()).unwrap() {
-            let state = MachineState::from(&previous);
-            tracing::info!(%id, ?state, "Found previous state");
-            state
+    pub fn new(id: String, db: StateDB, desc: MachineDescription) -> Self {
+        let state = if let Some(previous) = db.get(id.as_bytes()).unwrap() {
+            tracing::info!(%id, ?previous, "Found previous state");
+            previous
         } else {
             tracing::info!(%id, "No previous state, defaulting to `free`");
-            let state = MachineState::used(UserRef::new("test".to_string()), Some(UserRef::new
-                ("prev".to_string())));
+            let state = MachineState::used(UserRef::new("test".to_string()), Some(UserRef::new("prev".to_string())));
+
             let update = state.to_state();
-            db.update(id.as_bytes(), &update, &update).unwrap();
-            state
+
+            let mut serializer = AllocSerializer::<1024>::default();
+            serializer.serialize_value(&update).expect("failed to serialize new default state");
+            let val = ArchivedValue::new(serializer.into_serializer().into_inner());
+            db.put(&id.as_bytes(), &val).unwrap();
+            val
         };
-        let signal = Mutable::new(state.to_state());
+        let signal = Mutable::new(state);
 
         Self { id, db, signal, desc }
     }
 
-    pub fn signal(&self) -> impl Signal<Item=State> {
-        Box::pin(self.signal.signal_cloned().dedupe_cloned())
+    pub fn signal(&self) -> impl Signal<Item=ArchivedValue<State>> {
+        Box::pin(self.signal.signal_cloned())
     }
 
-    fn get_state(&self) -> MachineState {
-        MachineState::from(&self.db.get_output(self.id.as_bytes()).unwrap().unwrap())
+    fn get_state(&self) -> ArchivedValue<State> {
+        self.db.get(self.id.as_bytes())
+            .expect("lmdb error")
+            .expect("state should never be None")
     }
 
-    fn get_raw_state(&self) -> Option<LMDBorrow<RoTransaction, Archived<State>>> {
-        self.db.get_output(self.id.as_bytes()).unwrap()
+    fn get_ref(&self) -> impl Deref<Target=ArchivedValue<State>> + '_ {
+        self.signal.lock_ref()
     }
 
-    fn set_state(&self, state: MachineState) {
-        let span = tracing::debug_span!("set", id = %self.id, ?state, "Updating state");
+    fn set_state(&self, state: ArchivedValue<State>) {
+        let span = tracing::debug_span!("set_state", id = %self.id, ?state);
         let _guard = span.enter();
         tracing::debug!("Updating state");
+
         tracing::trace!("Updating DB");
-        let update = state.to_state();
-        self.db.update(self.id.as_bytes(), &update, &update).unwrap();
+        self.db.put(&self.id.as_bytes(), &state).unwrap();
         tracing::trace!("Updated DB, sending update signal");
-        self.signal.set(update);
+
+        self.signal.set(state);
         tracing::trace!("Sent update signal");
     }
 }
@@ -81,11 +89,7 @@ impl Resource {
         Self { inner }
     }
 
-    pub fn get_raw_state(&self) -> Option<LMDBorrow<RoTransaction, Archived<State>>> {
-        self.inner.get_raw_state()
-    }
-
-    pub fn get_state(&self) -> MachineState {
+    pub fn get_state(&self) -> ArchivedValue<State> {
         self.inner.get_state()
     }
 
@@ -93,7 +97,7 @@ impl Resource {
         &self.inner.id
     }
 
-    pub fn get_signal(&self) -> impl Signal<Item=State> {
+    pub fn get_signal(&self) -> impl Signal<Item=ArchivedValue<State>> {
         self.inner.signal()
     }
 
@@ -102,46 +106,54 @@ impl Resource {
     }
 
     fn set_state(&self, state: MachineState) {
-        self.inner.set_state(state)
+        let mut serializer = AllocSerializer::<1024>::default();
+        serializer.serialize_value(&state);
+        let archived = ArchivedValue::new(serializer.into_serializer().into_inner());
+        self.inner.set_state(archived)
     }
 
     fn set_status(&self, state: Status) {
         let old = self.inner.get_state();
-        let new = MachineState { state, .. old };
+        let oldref: &Archived<State> = old.as_ref();
+        let previous: &Archived<Option<UserRef>> = &oldref.inner.previous;
+        let previous = Deserialize::<Option<UserRef>, _>::deserialize(previous, &mut rkyv::Infallible)
+            .expect("Infallible deserializer failed");
+        let new = MachineState { state, previous };
         self.set_state(new);
     }
 
     pub async fn try_update(&self, session: SessionHandle, new: Status) {
         let old = self.get_state();
+        let old: &Archived<State> = old.as_ref();
         let user = session.get_user();
 
         if session.has_manage(self) // Default allow for managers
 
             || (session.has_write(self) // Decision tree for writers
-                && match (&old.state, &new) {
+                && match (&old.inner.state, &new) {
                 // Going from available to used by the person requesting is okay.
-                (Status::Free, Status::InUse(who))
+                (ArchivedStatus::Free, Status::InUse(who))
                 // Check that the person requesting does not request for somebody else.
                 // *That* is manage privilege.
                 if who == &user => true,
 
                 // Reserving things for ourself is okay.
-                (Status::Free, Status::Reserved(whom))
+                (ArchivedStatus::Free, Status::Reserved(whom))
                 if &user == whom => true,
 
                 // Returning things we've been using is okay. This includes both if
                 // they're being freed or marked as to be checked.
-                (Status::InUse(who), Status::Free | Status::ToCheck(_))
+                (ArchivedStatus::InUse(who), Status::Free | Status::ToCheck(_))
                 if who == &user => true,
 
                 // Un-reserving things we reserved is okay
-                (Status::Reserved(whom), Status::Free)
+                (ArchivedStatus::Reserved(whom), Status::Free)
                 if whom == &user => true,
                 // Using things that we've reserved is okay. But the person requesting
                 // that has to be the person that reserved the machine. Otherwise
                 // somebody could make a machine reserved by a different user as used by
                 // that different user but use it themself.
-                (Status::Reserved(whom), Status::InUse(who))
+                (ArchivedStatus::Reserved(whom), Status::InUse(who))
                 if whom == &user && who == whom => true,
 
                 // Default is deny.
@@ -149,13 +161,13 @@ impl Resource {
             })
 
             // Default permissions everybody has
-            || match (&old.state, &new) {
+            || match (&old.inner.state, &new) {
                 // Returning things we've been using is okay. This includes both if
                 // they're being freed or marked as to be checked.
-                (Status::InUse(who), Status::Free | Status::ToCheck(_)) if who == &user => true,
+                (ArchivedStatus::InUse(who), Status::Free | Status::ToCheck(_)) if who == &user => true,
 
                 // Un-reserving things we reserved is okay
-                (Status::Reserved(whom), Status::Free) if whom == &user => true,
+                (ArchivedStatus::Reserved(whom), Status::Free) if whom == &user => true,
 
                 // Default is deny.
                 _ => false,
@@ -166,11 +178,15 @@ impl Resource {
     }
 
     pub async fn give_back(&self, session: SessionHandle) {
-        if let Status::InUse(user) = self.get_state().state {
+        let state = self.get_state();
+        let s: &Archived<State> = state.as_ref();
+        let i: &Archived<MachineState> = &s.inner;
+        unimplemented!();
+        /*if let Status::InUse(user) = self.get_state().state {
             if user == session.get_user() {
                 self.set_state(MachineState::free(Some(user)));
             }
-        }
+        }*/
     }
 
     pub async fn force_set(&self, new: Status) {
@@ -182,13 +198,13 @@ impl Resource {
     }
 
     pub fn is_owned_by(&self, owner: UserRef) -> bool {
-        match self.get_state().state {
-            Status::Free | Status::Disabled => false,
+        match &self.get_state().as_ref().inner.state {
+            ArchivedStatus::Free | ArchivedStatus::Disabled => false,
 
-            Status::InUse(user)
-            | Status::ToCheck(user)
-            | Status::Blocked(user)
-            | Status::Reserved(user) => user == owner,
+            ArchivedStatus::InUse(user)
+            | ArchivedStatus::ToCheck(user)
+            | ArchivedStatus::Blocked(user)
+            | ArchivedStatus::Reserved(user) => user == &owner,
         }
     }
 }

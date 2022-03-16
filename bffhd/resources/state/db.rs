@@ -1,74 +1,52 @@
-use std::{
-    sync::Arc,
-    path::Path,
-};
-
-use rkyv::Archived;
-
-use crate::db::{
-    DB,
-    Environment,
-
-    EnvironmentFlags,
-    DatabaseFlags,
+use crate::db;
+use crate::db::{ArchivedValue, RawDB, DB, AlignedAdapter};
+use lmdb::{
+    DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction, Transaction,
     WriteFlags,
-
-    Adapter,
-    AllocAdapter,
-    DBError,
-
-    Transaction,
-    RoTransaction,
-    RwTransaction,
-
 };
+use std::{path::Path, sync::Arc};
 
 use crate::resources::state::State;
 
-type StateAdapter = AllocAdapter<State>;
-
-/// State Database containing the currently set state
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct StateDB {
-    /// The environment for all the databases below
     env: Arc<Environment>,
-
-    input: DB<StateAdapter>,
-    output: DB<StateAdapter>,
-
-    // TODO: Index resources name/id/uuid -> u64
+    db: DB<AlignedAdapter<State>>,
 }
 
 impl StateDB {
     pub fn open_env<P: AsRef<Path>>(path: P) -> lmdb::Result<Arc<Environment>> {
         Environment::new()
-            .set_flags( EnvironmentFlags::WRITE_MAP
-                      | EnvironmentFlags::NO_SUB_DIR
-                      | EnvironmentFlags::NO_TLS
-                      | EnvironmentFlags::NO_READAHEAD)
-            .set_max_dbs(4)
+            .set_flags(
+                EnvironmentFlags::WRITE_MAP
+                    | EnvironmentFlags::NO_SUB_DIR
+                    | EnvironmentFlags::NO_TLS
+                    | EnvironmentFlags::NO_READAHEAD,
+            )
             .open(path.as_ref())
             .map(Arc::new)
     }
 
-    fn new(env: Arc<Environment>, input: DB<StateAdapter>, output: DB<StateAdapter>) -> Self {
-        Self { env: env, input, output }
+    fn new(env: Arc<Environment>, db: RawDB) -> Self {
+        let db = DB::new(db);
+        Self { env, db }
+    }
+
+    pub fn open_with_env(env: Arc<Environment>) -> lmdb::Result<Self> {
+        let db = unsafe { RawDB::open(&env, Some("state"))? };
+        Ok(Self::new(env, db))
     }
 
     pub fn open<P: AsRef<Path>>(path: P) -> lmdb::Result<Self> {
         let env = Self::open_env(path)?;
-        let input = unsafe { DB::open(&env, Some("input"))?  };
-        let output = unsafe { DB::open(&env, Some("output"))?  };
-
-        Ok(Self::new(env, input, output))
+        Self::open_with_env(env)
     }
 
     pub fn create_with_env(env: Arc<Environment>) -> lmdb::Result<Self> {
         let flags = DatabaseFlags::empty();
-        let input = unsafe { DB::create(&env, Some("input"), flags)?  };
-        let output = unsafe { DB::create(&env, Some("output"), flags)?  };
+        let db = unsafe { RawDB::create(&env, Some("state"), flags)? };
 
-        Ok(Self::new(env, input, output))
+        Ok(Self::new(env, db))
     }
 
     pub fn create<P: AsRef<Path>>(path: P) -> lmdb::Result<Self> {
@@ -76,46 +54,28 @@ impl StateDB {
         Self::create_with_env(env)
     }
 
-    fn update_txn(&self, txn: &mut RwTransaction, key: impl AsRef<[u8]>, input: &State, output: &State)
-        -> Result<(), DBError>
-    {
+    pub fn begin_ro_txn(&self) -> Result<impl Transaction + '_, db::Error> {
+        self.env.begin_ro_txn()
+    }
+
+    pub fn get(&self, key: impl AsRef<[u8]>) -> Result<Option<ArchivedValue<State>>, db::Error> {
+        let txn = self.env.begin_ro_txn()?;
+        self.db.get(&txn, &key.as_ref())
+    }
+
+    pub fn get_all<'txn, T: Transaction>(
+        &self,
+        txn: &'txn T,
+    ) -> Result<impl IntoIterator<Item = (&'txn [u8], ArchivedValue<State>)>, db::Error, > {
+        self.db.get_all(txn)
+    }
+
+    pub fn put(&self, key: &impl AsRef<[u8]>, val: &ArchivedValue<State>) -> Result<(), db::Error> {
+        let mut txn = self.env.begin_rw_txn()?;
         let flags = WriteFlags::empty();
-        let k = key.as_ref();
-        self.input.put(txn, &k, input, flags)?;
-        self.output.put(txn, &k, output, flags)?;
-        Ok(())
+        self.db.put(&mut txn, key, val, flags)?;
+        txn.commit()
     }
-
-    pub fn update(&self, key: impl AsRef<[u8]>, input: &State, output: &State)
-        -> Result<(), DBError>
-    {
-        let mut txn = self.env.begin_rw_txn().map_err(StateAdapter::from_db_err)?;
-        self.update_txn(&mut txn, key, input, output)?;
-
-        txn.commit().map_err(StateAdapter::from_db_err)
-    }
-
-    fn get(&self, db: &DB<StateAdapter>, key: impl AsRef<[u8]>)
-        -> Result<Option<LMDBorrow<RoTransaction, Archived<State>>>, DBError> 
-    {
-        let txn = self.env.begin_ro_txn().map_err(StateAdapter::from_db_err)?;
-        if let Some(state) = db.get(&txn, &key.as_ref())? {
-            let ptr = state.into();
-            Ok(Some(unsafe { LMDBorrow::new(ptr, txn) }))
-        } else {
-            Ok(None)
-        }
-    }
-
-    #[inline(always)]
-    pub fn get_input(&self, key: impl AsRef<[u8]>)
-        -> Result<Option<LMDBorrow<RoTransaction, Archived<State>>>, DBError> 
-    { self.get(&self.input, key) }
-
-    #[inline(always)]
-    pub fn get_output(&self, key: impl AsRef<[u8]>)
-        -> Result<Option<LMDBorrow<RoTransaction, Archived<State>>>, DBError> 
-    { self.get(&self.output, key) }
 }
 
 #[cfg(test)]
@@ -123,7 +83,7 @@ mod tests {
     use super::*;
 
     use crate::resource::state::value::Vec3u8;
-    use crate::resource::state::value::{OID_COLOUR, OID_POWERED, OID_INTENSITY};
+    use crate::resource::state::value::{OID_COLOUR, OID_INTENSITY, OID_POWERED};
     use std::ops::Deref;
 
     #[test]
@@ -133,14 +93,14 @@ mod tests {
         tmppath.push("db");
         let db = StateDB::create(tmppath).unwrap();
         let b = State::build()
-            .add(OID_COLOUR.clone(), Box::new(Vec3u8 { a: 1, b: 2, c: 3}))
+            .add(OID_COLOUR.clone(), Box::new(Vec3u8 { a: 1, b: 2, c: 3 }))
             .add(OID_POWERED.clone(), Box::new(true))
             .add(OID_INTENSITY.clone(), Box::new(1023))
             .finish();
         println!("({}) {:?}", b.hash(), b);
 
         let c = State::build()
-            .add(OID_COLOUR.clone(), Box::new(Vec3u8 { a: 1, b: 2, c: 3}))
+            .add(OID_COLOUR.clone(), Box::new(Vec3u8 { a: 1, b: 2, c: 3 }))
             .add(OID_POWERED.clone(), Box::new(true))
             .add(OID_INTENSITY.clone(), Box::new(1023))
             .finish();

@@ -1,8 +1,10 @@
 use std::collections::HashMap;
 use std::process::{Command, Stdio};
 use futures_util::future::BoxFuture;
+use rkyv::Archived;
 use crate::actors::Actor;
-use crate::resources::modules::fabaccess::Status;
+use crate::db::ArchivedValue;
+use crate::resources::modules::fabaccess::ArchivedStatus;
 use crate::resources::state::State;
 
 pub struct Process {
@@ -29,7 +31,7 @@ impl Process {
 }
 
 impl Actor for Process {
-    fn apply(&mut self, state: State) -> BoxFuture<'static, ()> {
+    fn apply(&mut self, state: ArchivedValue<State>) -> BoxFuture<'static, ()> {
         tracing::debug!(name=%self.name, cmd=%self.cmd, ?state,
             "Process actor updating state");
         let mut command = Command::new(&self.cmd);
@@ -38,25 +40,25 @@ impl Actor for Process {
             .args(self.args.iter())
             .arg(&self.name);
 
-        match state.inner.state {
-            Status::Free => {
+        match &state.as_ref().inner.state {
+            ArchivedStatus::Free => {
                 command.arg("free");
             }
-            Status::InUse(ref by) => {
-                command.arg("inuse").arg(format!("{}", by.get_username()));
+            ArchivedStatus::InUse(by) => {
+                command.arg("inuse").arg(by.id.as_str());
             }
-            Status::ToCheck(ref by) => {
+            ArchivedStatus::ToCheck(by) => {
                 command.arg("tocheck")
-                       .arg(format!("{}", by.get_username()));
+                       .arg(by.id.as_str());
             }
-            Status::Blocked(ref by) => {
+            ArchivedStatus::Blocked(by) => {
                 command.arg("blocked")
-                       .arg(format!("{}", by.get_username()));
+                       .arg(by.id.as_str());
             }
-            Status::Disabled => { command.arg("disabled"); },
-            Status::Reserved(ref by) => {
+            ArchivedStatus::Disabled => { command.arg("disabled"); },
+            ArchivedStatus::Reserved(by) => {
                 command.arg("reserved")
-                       .arg(format!("{}", by.get_username()));
+                       .arg(by.id.as_str());
             }
         }
 

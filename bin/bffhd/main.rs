@@ -1,5 +1,4 @@
 use clap::{Arg, Command};
-use diflouroborane::db::Dump;
 use diflouroborane::{config, Diflouroborane};
 
 
@@ -112,9 +111,7 @@ fn main() -> anyhow::Result<()> {
     let mut config = config::read(&PathBuf::from_str(configpath).unwrap()).unwrap();
 
     if matches.is_present("dump") {
-        let bffh = Diflouroborane::new(config)?;
-        let dump = Dump::new(bffh.users, bffh.resources)?;
-        println!("{:?}", dump);
+        unimplemented!()
     } else if matches.is_present("load") {
         let bffh = Diflouroborane::new(config)?;
         bffh.users.load_file(matches.value_of("load").unwrap());

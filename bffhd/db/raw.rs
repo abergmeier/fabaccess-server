@@ -38,7 +38,7 @@ impl RawDB {
         txn.put(self.db, key, value, flags)
     }
 
-    pub fn reserve<'txn, K>(&self, txn: &'txn mut RwTransaction, key: &K, size: usize, flags: WriteFlags) 
+    pub fn reserve<'txn, K>(&self, txn: &'txn mut RwTransaction, key: &K, size: usize, flags: WriteFlags)
         -> lmdb::Result<&'txn mut [u8]>
         where K: AsRef<[u8]>
     {
