@@ -69,7 +69,7 @@ impl UserRef {
 
 static USERDB: OnceCell<UserDB> = OnceCell::new();
 
-#[derive(Copy, Clone)]
+#[derive(Copy, Clone, Debug)]
 #[repr(transparent)]
 pub struct Users {
     userdb: &'static UserDB,

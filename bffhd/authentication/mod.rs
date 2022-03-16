@@ -7,6 +7,9 @@ use rsasl::session::{Session, SessionData};
 use rsasl::validate::{validations, Validation};
 use rsasl::{SASL};
 use std::sync::Arc;
+use rsasl::registry::Mechanism;
+
+mod fabfire;
 
 struct Callback {
     users: Users,
@@ -66,8 +69,18 @@ pub struct AuthenticationHandle {
 
 impl AuthenticationHandle {
     pub fn new(userdb: Users) -> Self {
+        let span = tracing::debug_span!("authentication");
+        let _guard = span.enter();
+
         let mut rsasl = SASL::new();
         rsasl.install_callback(Arc::new(Callback::new(userdb)));
+
+        let mechs: Vec<&'static str> = rsasl.server_mech_list().into_iter()
+            .map(|m| m.mechanism.as_str())
+            .collect();
+        tracing::info!(available_mechs=mechs.len(), "initialized sasl backend");
+        tracing::debug!(?mechs, "available mechs");
+
         Self {
             inner: Arc::new(Inner::new(rsasl)),
         }
