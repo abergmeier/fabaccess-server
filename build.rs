@@ -1,28 +1,7 @@
 use std::process::Command;
 
 fn main() {
-    // Build version number using the current git commit id
-    let out = Command::new("git").arg("rev-list")
-                                 .args(["HEAD", "-1"])
-                                 .output()
-                                 .expect("failed to run `git rev-list HEAD -1`");
-    let owned_gitrev = String::from_utf8(out.stdout)
-        .expect("git rev-list output was not valid UTF8");
-    let gitrev = owned_gitrev.trim();
-    let abbrev = match gitrev.len(){
-        0 => "unknown",
-        _ => &gitrev[0..9],
-    };
-    println!("cargo:rustc-env=CARGO_PKG_VERSION_GITREV={}", gitrev);
-
-    let out = Command::new("git").arg("log")
-                                 .args(["-1", "--format=%as"])
-                                 .output()
-                                 .expect("failed to run `git log -1 --format=\"format:%as\"`");
-    let commit_date = String::from_utf8(out.stdout)
-        .expect("git log output was not valid UTF8");
-    let commit_date = commit_date.trim();
-    println!("cargo:rustc-env=BFFH_GIT_COMMIT_DATE={}", commit_date);
+    println!(">>> Building version number...");
 
     let rustc = std::env::var("RUSTC").unwrap();
     let out = Command::new(rustc).arg("--version")
@@ -39,6 +18,27 @@ fn main() {
                 version = env!("CARGO_PKG_VERSION"),
                 rustc = rustc_version)
     } else {
+        // Build version number using the current git commit id
+        let out = Command::new("git").arg("rev-list")
+                                     .args(["HEAD", "-1"])
+                                     .output()
+                                     .expect("failed to run `git rev-list HEAD -1`");
+        let owned_gitrev = String::from_utf8(out.stdout)
+            .expect("git rev-list output was not valid UTF8");
+        let gitrev = owned_gitrev.trim();
+        let abbrev = match gitrev.len(){
+            0 => "unknown",
+            _ => &gitrev[0..9],
+        };
+
+        let out = Command::new("git").arg("log")
+                                     .args(["-1", "--format=%as"])
+                                     .output()
+                                     .expect("failed to run `git log -1 --format=\"format:%as\"`");
+        let commit_date = String::from_utf8(out.stdout)
+            .expect("git log output was not valid UTF8");
+        let commit_date = commit_date.trim();
+
         format!("BFFH {version} ({gitrev} {date}) [{rustc}]",
                 version=env!("CARGO_PKG_VERSION"),
                 gitrev=abbrev,
