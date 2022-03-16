@@ -95,12 +95,9 @@ impl Callback for CB {
     ) -> Result<(), SessionError> {
         match property {
             fabfire::FABFIRECARDKEY => {
-                // Access the authentication id, i.e. the username to check the password for
                 let authcid = session.get_property_or_callback::<AuthId>()?;
-                println!("auth'ing user {:?}", authcid);
                 self.userdb.get_user(authcid.unwrap().as_ref()).map(|user| {
                     let kvs= user.unwrap().data.kv;
-                    println!("kvs: {:?}", kvs);
                     kvs.get("cardkey").map(|key| {
                         session.set_property::<FabFireCardKey>(Arc::new(<[u8; 16]>::try_from(hex::decode(key).unwrap()).unwrap()));
                     });
@@ -205,8 +202,8 @@ impl authentication::Server for Auth {
                 }
                 Ok(Step::NeedsMore(_)) => {
                     trace!(self.log, "Authentication wants more data");
-                    self.state = State::Aborted;
-                    self.build_error(builder);
+                    builder.set_challenge(&out.get_ref());
+                    self.state = State::Running(session);
                 }
                 Err(error) => {
                     trace!(self.log, "Authentication errored: {}", error);
