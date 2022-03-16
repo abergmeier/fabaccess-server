@@ -48,6 +48,7 @@ fn main() {
     let rustc_version = rustc_version.trim();
     println!("cargo:rustc-env=CARGO_RUSTC_VERSION={}", rustc_version);
 
+    println!("cargo:rerun-if-env-changed=BFFHD_BUILD_TAGGED_RELEASE");
     let tagged_release = option_env!("BFFHD_BUILD_TAGGED_RELEASE") == Some("1");
     let release = if tagged_release {
         format!("BFFH {version} [{rustc}]",
