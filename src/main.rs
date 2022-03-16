@@ -120,7 +120,7 @@ fn main() {
         // Log is in an Arc so we can do very cheap clones in closures.
         let (log, guard) = log::init();
         let log = Arc::new(log);
-        info!(log, "Starting");
+        info!(log, "Starting {}", RELEASE);
 
         match maybe(matches, log.clone()) {
             Ok(_) => {},
