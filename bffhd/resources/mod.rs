@@ -35,8 +35,8 @@ impl Inner {
             tracing::info!(%id, ?previous, "Found previous state");
             previous
         } else {
-            tracing::info!(%id, "No previous state, defaulting to `free`");
-            let state = MachineState::used(UserRef::new("test".to_string()), Some(UserRef::new("prev".to_string())));
+            let state = MachineState::free(None);
+            tracing::info!(%id, ?state, "No previous state found, setting default");
 
             let update = state.to_state();
 
@@ -61,7 +61,7 @@ impl Inner {
             .expect("state should never be None")
     }
 
-    fn get_ref(&self) -> impl Deref<Target=ArchivedValue<State>> + '_ {
+    fn get_state_ref(&self) -> impl Deref<Target=ArchivedValue<State>> + '_ {
         self.signal.lock_ref()
     }
 
@@ -93,8 +93,16 @@ impl Resource {
         self.inner.get_state()
     }
 
+    pub fn get_state_ref(&self) -> impl Deref<Target=ArchivedValue<State>> + '_ {
+        self.inner.get_state_ref()
+    }
+
     pub fn get_id(&self) -> &str {
         &self.inner.id
+    }
+
+    pub fn get_name(&self) -> &str {
+        self.inner.desc.name.as_str()
     }
 
     pub fn get_signal(&self) -> impl Signal<Item=ArchivedValue<State>> {
@@ -103,6 +111,10 @@ impl Resource {
 
     pub fn get_required_privs(&self) -> &PrivilegesBuf {
         &self.inner.desc.privs
+    }
+
+    pub fn get_description(&self) -> &MachineDescription {
+        &self.inner.desc
     }
 
     fn set_state(&self, state: MachineState) {
@@ -181,12 +193,12 @@ impl Resource {
         let state = self.get_state();
         let s: &Archived<State> = state.as_ref();
         let i: &Archived<MachineState> = &s.inner;
-        unimplemented!();
-        /*if let Status::InUse(user) = self.get_state().state {
-            if user == session.get_user() {
-                self.set_state(MachineState::free(Some(user)));
+        if let ArchivedStatus::InUse(user) = &i.state {
+            let current = session.get_user();
+            if user == &current {
+                self.set_state(MachineState::free(Some(current)));
             }
-        }*/
+        }
     }
 
     pub async fn force_set(&self, new: Status) {

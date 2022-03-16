@@ -16,6 +16,8 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use once_cell::sync::Lazy;
+use rumqttc::ConnectReturnCode::Success;
+use rumqttc::Packet::ConnAck;
 use rustls::{RootCertStore};
 use url::Url;
 use crate::actors::dummy::Dummy;
@@ -153,6 +155,13 @@ pub fn load(executor: Executor, config: &Config, resources: ResourcesHandle) -> 
         async move {
             match eventloop.poll().await {
                 Ok(Event::Incoming(Incoming::Connect(_connect))) => {}
+                Ok(Event::Incoming(Incoming::ConnAck(connack))) => {
+                    if connack.code == Success {
+                        tracing::debug!(?connack, "MQTT connection established");
+                    } else {
+                        tracing::error!(?connack, "MQTT connect failed");
+                    }
+                }
                 Ok(event) => {
                     tracing::warn!(?event, "Got unexpected mqtt event");
                 }

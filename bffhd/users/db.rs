@@ -105,8 +105,7 @@ impl UserDB {
 
     pub fn put(&self, uid: &str, user: &User) -> Result<(), db::Error> {
         let mut serializer = AllocSerializer::<1024>::default();
-        let pos = serializer.serialize_value(user).expect("rkyv error");
-        assert_eq!(pos, 0);
+        serializer.serialize_value(user).expect("rkyv error");
         let v = serializer.into_serializer().into_inner();
         let value = ArchivedValue::new(v);
 

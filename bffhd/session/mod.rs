@@ -25,7 +25,7 @@ impl SessionManager {
     pub fn open(&self, uid: impl AsRef<str>) -> Option<SessionHandle> {
         let uid = uid.as_ref();
         if let Some(user) = self.users.get_user(uid) {
-            tracing::trace!(uid, "opening new session for user");
+            tracing::trace!(uid, ?user, "opening new session for user");
             Some(SessionHandle {
                 users: self.users.clone(),
                 roles: self.roles.clone(),
