@@ -3,6 +3,7 @@
 
 
 use once_cell::sync::OnceCell;
+use crate::authorization::permissions::Permission;
 use crate::authorization::roles::{Roles};
 use crate::resources::Resource;
 use crate::Users;
@@ -74,6 +75,13 @@ impl SessionHandle {
     pub fn has_manage(&self, resource: &Resource) -> bool {
         if let Some(user) = self.users.get_user(self.user.get_username()) {
             self.roles.is_permitted(&user.userdata, &resource.get_required_privs().manage)
+        } else {
+            false
+        }
+    }
+    pub fn has_perm(&self, perm: impl AsRef<Permission>) -> bool {
+        if let Some(user) = self.users.get_user(self.user.get_username()) {
+            self.roles.is_permitted(&user.userdata, perm)
         } else {
             false
         }

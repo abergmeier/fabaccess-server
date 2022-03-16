@@ -10,6 +10,7 @@ use api::machine_capnp::machine::{
 };
 use capnp::capability::Promise;
 use capnp_rpc::pry;
+use crate::capnp::user::User;
 
 #[derive(Clone)]
 pub struct Machine {
@@ -196,11 +197,13 @@ impl ManageServer for Machine {
     fn get_machine_info_extended(
         &mut self,
         _: manage::GetMachineInfoExtendedParams,
-        _: manage::GetMachineInfoExtendedResults,
+        mut result: manage::GetMachineInfoExtendedResults,
     ) -> Promise<(), ::capnp::Error> {
-        Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+        let mut builder = result.get();
+        let user = User::new(self.session.clone());
+        user.build_else(self.resource.get_current_user(), builder.reborrow().init_current_user());
+        user.build_else(self.resource.get_previous_user(), builder.init_last_user());
+        Promise::ok(())
     }
     fn set_property(
         &mut self,

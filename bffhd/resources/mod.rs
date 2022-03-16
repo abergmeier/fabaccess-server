@@ -1,9 +1,10 @@
-use std::convert::Infallible;
+use rkyv::Infallible;
 use std::ops::Deref;
 use std::sync::Arc;
 use futures_signals::signal::{Mutable, Signal, SignalExt};
 use lmdb::RoTransaction;
 use rkyv::{Archived, Deserialize};
+use rkyv::option::ArchivedOption;
 use rkyv::ser::Serializer;
 use rkyv::ser::serializers::AllocSerializer;
 use crate::authorization::permissions::PrivilegesBuf;
@@ -115,6 +116,32 @@ impl Resource {
 
     pub fn get_description(&self) -> &MachineDescription {
         &self.inner.desc
+    }
+
+    pub fn get_current_user(&self) -> Option<UserRef> {
+        let state = self.get_state_ref();
+        let state: &Archived<State> = state.as_ref();
+        match &state.inner.state {
+            ArchivedStatus::Blocked(user) |
+            ArchivedStatus::InUse(user) |
+            ArchivedStatus::Reserved(user) |
+            ArchivedStatus::ToCheck(user) => {
+                let user = Deserialize::<UserRef, _>::deserialize(user, &mut Infallible).unwrap();
+                Some(user)
+            },
+            _ => None,
+        }
+    }
+
+    pub fn get_previous_user(&self) -> Option<UserRef> {
+        let state = self.get_state_ref();
+        let state: &Archived<State> = state.as_ref();
+        if let ArchivedOption::Some(user) = &state.inner.previous {
+            let user = Deserialize::<UserRef, _>::deserialize(user, &mut Infallible).unwrap();
+            Some(user)
+        } else {
+            None
+        }
     }
 
     fn set_state(&self, state: MachineState) {
