@@ -9,7 +9,10 @@ fn main() {
     let owned_gitrev = String::from_utf8(out.stdout)
         .expect("git rev-list output was not valid UTF8");
     let gitrev = owned_gitrev.trim();
-    let abbrev = &gitrev[0..9];
+    let abbrev = match gitrev.len(){
+        0 => "unknown",
+        _ => &gitrev[0..9],
+    };
     println!("cargo:rustc-env=CARGO_PKG_VERSION_GITREV={}", gitrev);
 
     let out = Command::new("git").arg("log")
