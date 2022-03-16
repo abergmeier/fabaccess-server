@@ -216,9 +216,18 @@ async fn fill_machine_builder(
     builder.set_urn(&format!("urn:fabaccess:resource:{}", id.as_ref()));
 
     let machineapi = Machine::new(user.clone(), perms, machine.clone());
-    if perms.write {
+    let state = machine.get_status().await;
+
+    // Only set `use` interf if machine could be used by the user.
+    if perms.write && match &state {
+            Status::Free => true,
+            Status::Reserved(reserver) if reserver == user => true,
+            _ => false,
+        }
+    {
         builder.set_use(capnp_rpc::new_client(machineapi.clone()));
     }
+
     if perms.manage {
         //builder.set_transfer(capnp_rpc::new_client(machineapi.clone()));
         //builder.set_check(capnp_rpc::new_client(machineapi.clone()));
@@ -228,12 +237,11 @@ async fn fill_machine_builder(
         builder.set_admin(capnp_rpc::new_client(machineapi.clone()));
     }
 
-
-    let s = match machine.get_status().await {
+    let s = match state {
         Status::Free => MachineState::Free,
         Status::Disabled => MachineState::Disabled,
         Status::Blocked(_) => MachineState::Blocked,
-        Status::InUse(u) => {
+        Status::InUse(ref u) => {
             if let Some(owner) = u.as_ref() {
                 if owner == user {
                     builder.set_inuse(capnp_rpc::new_client(machineapi.clone()));
