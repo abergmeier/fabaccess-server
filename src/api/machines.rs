@@ -62,24 +62,33 @@ impl machines::Server for Machines {
 
                 let mut filtered_v = Vec::with_capacity(v.len());
                 for (id, machine) in v.into_iter() {
-                    match machine.get_status().await {
-                        // Always show a machine if they're in use by myself
-                        Status::InUse(ref bywho) =>
-                            if bywho.is_some() && bywho.as_ref().filter(|bywho| *bywho == user).is_some()
-                            {
+                    // Check if the user has disclose. If yes, machines are always shown.
+                    let required_disclose = &machine.desc.privs.disclose;
+                    if session.as_ref().unwrap().perms.iter()
+                              .any(|rule| rule.match_perm(required_disclose))
+                    {
+                        filtered_v.push((id, machine));
+                    } else {
+                        // If no, match their state. Used & reserved machines are also shown
+                        match machine.get_status().await {
+                            // Always show a machine if they're in use by myself
+                            Status::InUse(ref bywho) =>
+                                if bywho.is_some() && bywho.as_ref().filter(|bywho| *bywho == user).is_some()
+                                {
+                                    filtered_v.push((id, machine));
+                                }
+                            Status::Reserved(ref bywho) => if bywho == user {
                                 filtered_v.push((id, machine));
                             }
-                        Status::Reserved(ref bywho) => if bywho == user {
-                            filtered_v.push((id, machine));
-                        }
 
-                        // The rest depends on the actual priviledges below
-                        _ => {
-                            let required_disclose = &machine.desc.privs.disclose;
-                            if session.as_ref().unwrap().perms.iter()
-                                .any(|rule| rule.match_perm(required_disclose))
-                            {
-                                filtered_v.push((id, machine));
+                            // The rest depends on the actual priviledges below
+                            _ => {
+                                let required_disclose = &machine.desc.privs.disclose;
+                                if session.as_ref().unwrap().perms.iter()
+                                          .any(|rule| rule.match_perm(required_disclose))
+                                {
+                                    filtered_v.push((id, machine));
+                                }
                             }
                         }
                     }
