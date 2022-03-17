@@ -74,7 +74,7 @@ capnp-rpc = "0.14.1"
 
 # API Authentication
 #rsasl = "2.0.0-preview3"
-rsasl = { version = "2.0.0-preview3", features = ["unstable_custom_mechanism"] }
+rsasl = { git = "https://github.com/dequbed/rsasl.git", branch = "main", default_features = false, features = ["unstable_custom_mechanism", "provider", "registry_static", "plain"] }
 desfire = "0.2.0-alpha1"
 hex = { version = "0.4.3", features = ["serde"] }
 linkme = "0.2.10"
