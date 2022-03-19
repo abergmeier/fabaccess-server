@@ -8,6 +8,7 @@ use std::{env, io, io::Write, path::PathBuf};
 
 
 use nix::NixPath;
+use diflouroborane::error::Error;
 
 
 fn main() -> anyhow::Result<()> {
@@ -114,7 +115,11 @@ fn main() -> anyhow::Result<()> {
         unimplemented!()
     } else if matches.is_present("load") {
         let bffh = Diflouroborane::new(config)?;
-        bffh.users.load_file(matches.value_of("load").unwrap());
+        if bffh.users.load_file(matches.value_of("load").unwrap()).is_ok() {
+            tracing::info!("loaded users from {}", matches.value_of("load").unwrap());
+        } else {
+            tracing::error!("failed to load users from {}", matches.value_of("load").unwrap());
+        }
         return Ok(())
     } else {
         let keylog = matches.value_of("keylog");
