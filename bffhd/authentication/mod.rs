@@ -5,9 +5,10 @@ use rsasl::mechname::Mechname;
 use rsasl::property::{AuthId, Password};
 use rsasl::session::{Session, SessionData};
 use rsasl::validate::{validations, Validation};
-use rsasl::{SASL};
+use rsasl::{Property, SASL};
 use std::sync::Arc;
 use rsasl::registry::Mechanism;
+use crate::authentication::fabfire::FabFireCardKey;
 
 mod fabfire;
 
@@ -20,6 +21,28 @@ impl Callback {
     }
 }
 impl rsasl::callback::Callback for Callback {
+    fn provide_prop(
+        &self,
+        session: &mut rsasl::session::SessionData,
+        property: Property,
+    ) -> Result<(), SessionError> {
+        match property {
+            fabfire::FABFIRECARDKEY => {
+                let authcid = session.get_property_or_callback::<AuthId>()?;
+                let user = self.users.get_user(authcid.unwrap().as_ref())
+                    .ok_or(SessionError::AuthenticationFailure)?;
+                let kv = user.userdata.kv.get("cardkey")
+                    .ok_or(SessionError::AuthenticationFailure)?;
+                let card_key = <[u8; 16]>::try_from(hex::decode(kv)
+                    .map_err(|_| SessionError::AuthenticationFailure)?)
+                    .map_err(|_| SessionError::AuthenticationFailure)?;
+                session.set_property::<FabFireCardKey>(Arc::new(card_key));
+                Ok(())
+            }
+            _ => Err(SessionError::NoProperty { property }),
+        }
+    }
+
     fn validate(
         &self,
         session: &mut SessionData,

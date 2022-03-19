@@ -12,6 +12,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use desfire::desfire::desfire::MAX_BYTES_PER_TRANSACTION;
 use rsasl::property::AuthId;
+use tracing::{error, trace};
 use crate::authentication::fabfire::FabFireCardKey;
 
 enum FabFireError {
@@ -152,7 +153,7 @@ impl Authentication for FabFire {
     fn step(&mut self, session: &mut SessionData, input: Option<&[u8]>, writer: &mut dyn Write) -> StepResult {
         match self.step {
             Step::New => {
-                // println!("Step: New");
+                tracing::trace!("Step: New");
                 //receive card info (especially card UID) from reader
                 return match input {
                     None => { Err(SessionError::InputDataRequired) }
@@ -160,7 +161,7 @@ impl Authentication for FabFire {
                         self.card_info = match serde_json::from_slice(cardinfo) {
                             Ok(card_info) => Some(card_info),
                             Err(e) => {
-                                // eprintln!("{:?}", e);
+                                tracing::error!("Deserializing card_info failed: {:?}", e);
                                 return Err(FabFireError::DeserializationError(e).into());
                             }
                         };
@@ -169,12 +170,12 @@ impl Authentication for FabFire {
                             Ok(buf) => match Vec::<u8>::try_from(buf) {
                                 Ok(data) => data,
                                 Err(e) => {
-                                    // eprintln!("Failed to convert APDUCommand to Vec<u8>: {:?}", e);
+                                    tracing::error!("Failed to convert APDUCommand to Vec<u8>: {:?}", e);
                                     return Err(FabFireError::SerializationError.into());
                                 }
                             },
                             Err(e) => {
-                                // eprintln!("Failed to generate APDUCommand: {:?}", e);
+                                tracing::error!("Failed to generate APDUCommand: {:?}", e);
                                 return Err(FabFireError::SerializationError.into());
                             }
                         };
@@ -186,7 +187,7 @@ impl Authentication for FabFire {
                                 Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                             }
                             Err(e) => {
-                                // eprintln!("Failed to serialize APDUCommand: {:?}", e);
+                                tracing::error!("Failed to serialize APDUCommand: {:?}", e);
                                 Err(FabFireError::SerializationError.into())
                             }
                         };
@@ -194,14 +195,14 @@ impl Authentication for FabFire {
                 };
             }
             Step::SelectApp => {
-                // println!("Step: SelectApp");
+                tracing::trace!("Step: SelectApp");
                 // check that we successfully selected the application
                 let response: CardCommand = match input {
                     None => { return Err(SessionError::InputDataRequired); }
                     Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
                         Ok(response) => response,
                         Err(e) => {
-                            // eprintln!("{:?}", e);
+                            tracing::error!("Deserializing data from card failed: {:?}", e);
                             return Err(e.into());
                         }
                     }
@@ -210,7 +211,7 @@ impl Authentication for FabFire {
                 let apdu_response = match response {
                     CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
                     _ => {
-                        // eprintln!("Unexpected response: {:?}", response);
+                        tracing::error!("Unexpected response: {:?}", response);
                         return Err(FabFireError::ParseError.into());
                     }
                 };
@@ -223,11 +224,13 @@ impl Authentication for FabFire {
                 let buf = match self.desfire.read_data_chunk_cmd(MAGIC_FILE_ID, 0, MAGIC.len()) {
                     Ok(buf) => match Vec::<u8>::try_from(buf) {
                         Ok(data) => data,
-                        Err(_) => {
+                        Err(e) => {
+                            tracing::error!("Failed to convert APDUCommand to Vec<u8>: {:?}", e);
                             return Err(FabFireError::SerializationError.into());
                         }
                     },
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Failed to generate APDUCommand: {:?}", e);
                         return Err(FabFireError::SerializationError.into());
                     }
                 };
@@ -238,20 +241,21 @@ impl Authentication for FabFire {
                         writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
                         Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Failed to serialize APDUCommand: {:?}", e);
                         Err(FabFireError::SerializationError.into())
                     }
                 };
             }
             Step::VerifyMagic => {
-                // println!("Step: VerifyMagic");
+                tracing::trace!("Step: VerifyMagic");
                 // verify the magic string to determine that we have a valid fabfire card
                 let response: CardCommand = match input {
                     None => { return Err(SessionError::InputDataRequired); }
                     Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
                         Ok(response) => response,
                         Err(e) => {
-                            // eprintln!("{:?}", e);
+                            tracing::error!("Deserializing data from card failed: {:?}", e);
                             return Err(e.into());
                         }
                     }
@@ -260,7 +264,7 @@ impl Authentication for FabFire {
                 let apdu_response = match response {
                     CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
                     _ => {
-                        // eprintln!("Unexpected response: {:?}", response);
+                        tracing::error!("Unexpected response: {:?}", response);
                         return Err(FabFireError::ParseError.into());
                     }
                 };
@@ -271,15 +275,18 @@ impl Authentication for FabFire {
                         match apdu_response.body {
                             Some(data) => {
                                 if std::str::from_utf8(data.as_slice()) != Ok(MAGIC) {
+                                    tracing::error!("Invalid magic string");
                                     return Err(FabFireError::ParseError.into());
                                 }
                             }
                             None => {
+                                tracing::error!("No data returned from card");
                                 return Err(FabFireError::ParseError.into());
                             }
                         };
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Got invalid APDUResponse: {:?}", e);
                         return Err(FabFireError::ParseError.into());
                     }
                 }
@@ -291,11 +298,13 @@ impl Authentication for FabFire {
                 let buf = match self.desfire.read_data_chunk_cmd(URN_FILE_ID, 0, self.local_urn.as_bytes().len()) { // TODO: support urn longer than 47 Bytes
                     Ok(buf) => match Vec::<u8>::try_from(buf) {
                         Ok(data) => data,
-                        Err(_) => {
+                        Err(e) => {
+                            tracing::error!("Failed to convert APDUCommand to Vec<u8>: {:?}", e);
                             return Err(FabFireError::SerializationError.into());
                         }
                     },
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Failed to generate APDUCommand: {:?}", e);
                         return Err(FabFireError::SerializationError.into());
                     }
                 };
@@ -306,20 +315,21 @@ impl Authentication for FabFire {
                         writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
                         Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Failed to serialize APDUCommand: {:?}", e);
                         Err(FabFireError::SerializationError.into())
                     }
                 };
             }
             Step::GetURN => {
-                // println!("Step: GetURN");
+                tracing::trace!("Step: GetURN");
                 // parse the urn and match it to our local urn
                 let response: CardCommand = match input {
                     None => { return Err(SessionError::InputDataRequired); }
                     Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
                         Ok(response) => response,
                         Err(e) => {
-                            // eprintln!("{:?}", e);
+                            tracing::error!("Deserializing data from card failed: {:?}", e);
                             return Err(e.into());
                         }
                     }
@@ -328,7 +338,7 @@ impl Authentication for FabFire {
                 let apdu_response = match response {
                     CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
                     _ => {
-                        // eprintln!("Unexpected response: {:?}", response);
+                       tracing::error!("Unexpected response: {:?}", response);
                         return Err(FabFireError::ParseError.into());
                     }
                 };
@@ -340,18 +350,18 @@ impl Authentication for FabFire {
                             Some(data) => {
                                 let received_urn = String::from_utf8(data).unwrap();
                                 if received_urn != self.local_urn {
-                                    // eprintln!("URN mismatch: {:?} != {:?}", received_urn, self.local_urn);
+                                    tracing::error!("URN mismatch: {:?} != {:?}", received_urn, self.local_urn);
                                     return Err(FabFireError::ParseError.into());
                                 }
                             }
                             None => {
-                                // eprintln!("No data in response");
+                                tracing::error!("No data returned from card");
                                 return Err(FabFireError::ParseError.into());
                             }
                         };
                     }
                     Err(e) => {
-                        // eprintln!("Invalid response: {:?}", e);
+                       tracing::error!("Got invalid APDUResponse: {:?}", e);
                         return Err(FabFireError::ParseError.into());
                     }
                 }
@@ -361,11 +371,13 @@ impl Authentication for FabFire {
                 let buf = match self.desfire.read_data_chunk_cmd(TOKEN_FILE_ID, 0, MAX_BYTES_PER_TRANSACTION) { // TODO: support data longer than 47 Bytes
                     Ok(buf) => match Vec::<u8>::try_from(buf) {
                         Ok(data) => data,
-                        Err(_) => {
+                        Err(e) => {
+                            tracing::error!("Failed to convert APDUCommand to Vec<u8>: {:?}", e);
                             return Err(FabFireError::SerializationError.into());
                         }
                     },
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Failed to generate APDUCommand: {:?}", e);
                         return Err(FabFireError::SerializationError.into());
                     }
                 };
@@ -376,7 +388,8 @@ impl Authentication for FabFire {
                         writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
                         Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Failed to serialize APDUCommand: {:?}", e);
                         Err(FabFireError::SerializationError.into())
                     }
                 };
@@ -389,7 +402,7 @@ impl Authentication for FabFire {
                     Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
                         Ok(response) => response,
                         Err(e) => {
-                            // eprintln!("{:?}", e);
+                            tracing::error!("Deserializing data from card failed: {:?}", e);
                             return Err(e.into());
                         }
                     }
@@ -398,7 +411,7 @@ impl Authentication for FabFire {
                 let apdu_response = match response {
                     CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
                     _ => {
-                        // eprintln!("Unexpected response: {:?}", response);
+                        tracing::error!("Unexpected response: {:?}", response);
                         return Err(FabFireError::ParseError.into());
                     }
                 };
@@ -413,22 +426,24 @@ impl Authentication for FabFire {
                                 let key = match session.get_property_or_callback::<FabFireCardKey>() {
                                     Ok(Some(key)) => Box::from(key.as_slice()),
                                     Ok(None) => {
+                                        tracing::error!("No keys on file for token");
                                         return Err(FabFireError::InvalidCredentials("No keys on file for token".to_string()).into());
                                     }
                                     Err(e) => {
+                                        tracing::error!("Failed to get key: {:?}", e);
                                         return Err(FabFireError::Session(e).into());
                                     }
                                 };
                                 self.key_info = Some(KeyInfo{ key_id: 0x01, key });
                             }
                             None => {
-                                // eprintln!("No data in response");
+                                tracing::error!("No data in response");
                                 return Err(FabFireError::ParseError.into());
                             }
                         };
                     }
                     Err(e) => {
-                        // eprintln!("Invalid response: {:?}", e);
+                        tracing::error!("Failed to check response: {:?}", e);
                         return Err(FabFireError::ParseError.into());
                     }
                 }
@@ -436,11 +451,13 @@ impl Authentication for FabFire {
                 let buf = match self.desfire.authenticate_iso_aes_challenge_cmd(self.key_info.as_ref().unwrap().key_id) {
                     Ok(buf) => match Vec::<u8>::try_from(buf) {
                         Ok(data) => data,
-                        Err(_) => {
+                        Err(e) => {
+                            tracing::error!("Failed to convert to Vec<u8>: {:?}", e);
                             return Err(FabFireError::SerializationError.into());
                         }
                     },
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Failed to create authenticate command: {:?}", e);
                         return Err(FabFireError::SerializationError.into());
                     }
                 };
@@ -451,19 +468,20 @@ impl Authentication for FabFire {
                         writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
                         Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Failed to serialize command: {:?}", e);
                         Err(FabFireError::SerializationError.into())
                     }
                 };
             }
             Step::Authenticate1 => {
-                // println!("Step: Authenticate1");
+                tracing::trace!("Step: Authenticate1");
                 let response: CardCommand = match input {
                     None => { return Err(SessionError::InputDataRequired); }
                     Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
                         Ok(response) => response,
                         Err(e) => {
-                            // eprintln!("{:?}", e);
+                            tracing::error!("Failed to deserialize response: {:?}", e);
                             return Err(e.into());
                         }
                     }
@@ -472,7 +490,7 @@ impl Authentication for FabFire {
                 let apdu_response = match response {
                     CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
                     _ => {
-                        // eprintln!("Unexpected response: {:?}", response);
+                        tracing::error!("Unexpected response: {:?}", response);
                         return Err(FabFireError::ParseError.into());
                     }
                 };
@@ -487,7 +505,6 @@ impl Authentication for FabFire {
                                 //FIXME: This is ugly, we should find a better way to make the function testable
                                 //TODO: Check if we need a CSPRNG here
                                 let rnd_a: [u8; 16] = rand::random();
-                                // println!("RND_A: {:x?}", rnd_a);
 
                                 let (cmd_challenge_response,
                                     rnd_b,
@@ -498,7 +515,8 @@ impl Authentication for FabFire {
                                 self.auth_info = Some(AuthInfo { rnd_a: Vec::<u8>::from(rnd_a), rnd_b, iv });
                                 let buf = match Vec::<u8>::try_from(cmd_challenge_response) {
                                     Ok(data) => data,
-                                    Err(_) => {
+                                    Err(e) => {
+                                        tracing::error!("Failed to convert to Vec<u8>: {:?}", e);
                                         return Err(FabFireError::SerializationError.into());
                                     }
                                 };
@@ -509,17 +527,20 @@ impl Authentication for FabFire {
                                         writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
                                         Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
                                     }
-                                    Err(_) => {
+                                    Err(e) => {
+                                        tracing::error!("Failed to serialize command: {:?}", e);
                                         Err(FabFireError::SerializationError.into())
                                     }
                                 };
                             }
                             None => {
+                                tracing::error!("Got invalid response: {:?}", apdu_response);
                                 return Err(FabFireError::ParseError.into());
                             }
                         };
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Failed to check response: {:?}", e);
                         return Err(FabFireError::ParseError.into());
                     }
                 }
@@ -531,7 +552,7 @@ impl Authentication for FabFire {
                     Some(buf) => match serde_json::from_slice(buf).map_err(|e| FabFireError::DeserializationError(e)) {
                         Ok(response) => response,
                         Err(e) => {
-                            // eprintln!("{:?}", e);
+                            tracing::error!("Failed to deserialize response: {:?}", e);
                             return Err(e.into());
                         }
                     }
@@ -540,7 +561,7 @@ impl Authentication for FabFire {
                 let apdu_response = match response {
                     CardCommand::readPICC { data } => { APDUResponse::new(&*data) }
                     _ => {
-                        // eprintln!("Unexpected response: {:?}", response);
+                        tracing::error!("Got invalid response: {:?}", response);
                         return Err(FabFireError::ParseError.into());
                     }
                 };
@@ -570,7 +591,8 @@ impl Authentication for FabFire {
                                                     writer.write_all(&send_buf).map_err(|e| SessionError::Io { source: e })?;
                                                     return Ok(rsasl::session::Step::Done(Some(send_buf.len())))
                                                 }
-                                                Err(_) => {
+                                                Err(e) => {
+                                                    tracing::error!("Failed to serialize command: {:?}", e);
                                                     Err(FabFireError::SerializationError.into())
                                                 }
                                             };
@@ -579,11 +601,13 @@ impl Authentication for FabFire {
                                 }
                             }
                             None => {
+                                tracing::error!("got empty response");
                                 return Err(FabFireError::ParseError.into());
                             }
                         };
                     }
-                    Err(_) => {
+                    Err(e) => {
+                        tracing::error!("Got invalid response: {:?}", apdu_response);
                         return Err(FabFireError::InvalidCredentials(format!("{}", apdu_response)).into());
                     }
                 }
