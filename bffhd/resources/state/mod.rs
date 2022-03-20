@@ -31,6 +31,7 @@ pub struct State {
     pub inner: MachineState,
 }
 
+
 impl fmt::Debug for State {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut sf = f.debug_struct("State");
@@ -39,6 +40,12 @@ impl fmt::Debug for State {
         sf.field(k.as_ref(), &self.inner);
         //}
         sf.finish()
+    }
+}
+
+impl fmt::Display for ArchivedState {
+    fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
+        Display::fmt(&self.inner, f)
     }
 }
 

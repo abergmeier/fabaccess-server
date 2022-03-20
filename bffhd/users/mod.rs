@@ -3,6 +3,7 @@ use lmdb::Environment;
 use once_cell::sync::OnceCell;
 use rkyv::{Archive, Deserialize, Infallible, Serialize};
 use std::collections::HashMap;
+use std::fmt::{Display, Formatter, Write};
 use std::ops::Deref;
 use std::path::Path;
 use std::sync::Arc;
@@ -38,6 +39,12 @@ impl PartialEq<ArchivedUserRef> for UserRef {
 impl PartialEq<UserRef> for ArchivedUserRef {
     fn eq(&self, other: &UserRef) -> bool {
         self.id == other.id
+    }
+}
+
+impl Display for ArchivedUserRef {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.id.as_str())
     }
 }
 

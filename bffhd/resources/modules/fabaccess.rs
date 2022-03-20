@@ -1,4 +1,5 @@
-
+use std::fmt;
+use std::fmt::{Write, write};
 use crate::utils::oid::ObjectIdentifier;
 use once_cell::sync::Lazy;
 use rkyv::{Archive, Archived, Deserialize, Infallible};
@@ -55,6 +56,19 @@ pub enum Status {
 pub struct MachineState {
     pub state: Status,
     pub previous: Option<UserRef>,
+}
+
+impl fmt::Display for ArchivedMachineState {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match &self.state {
+            ArchivedStatus::Free => f.write_str("free"),
+            ArchivedStatus::InUse(user) => write!(f, "inuse {}", user),
+            ArchivedStatus::ToCheck(user) => write!(f, "tocheck {}", user),
+            ArchivedStatus::Blocked(user) => write!(f, "blocked {}", user),
+            ArchivedStatus::Disabled => f.write_str("disabled"),
+            ArchivedStatus::Reserved(user) => write!(f, "reserved {}", user),
+        }
+    }
 }
 
 impl MachineState {

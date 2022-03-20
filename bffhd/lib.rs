@@ -50,6 +50,7 @@ use once_cell::sync::OnceCell;
 
 use signal_hook::consts::signal::*;
 use executor::pool::Executor;
+use crate::audit::AuditLog;
 use crate::authentication::AuthenticationHandle;
 use crate::authorization::roles::Roles;
 use crate::capnp::APIServer;
@@ -92,6 +93,8 @@ impl Diflouroborane {
 
         let users = Users::new(env.clone()).context("Failed to open users DB file")?;
         let roles = Roles::new(config.roles.clone());
+
+        let _audit_log = AuditLog::new(&config).context("Failed to initialize audit log")?;
 
         let resources = ResourcesHandle::new(config.machines.iter().map(|(id, desc)| {
             Resource::new(Arc::new(resources::Inner::new(id.to_string(), statedb.clone(), desc.clone())))

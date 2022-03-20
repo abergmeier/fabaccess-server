@@ -7,6 +7,7 @@ use rkyv::{Archived, Deserialize};
 use rkyv::option::ArchivedOption;
 use rkyv::ser::Serializer;
 use rkyv::ser::serializers::AllocSerializer;
+use crate::audit::AUDIT;
 use crate::authorization::permissions::PrivilegesBuf;
 use crate::config::MachineDescription;
 use crate::db::ArchivedValue;
@@ -74,6 +75,8 @@ impl Inner {
         tracing::trace!("Updating DB");
         self.db.put(&self.id.as_bytes(), &state).unwrap();
         tracing::trace!("Updated DB, sending update signal");
+
+        AUDIT.get().unwrap().log(self.id.as_str(), &format!("{}", state));
 
         self.signal.set(state);
         tracing::trace!("Sent update signal");
