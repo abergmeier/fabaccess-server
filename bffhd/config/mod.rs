@@ -6,7 +6,7 @@ use serde::{Serialize, Deserialize};
 
 use std::fmt::Formatter;
 use std::net::{ToSocketAddrs};
-use serde_dhall::{SimpleType};
+use serde_dhall::StaticType;
 
 
 mod dhall;
@@ -16,14 +16,6 @@ use crate::authorization::permissions::{PrivilegesBuf};
 use crate::authorization::roles::Role;
 use crate::capnp::{Listen, TlsListen};
 use crate::logging::LogConfig;
-
-pub fn load(path: impl AsRef<Path>, args: &clap::ArgMatches) -> anyhow::Result<Config> {
-    unimplemented!()
-}
-
-pub struct ConfigBlock {
-    static_type: SimpleType,
-}
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -98,12 +90,6 @@ pub struct ModuleConfig {
     pub module: String,
     pub params: HashMap<String, String>
 }
-
-pub struct ListenSock {
-    listen: Listen,
-    tls_config: TlsListen,
-}
-
 
 pub(crate) fn deser_option<'de, D, T>(d: D) -> std::result::Result<Option<T>, D::Error>
     where D: serde::Deserializer<'de>, T: serde::Deserialize<'de>,
