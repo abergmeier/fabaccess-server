@@ -1,30 +1,55 @@
+use capnp::capability::Promise;
+use capnp_rpc::pry;
 use crate::session::SessionHandle;
 use api::user_capnp::user::{admin, info, manage, Builder};
-use crate::users::UserRef;
+use crate::authorization::permissions::Permission;
+use crate::users::{db, UserRef};
 
+#[derive(Clone)]
 pub struct User {
     session: SessionHandle,
+    user: UserRef,
 }
 
 impl User {
-    pub fn new(session: SessionHandle) -> Self {
-        Self { session }
+    pub fn new(session: SessionHandle, user: UserRef) -> Self {
+        Self { session, user }
     }
 
-    pub fn build_else(&self, user: Option<UserRef>, mut builder: Builder) {
-        if let Some(user) = user {
-            builder.set_username(user.get_username());
+    pub fn new_self(session: SessionHandle) -> Self {
+        let user = session.get_user_ref();
+        Self::new(session, user)
+    }
+
+    pub fn build_else(&self, user: Option<UserRef>, builder: Builder) {
+        if let Some(user) = user.and_then(|u| self.session.users.get_user(u.get_username())) {
+            self.fill(user, builder);
         }
     }
 
-    pub fn build_into(self, mut builder: Builder) {
-        let user = self.session.get_user();
-        builder.set_username(user.get_username());
+    pub fn build(session: SessionHandle, mut builder: Builder) {
+        let this = Self::new_self(session);
+        let user = this.session.get_user();
+        this.fill(user, builder);
     }
 
-    pub fn build(session: SessionHandle, mut builder: Builder) {
-        let this = Self::new(session);
-        this.build_into(builder)
+    pub fn fill(&self, user: db::User, mut builder: Builder) {
+        builder.set_username(user.id.as_str());
+
+        let client = Self::new(self.session.clone(), UserRef::new(user.id.clone()));
+
+        // We have permissions on ourself
+        let is_me = &self.session.get_user_ref().id == &user.id;
+
+        if is_me || self.session.has_perm(Permission::new("bffh.users.info")) {
+            builder.set_info(capnp_rpc::new_client(client.clone()));
+        }
+        if is_me {
+            builder.set_manage(capnp_rpc::new_client(client.clone()));
+        }
+        if self.session.has_perm(Permission::new("bffh.users.admin")) {
+            builder.set_admin(capnp_rpc::new_client(client.clone()));
+        }
     }
 }
 
@@ -32,21 +57,25 @@ impl info::Server for User {
     fn list_roles(
         &mut self,
         _: info::ListRolesParams,
-        _: info::ListRolesResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        ::capnp::capability::Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+        mut result: info::ListRolesResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let user = self.session.get_user();
+        let mut builder = result.get().init_roles(user.userdata.roles.len() as u32);
+        for (i, role) in user.userdata.roles.into_iter().enumerate() {
+            let mut b = builder.reborrow().get(i as u32);
+            b.set_name(role.as_str());
+        }
+        Promise::ok(())
     }
 }
 
 impl manage::Server for User {
     fn pwd(
         &mut self,
-        _: manage::PwdParams,
-        _: manage::PwdResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        ::capnp::capability::Promise::err(::capnp::Error::unimplemented(
+        params: manage::PwdParams,
+        mut results: manage::PwdResults,
+    ) -> Promise<(), ::capnp::Error> {
+        Promise::err(::capnp::Error::unimplemented(
             "method not implemented".to_string(),
         ))
     }
@@ -57,35 +86,55 @@ impl admin::Server for User {
         &mut self,
         _: admin::GetUserInfoExtendedParams,
         _: admin::GetUserInfoExtendedResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        ::capnp::capability::Promise::err(::capnp::Error::unimplemented(
+    ) -> Promise<(), ::capnp::Error> {
+        Promise::err(::capnp::Error::unimplemented(
             "method not implemented".to_string(),
         ))
     }
     fn add_role(
         &mut self,
-        _: admin::AddRoleParams,
+        param: admin::AddRoleParams,
         _: admin::AddRoleResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        ::capnp::capability::Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+    ) -> Promise<(), ::capnp::Error> {
+        let rolename = pry!(pry!(pry!(param.get()).get_role()).get_name());
+
+        if let Some(_role) = self.session.roles.get(rolename) {
+            let mut target = self.session.users.get_user(self.user.get_username()).unwrap();
+
+            // Only update if needed
+            if !target.userdata.roles.iter().any(|r| r.as_str() == rolename) {
+                target.userdata.roles.push(rolename.to_string());
+                self.session.users.put_user(self.user.get_username(), &target);
+            }
+        }
+
+        Promise::ok(())
     }
     fn remove_role(
         &mut self,
-        _: admin::RemoveRoleParams,
+        param: admin::RemoveRoleParams,
         _: admin::RemoveRoleResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        ::capnp::capability::Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+    ) -> Promise<(), ::capnp::Error> {
+        let rolename = pry!(pry!(pry!(param.get()).get_role()).get_name());
+
+        if let Some(_role) = self.session.roles.get(rolename) {
+            let mut target = self.session.users.get_user(self.user.get_username()).unwrap();
+
+            // Only update if needed
+            if target.userdata.roles.iter().any(|r| r.as_str() == rolename) {
+                target.userdata.roles.retain(|r| r.as_str() != rolename);
+                self.session.users.put_user(self.user.get_username(), &target);
+            }
+        }
+
+        Promise::ok(())
     }
     fn pwd(
         &mut self,
         _: admin::PwdParams,
         _: admin::PwdResults,
-    ) -> ::capnp::capability::Promise<(), ::capnp::Error> {
-        ::capnp::capability::Promise::err(::capnp::Error::unimplemented(
+    ) -> Promise<(), ::capnp::Error> {
+        Promise::err(::capnp::Error::unimplemented(
             "method not implemented".to_string(),
         ))
     }

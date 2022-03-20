@@ -1,4 +1,6 @@
 use capnp::capability::Promise;
+use capnp_rpc::pry;
+use libc::user;
 use api::usersystem_capnp::user_system::{
     info, manage, Server as UserSystem,
     self as system,
@@ -7,6 +9,7 @@ use crate::authorization::permissions::Permission;
 use crate::capnp::user::User;
 
 use crate::session::SessionHandle;
+use crate::users::UserRef;
 
 #[derive(Clone)]
 pub struct Users {
@@ -56,11 +59,17 @@ impl manage::Server for Users {
     fn get_user_list(
         &mut self,
         _: manage::GetUserListParams,
-        _: manage::GetUserListResults,
+        mut result: manage::GetUserListResults,
     ) -> Promise<(), ::capnp::Error> {
-        Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+        let userdb = self.session.users.into_inner();
+        let users = pry!(userdb.get_all()
+            .map_err(|e| capnp::Error::failed(format!("UserDB error: {:?}", e))));
+        let mut builder = result.get().init_user_list(users.len() as u32);
+        let me = User::new_self(self.session.clone());
+        for (i, (_, user)) in users.into_iter().enumerate() {
+            me.fill(user, builder.reborrow().get(i as u32));
+        }
+        Promise::ok(())
     }
     fn add_user(
         &mut self,

@@ -40,7 +40,7 @@ impl Machine {
             builder.set_urn(&format!("urn:fabaccess:resource:{}", self.resource.get_id()));
 
             {
-                let user = self.session.get_user();
+                let user = self.session.get_user_ref();
                 let state = self.resource.get_state_ref();
                 let state = state.as_ref();
 
@@ -113,7 +113,7 @@ impl UseServer for Machine {
         let resource = self.resource.clone();
         let session = self.session.clone();
         Promise::from_future(async move {
-            let user = session.get_user();
+            let user = session.get_user_ref();
             resource.try_update(session, Status::InUse(user)).await;
             Ok(())
         })
@@ -127,7 +127,7 @@ impl UseServer for Machine {
         let resource = self.resource.clone();
         let session = self.session.clone();
         Promise::from_future(async move {
-            let user = session.get_user();
+            let user = session.get_user_ref();
             resource
                 .try_update(session, Status::Reserved(user))
                 .await;
@@ -200,7 +200,7 @@ impl ManageServer for Machine {
         mut result: manage::GetMachineInfoExtendedResults,
     ) -> Promise<(), ::capnp::Error> {
         let mut builder = result.get();
-        let user = User::new(self.session.clone());
+        let user = User::new_self(self.session.clone());
         user.build_else(self.resource.get_current_user(), builder.reborrow().init_current_user());
         user.build_else(self.resource.get_previous_user(), builder.init_last_user());
         Promise::ok(())
@@ -233,7 +233,7 @@ impl ManageServer for Machine {
         let session = self.session.clone();
         Promise::from_future(async move {
             resource
-                .force_set(Status::InUse(session.get_user()))
+                .force_set(Status::InUse(session.get_user_ref()))
                 .await;
             Ok(())
         })
@@ -270,7 +270,7 @@ impl ManageServer for Machine {
         let session = self.session.clone();
         Promise::from_future(async move {
             resource
-                .force_set(Status::Blocked(session.get_user()))
+                .force_set(Status::Blocked(session.get_user_ref()))
                 .await;
             Ok(())
         })
@@ -295,7 +295,7 @@ impl AdminServer for Machine {
         _: admin::ForceSetStateResults,
     ) -> Promise<(), ::capnp::Error> {
         use api::schema::machine_capnp::machine::MachineState as APIMState;
-        let user = self.session.get_user();
+        let user = self.session.get_user_ref();
         let state = match pry!(pry!(params.get()).get_state()) {
             APIMState::Free => Status::Free,
             APIMState::Blocked => Status::Blocked(user),

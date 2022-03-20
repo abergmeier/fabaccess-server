@@ -93,6 +93,11 @@ impl Users {
             .map(|user| Deserialize::<db::User, _>::deserialize(user.as_ref(), &mut Infallible).unwrap())
     }
 
+    pub fn put_user(&self, uid: &str, user: &db::User) -> Result<(), lmdb::Error> {
+        tracing::trace!(uid, ?user, "Updating user");
+        self.userdb.put(uid, user)
+    }
+
     pub fn load_file<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
         let f = std::fs::read(path)?;
         let map: HashMap<String, UserData> = toml::from_slice(&f)?;

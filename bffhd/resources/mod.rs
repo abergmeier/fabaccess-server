@@ -167,7 +167,7 @@ impl Resource {
     pub async fn try_update(&self, session: SessionHandle, new: Status) {
         let old = self.get_state();
         let old: &Archived<State> = old.as_ref();
-        let user = session.get_user();
+        let user = session.get_user_ref();
 
         if session.has_manage(self) // Default allow for managers
 
@@ -224,7 +224,7 @@ impl Resource {
         let s: &Archived<State> = state.as_ref();
         let i: &Archived<MachineState> = &s.inner;
         if let ArchivedStatus::InUse(user) = &i.state {
-            let current = session.get_user();
+            let current = session.get_user_ref();
             if user == &current {
                 self.set_state(MachineState::free(Some(current)));
             }
@@ -236,7 +236,7 @@ impl Resource {
     }
 
     pub fn visible(&self, session: &SessionHandle) -> bool {
-        session.has_disclose(self) || self.is_owned_by(session.get_user())
+        session.has_disclose(self) || self.is_owned_by(session.get_user_ref())
     }
 
     pub fn is_owned_by(&self, owner: UserRef) -> bool {

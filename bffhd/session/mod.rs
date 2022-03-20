@@ -7,7 +7,7 @@ use crate::authorization::permissions::Permission;
 use crate::authorization::roles::{Roles};
 use crate::resources::Resource;
 use crate::Users;
-use crate::users::UserRef;
+use crate::users::{db, UserRef};
 
 
 #[derive(Clone)]
@@ -40,15 +40,19 @@ impl SessionManager {
 
 #[derive(Clone)]
 pub struct SessionHandle {
-    users: Users,
-    roles: Roles,
+    pub users: Users,
+    pub roles: Roles,
 
     user: UserRef,
 }
 
 impl SessionHandle {
-    pub fn get_user(&self) -> UserRef {
+    pub fn get_user_ref(&self) -> UserRef {
         self.user.clone()
+    }
+
+    pub fn get_user(&self) -> db::User {
+        self.users.get_user(self.user.get_username()).expect("Failed to get user self")
     }
 
     pub fn has_disclose(&self, resource: &Resource) -> bool {
