@@ -8,6 +8,7 @@ use futures_rustls::TlsAcceptor;
 use rustls::{Certificate, PrivateKey, ServerConfig, SupportedCipherSuite};
 use rustls::version::{TLS12, TLS13};
 use tracing::{Level};
+use crate::capnp::TlsListen;
 use crate::config;
 
 use crate::keylog::KeyLogFile;
@@ -61,7 +62,7 @@ impl TlsConfig {
         }
     }
 
-    pub fn make_tls_acceptor(&self, config: &config::TlsListen) -> anyhow::Result<TlsAcceptor> {
+    pub fn make_tls_acceptor(&self, config: &TlsListen) -> anyhow::Result<TlsAcceptor> {
         let span = tracing::debug_span!("tls");
         let _guard = span.enter();
 

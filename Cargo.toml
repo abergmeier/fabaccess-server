@@ -56,6 +56,7 @@ ptr_meta = "0.1"
 rkyv_typename = "0.7"
 rkyv_dyn = "0.7"
 inventory = "0.1"
+linkme = "0.2.10"
 chrono = { version = "0.4", features = ["serde"] }
 
 # Password hashing for internal users
@@ -77,7 +78,6 @@ capnp-rpc = "0.14.1"
 rsasl = { git = "https://github.com/dequbed/rsasl.git", branch = "main", default_features = false, features = ["unstable_custom_mechanism", "provider", "registry_static", "plain"] }
 desfire = "0.2.0-alpha1"
 hex = { version = "0.4.3", features = ["serde"] }
-linkme = "0.2.10"
 
 futures-signals = "0.3.22"
 async-oneshot = "0.5"

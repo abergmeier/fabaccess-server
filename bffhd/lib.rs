@@ -40,7 +40,6 @@ mod session;
 
 
 
-
 use std::sync::{Arc};
 
 use anyhow::Context;
@@ -79,7 +78,7 @@ pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 
 impl Diflouroborane {
     pub fn new(config: Config) -> anyhow::Result<Self> {
-        logging::init(&config);
+        logging::init(&config.logging);
         tracing::info!(version=RELEASE_STRING, "Starting");
 
         let span = tracing::info_span!("setup");

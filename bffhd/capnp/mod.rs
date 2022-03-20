@@ -1,6 +1,3 @@
-use crate::config::Listen;
-
-
 use async_net::TcpListener;
 
 
@@ -18,12 +15,11 @@ use std::io;
 
 use std::net::SocketAddr;
 
-
 use crate::authentication::AuthenticationHandle;
-
-
-
 use crate::session::SessionManager;
+
+mod config;
+pub use config::{Listen, TlsListen};
 
 mod authenticationsystem;
 mod connection;

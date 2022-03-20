@@ -6,17 +6,23 @@ use serde::{Serialize, Deserialize};
 
 use std::fmt::Formatter;
 use std::net::{ToSocketAddrs};
+use serde_dhall::{SimpleType};
 
+
+mod dhall;
+pub use dhall::read_config_file as read;
 
 use crate::authorization::permissions::{PrivilegesBuf};
 use crate::authorization::roles::Role;
+use crate::capnp::{Listen, TlsListen};
+use crate::logging::LogConfig;
 
-type Result<T> = std::result::Result<T, serde_dhall::Error>;
+pub fn load(path: impl AsRef<Path>, args: &clap::ArgMatches) -> anyhow::Result<Config> {
+    unimplemented!()
+}
 
-pub fn read(path: &Path) -> Result<Config> {
-    serde_dhall::from_file(path)
-        .parse()
-        .map_err(Into::into)
+pub struct ConfigBlock {
+    static_type: SimpleType,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -78,7 +84,7 @@ pub struct Config {
     pub verbosity: isize,
 
     #[serde(default, skip)]
-    pub log_format: String,
+    pub logging: LogConfig,
 }
 
 impl Config {
@@ -105,49 +111,6 @@ pub(crate) fn deser_option<'de, D, T>(d: D) -> std::result::Result<Option<T>, D:
     Ok(T::deserialize(d).ok())
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct Listen {
-    address: String,
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
-    port: Option<u16>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct TlsListen {
-    pub certfile: PathBuf,
-    pub keyfile: PathBuf,
-
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub ciphers: Option<String>,
-    #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub tls_min_version: Option<String>,
-    #[serde(default = "Vec::new", skip_serializing_if = "Vec::is_empty")]
-    pub protocols: Vec<String>,
-}
-
-impl Listen {
-    pub fn to_tuple(&self) -> (&str, u16) {
-        (self.address.as_str(), self.port.unwrap_or(DEFAULT_PORT))
-    }
-}
-
-impl std::fmt::Display for Listen {
-    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}:{}", &self.address, self.port.unwrap_or(DEFAULT_PORT))
-    }
-}
-
-impl ToSocketAddrs for Listen {
-    type Iter = <(String, u16) as ToSocketAddrs>::Iter;
-
-    fn to_socket_addrs(&self) -> std::io::Result<Self::Iter> {
-        if let Some(port) = self.port {
-            (self.address.as_str(), port).to_socket_addrs()
-        } else {
-            (self.address.as_str(), DEFAULT_PORT).to_socket_addrs()
-        }
-    }
-}
 
 impl Default for Config {
     fn default() -> Self {
@@ -194,10 +157,7 @@ impl Default for Config {
 
             tlskeylog: None,
             verbosity: 0,
-            log_format: "Full".to_string(),
+            logging: LogConfig::default(),
         }
     }
 }
-
-// The default port in the non-assignable i.e. free-use area
-pub const DEFAULT_PORT: u16 = 59661;

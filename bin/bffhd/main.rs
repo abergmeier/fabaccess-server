@@ -1,4 +1,4 @@
-use clap::{Arg, Command};
+use clap::{Arg, Command, Parser};
 use diflouroborane::{config, Diflouroborane};
 
 
@@ -91,16 +91,23 @@ fn main() -> anyhow::Result<()> {
         // invalidate the generated TOML
         let stdout = io::stdout();
         let mut handle = stdout.lock();
-        handle.write_all(&encoded.as_bytes()).unwrap();
+        handle.write_all(encoded.as_bytes()).unwrap();
 
         // Early return to exit.
         return Ok(());
     } else if matches.is_present("check config") {
         match config::read(&PathBuf::from_str(configpath).unwrap()) {
             Ok(c) => {
-                println!("{:#?}", c);
-                println!("config is valid");
-                std::process::exit(0);
+                let formatted = format!("{:#?}", c);
+
+                // Direct writing to fd 1 is faster but also prevents any print-formatting that could
+                // invalidate the generated TOML
+                let stdout = io::stdout();
+                let mut handle = stdout.lock();
+                handle.write_all(formatted.as_bytes()).unwrap();
+
+                // Early return to exit.
+                return Ok(());
             }
             Err(e) => {
                 eprintln!("{}", e);
@@ -140,7 +147,7 @@ fn main() -> anyhow::Result<()> {
         if config.verbosity == 0 && matches.is_present("quiet") {
             config.verbosity = -1;
         }
-        config.log_format = matches.value_of("log format").unwrap_or("Full").to_string();
+        config.logging.format = matches.value_of("log format").unwrap_or("full").to_string();
 
         let mut bffh = Diflouroborane::new(config)?;
         bffh.run()?;

@@ -9,7 +9,10 @@ use rkyv_dyn::{DynDeserializer, DynError, DynSerializer};
 
 
 use crate::utils::oid::ObjectIdentifier;
+
+// Not using linkme because dynamically loaded modules
 use inventory;
+
 use rkyv::ser::{ScratchSpace, Serializer};
 use serde::de::Error as SerdeError;
 use serde::ser::SerializeMap;
