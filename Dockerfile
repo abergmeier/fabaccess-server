@@ -1,5 +1,5 @@
 # Setup build image for multistage build
-FROM rust:buster as builder
+FROM rust:bullseye as builder
 # install build deps
 RUN apt-get update && apt-get upgrade -y
 RUN apt-get install -yqq --no-install-recommends capnproto
@@ -10,9 +10,9 @@ RUN cargo build --release
 
 
 # Setup deployable image
-FROM debian:buster-slim
+FROM debian:bullseye-slim
 # Install runtime deps
-RUN apt-get update && apt-get upgrade -yqq
+#RUN apt-get update && apt-get upgrade -yqq
 COPY --from=builder /usr/src/bffh/target/release/bffhd /usr/local/bin/bffhd
 #COPY --from=builder /usr/src/bffh/examples/bffh.dhall /etc/diflouroborane.dhall
 # RUN diflouroborane --print-default > /etc/diflouroborane.toml
