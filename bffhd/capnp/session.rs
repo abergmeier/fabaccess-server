@@ -1,4 +1,5 @@
 use api::authenticationsystem_capnp::response::successful::Builder;
+use crate::authorization::permissions::Permission;
 
 
 use crate::capnp::machinesystem::Machines;
@@ -17,8 +18,24 @@ impl APISession {
 
     pub fn build(session: SessionHandle, builder: Builder) {
         let mut builder = builder.init_session();
-        builder.set_machine_system(capnp_rpc::new_client(Machines::new(session.clone())));
-        builder.set_user_system(capnp_rpc::new_client(Users::new(session.clone())));
-        builder.set_permission_system(capnp_rpc::new_client(Permissions::new(session)));
+
+        {
+            let mut b = builder.reborrow().init_machine_system();
+            b.set_info(capnp_rpc::new_client(Machines::new(session.clone())));
+        }
+
+        {
+            let mut b = builder.reborrow().init_user_system();
+            let u = Users::new(session.clone());
+            if session.has_perm(Permission::new("bffh.users.manage")) {
+                b.set_manage(capnp_rpc::new_client(u.clone()));
+            }
+            b.set_info(capnp_rpc::new_client(u));
+        }
+
+        {
+            let mut b = builder.init_permission_system();
+            b.set_info(capnp_rpc::new_client(Permissions::new(session)));
+        }
     }
 }

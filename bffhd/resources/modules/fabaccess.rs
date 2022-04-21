@@ -6,7 +6,7 @@ use rkyv::{Archive, Archived, Deserialize, Infallible};
 
 use std::str::FromStr;
 
-use crate::oidvalue;
+//use crate::oidvalue;
 use crate::resources::state::{State};
 
 
@@ -137,4 +137,4 @@ pub static OID_TYPE: Lazy<ObjectIdentifier> =
     Lazy::new(|| ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.14").unwrap());
 pub static OID_VALUE: Lazy<ObjectIdentifier> =
     Lazy::new(|| ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.2.4").unwrap());
-oidvalue!(OID_TYPE, MachineState, ArchivedMachineState);
+//oidvalue!(OID_TYPE, MachineState, ArchivedMachineState);

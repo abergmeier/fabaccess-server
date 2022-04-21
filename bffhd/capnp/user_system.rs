@@ -2,7 +2,7 @@ use capnp::capability::Promise;
 use capnp_rpc::pry;
 use libc::user;
 use api::usersystem_capnp::user_system::{
-    info, manage, Server as UserSystem,
+    info, manage,
     self as system,
 };
 use crate::authorization::permissions::Permission;
@@ -22,34 +22,13 @@ impl Users {
     }
 }
 
-impl system::Server for Users {
-    fn info(
-        &mut self,
-        _: system::InfoParams,
-        mut result: system::InfoResults,
-    ) -> Promise<(), ::capnp::Error> {
-        result.get().set_info(capnp_rpc::new_client(self.clone()));
-        Promise::ok(())
-    }
-    fn manage(
-        &mut self,
-        _: system::ManageParams,
-        mut result: system::ManageResults,
-    ) -> Promise<(), ::capnp::Error> {
-        if self.session.has_perm(Permission::new("bffh.users.manage")) {
-            result.get().set_manage(capnp_rpc::new_client(self.clone()));
-        }
-        Promise::ok(())
-    }
-}
-
 impl info::Server for Users {
     fn get_user_self(
         &mut self,
         _: info::GetUserSelfParams,
         mut result: info::GetUserSelfResults,
     ) -> Promise<(), ::capnp::Error> {
-        let builder = result.get().init_user();
+        let builder = result.get();
         User::build(self.session.clone(), builder);
         Promise::ok(())
     }

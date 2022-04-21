@@ -1,4 +1,4 @@
-use api::permissionsystem_capnp::permission_system::Server as PermissionSystem;
+use api::permissionsystem_capnp::permission_system::info::Server as PermissionSystem;
 
 use crate::session::SessionHandle;
 

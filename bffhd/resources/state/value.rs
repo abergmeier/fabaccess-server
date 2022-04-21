@@ -1,10 +1,7 @@
 use std::{any::Any, fmt, hash::Hash, ptr, str::FromStr};
 
 use ptr_meta::{DynMetadata, Pointee};
-use rkyv::{
-    out_field, Archive, ArchivePointee, ArchiveUnsized, Archived, ArchivedMetadata, Deserialize,
-    DeserializeUnsized, Fallible, Serialize, SerializeUnsized,
-};
+use rkyv::{out_field, Archive, ArchivePointee, ArchiveUnsized, Archived, ArchivedMetadata, Deserialize, DeserializeUnsized, Fallible, Serialize, SerializeUnsized, RelPtr};
 use rkyv_dyn::{DynDeserializer, DynError, DynSerializer};
 
 
@@ -20,7 +17,396 @@ use std::alloc::Layout;
 use std::collections::HashMap;
 use std::fmt::Formatter;
 use std::mem::MaybeUninit;
+use std::ops::Deref;
+use std::sync::atomic::{AtomicUsize, Ordering};
+use rkyv::boxed::{ArchivedBox, BoxResolver};
+use rkyv::vec::ArchivedVec;
 
+#[repr(transparent)]
+struct MetaBox<T: ?Sized>(Box<T>);
+impl<T: ?Sized> From<Box<T>> for MetaBox<T> {
+    fn from(b: Box<T>) -> Self {
+        Self(b)
+    }
+}
+
+#[repr(transparent)]
+struct ArchivedMetaBox<T: ArchivePointee + ?Sized>(RelPtr<T>);
+impl<T: ArchivePointee + ?Sized> ArchivedMetaBox<T> {
+    #[inline]
+    pub fn get(&self) -> &T {
+        unsafe { &*self.0.as_ptr() }
+    }
+}
+
+impl<T: ArchivePointee + ?Sized> AsRef<T> for ArchivedMetaBox<T> {
+    fn as_ref(&self) -> &T {
+        self.get()
+    }
+}
+
+impl<T: ArchivePointee + ?Sized> Deref for ArchivedMetaBox<T> {
+    type Target = T;
+
+    #[inline]
+    fn deref(&self) -> &Self::Target {
+        self.get()
+    }
+}
+
+// State built as
+struct NewStateBuilder {
+    inner: Vec<MetaBox<dyn SerializeStateValue>>,
+}
+
+// turns into
+struct NewState {
+    inner: ArchivedVec<ArchivedMetaBox<dyn ArchivedStateValue>>
+}
+impl NewState {
+    pub fn get_value<T: TypeOid>(&self) -> Option<&T> {
+        /*
+        let target_oid = T::type_oid();
+
+        let values = self.inner.as_slice();
+        for v in values {
+            let oid: &Archived<ObjectIdentifier> = &v.metadata().type_oid;
+            if &target_oid.deref() == &oid.deref() {
+                let value = unsafe { &*v.as_ptr().cast() };
+                return Some(value);
+            }
+        }
+
+        None
+         */
+        unimplemented!()
+    }
+}
+
+// for usage.
+// The important part is that both `SerializeValue` and `Value` tell us their OIDs. State will
+// usually consist of only a very small number of parts, most of the time just one, so linear
+// search will be the best.
+// `dyn Value` is Archived using custom sauce Metadata that will store the OID of the state
+// value, allowing us to cast the object (reasonably) safely. Thus we can also add a
+// method `get_part<T: Value>(&self) -> Option<&T>`
+// ArchivedBox is just a RelPtr into the object; so we'd use an `ArchivedValue<NewDesignState>`.
+// We can freely modify the memory of the value, so caching vtables is possible & sensible?
+// For dumping / loading values using serde we have to be able to serialize a `dyn Value` and to
+// deserialize a `dyn SerializeValue`.
+// This means, for every type T that's a value we must have:
+// - impl SerializeValue for T, which probably implies impl Value for T?
+// - impl Value for Archived<T>
+// - impl serde::Deserialize for T
+// - impl serde::Serialize for Archived<T>
+// - impl rkyv::Archive, rkyv::Serialize for T
+
+#[ptr_meta::pointee]
+/// Trait that values in the State Builder have to implement
+///
+/// It requires serde::Deserialize and rkyv::SerializeUnsized to be implemented.
+///
+/// it is assumed that there is a 1:1 mapping between a SerializeStateValue and a StateValue
+/// implementation. Every `T` implementing the former has exactly *one* `Archived<T>` implementing
+/// the latter.
+///
+/// The archived version of any implementation must implement [ArchivedStateValue](trait@ArchivedStateValue).
+pub trait SerializeStateValue: SerializeDynOid {}
+
+#[ptr_meta::pointee]
+/// Trait that (rkyv'ed) values in the State Object have to implement.
+///
+/// It requires serde::Serialize to be implemented.
+///
+/// It must be Sync since the State is sent as a signal to all connected actors by reference.
+/// It must be Send since the DB thread and the signal thread may be different.
+pub trait ArchivedStateValue: Send + Sync {}
+
+/// Serializing a trait object by storing an OID alongside
+///
+/// This trait is a dependency for [SerializeStateValue](trait@SerializeStateValue). It is by
+/// default implemented for all `T where T: for<'a> Serialize<dyn DynSerializer + 'a>, T::Archived: TypeOid`.
+pub trait SerializeDynOid {
+    /// Return the OID associated with the **Archived** type, i.e. `Archived<Self>`.
+    ///
+    /// This OID will be serialized alongside the trait object and is used to retrieve the
+    /// correct vtable when loading the state from DB.
+    fn archived_type_oid(&self) -> &'static ObjectIdentifier;
+
+    /// Serialize this type into a [`DynSerializer`](trait@DynSerializer)
+    fn serialize_dynoid(&self, serializer: &mut dyn DynSerializer) -> Result<usize, DynError>;
+}
+
+/// Types with an associated OID
+///
+/// This trait is required by the default implementation of [SerializeDynOid](trait@SerializeDynOid),
+/// providing the OID that is serialized alongside the state object to be able to correctly cast
+/// it when accessing state from the DB.
+pub trait TypeOid {
+    fn type_oid() -> &'static ObjectIdentifier;
+    fn type_name() -> &'static str;
+}
+
+impl<T> SerializeDynOid for T
+    where
+        T: for<'a> Serialize<dyn DynSerializer + 'a>,
+        T::Archived: TypeOid,
+{
+    fn archived_type_oid(&self) -> &'static ObjectIdentifier {
+        Archived::<T>::type_oid()
+    }
+
+    fn serialize_dynoid(&self, serializer: &mut dyn DynSerializer) -> Result<usize, DynError> {
+        serializer.serialize_value(self)
+    }
+}
+
+impl ArchivePointee for dyn ArchivedStateValue {
+    type ArchivedMetadata = ArchivedStateValueMetadata;
+
+    fn pointer_metadata(archived: &Self::ArchivedMetadata) -> <Self as Pointee>::Metadata {
+        archived.pointer_metadata()
+    }
+}
+
+impl ArchiveUnsized for dyn SerializeStateValue {
+    type Archived = dyn ArchivedStateValue;
+    type MetadataResolver = <ObjectIdentifier as Archive>::Resolver;
+
+    unsafe fn resolve_metadata(
+        &self,
+        pos: usize,
+        resolver: Self::MetadataResolver,
+        out: *mut ArchivedMetadata<Self>, // => ArchivedStateValueMetadata
+    ) {
+        let (oid_pos, oid) = out_field!(out.type_oid);
+        let type_oid = self.archived_type_oid();
+        type_oid.resolve(pos + oid_pos, resolver, oid);
+
+        let (_vtable_cache_pos, vtable_cache) = out_field!(out.vtable_cache);
+        *vtable_cache = AtomicUsize::default();
+    }
+}
+
+impl<S: ScratchSpace + Serializer + ?Sized> SerializeUnsized<S> for dyn SerializeStateValue {
+    fn serialize_unsized(&self, mut serializer: &mut S) -> Result<usize, S::Error> {
+        self.serialize_dynoid(&mut serializer)
+            .map_err(|e| *e.downcast::<S::Error>().unwrap())
+    }
+
+    fn serialize_metadata(&self, serializer: &mut S) -> Result<Self::MetadataResolver, S::Error> {
+        let oid = self.archived_type_oid();
+        oid.serialize(serializer)
+    }
+}
+
+#[derive(Debug)]
+pub struct ArchivedStateValueMetadata {
+    pub type_oid: Archived<ObjectIdentifier>,
+    vtable_cache: AtomicUsize,
+}
+
+impl ArchivedStateValueMetadata {
+    // TODO: `usize as *const VTable` is not sane.
+    pub fn vtable(&self) -> usize {
+        let val = self.vtable_cache.load(Ordering::Relaxed);
+        if val != 0 {
+            return val;
+        }
+
+        let val = IMPL_REGISTRY
+            .get(ImplId::from_type_oid(&self.type_oid))
+            .expect(&format!("Unregistered type oid {:?}", self.type_oid))
+            .vtable;
+        self.vtable_cache.store(val, Ordering::Relaxed);
+        return val;
+    }
+
+    pub fn pointer_metadata(&self) -> DynMetadata<dyn ArchivedStateValue> {
+        unsafe { core::mem::transmute(self.vtable()) }
+    }
+}
+
+#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
+/// OID of an [ArchivedStateValue](trait@ArchivedStateValue) implementation.
+///
+/// Used by the global type registry of all implementations to look up the vtables of state values
+/// when accessing it from DB and when (de-)serializing it using serde.
+struct ImplId<'a> {
+    type_oid: &'a [u8],
+}
+
+impl<'a> ImplId<'a> {
+    fn from_type_oid(type_oid: &'a [u8]) -> Self {
+        Self { type_oid }
+    }
+}
+
+impl ImplId<'static> {
+    fn new<T: TypeOid>() -> Self {
+        Self {
+            type_oid: &T::type_oid(),
+        }
+    }
+}
+
+#[derive(Copy, Clone, Debug)]
+struct ImplData<'a> {
+    pub vtable: usize,
+    pub name: &'a str,
+    pub info: ImplDebugInfo,
+}
+
+#[derive(Copy, Clone, Debug)]
+pub struct ImplDebugInfo {
+    pub file: &'static str,
+    pub line: u32,
+    pub column: u32,
+}
+
+#[derive(Debug)]
+/// State Value Implementation Entry
+///
+/// To register a state implementation you must call [inventory::collect](macro@inventory::collect)
+/// macro for an Entry constructed for your type on top level. Your type will have to have
+/// implementations of [TypeOid](trait@TypeOid) and [RegisteredImpl](trait@RegisteredImpl)
+/// Alternatively you can use the
+/// [statevalue_register](macro@crate::statevalue_register) macro with your OID as first and type
+/// as second parameter like so:
+///
+/// ```no_run
+/// struct MyStruct;
+/// statevalue_register!(ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.14").unwrap(), MyStruct)
+/// ```
+pub struct ImplEntry<'a> {
+    id: ImplId<'a>,
+    data: ImplData<'a>,
+}
+inventory::collect!(ImplEntry<'static>);
+
+impl ImplEntry<'_> {
+    pub fn new<T: TypeOid + RegisteredImpl>() -> Self {
+        Self {
+            id: ImplId::new::<T>(),
+            data: ImplData {
+                vtable: <T as RegisteredImpl>::vtable(),
+                name: <T as TypeOid>::type_name(),
+                info: <T as RegisteredImpl>::debug_info(),
+            },
+        }
+    }
+}
+
+#[derive(Debug)]
+struct ImplRegistry {
+    oid_to_data: HashMap<ImplId<'static>, ImplData<'static>>,
+}
+
+impl ImplRegistry {
+    fn new() -> Self {
+        Self {
+            oid_to_data: HashMap::new(),
+        }
+    }
+
+    fn add_entry(&mut self, entry: &'static ImplEntry) {
+        let old_val = self.oid_to_data.insert(entry.id, entry.data);
+
+        if let Some(old) = old_val {
+            eprintln!("Value impl oid conflict for {:?}", entry.id.type_oid);
+            eprintln!(
+                "Existing impl registered at {}:{}:{}",
+                old.info.file, old.info.line, old.info.column
+            );
+            eprintln!(
+                "New impl registered at {}:{}:{}",
+                entry.data.info.file, entry.data.info.line, entry.data.info.column
+            );
+        }
+    }
+
+    fn get(&self, type_oid: ImplId) -> Option<ImplData> {
+        self.oid_to_data.get(&type_oid).map(|d| *d)
+    }
+}
+lazy_static::lazy_static! {
+    // FIXME: Dynamic modules *will* break this.
+    static ref IMPL_REGISTRY: ImplRegistry = {
+        let mut reg = ImplRegistry::new();
+        for entry in inventory::iter::<ImplEntry> {
+            reg.add_entry(entry);
+        }
+        reg
+    };
+}
+
+pub unsafe trait RegisteredImpl {
+    fn vtable() -> usize;
+    fn debug_info() -> ImplDebugInfo;
+}
+
+#[doc(hidden)]
+#[macro_use]
+pub mod macros {
+    #[macro_export]
+    macro_rules! debug_info {
+        () => {
+            $crate::resources::state::value::ImplDebugInfo {
+                file: ::core::file!(),
+                line: ::core::line!(),
+                column: ::core::column!(),
+            }
+        };
+    }
+
+    #[macro_export]
+    macro_rules! statevalue_typeoid {
+        ( $x:ident, $y:ty, $z:ty ) => {
+            impl $crate::resources::state::value::TypeOid for $z {
+                fn type_oid() -> &'static $crate::utils::oid::ObjectIdentifier {
+                    &$x
+                }
+
+                fn type_name() -> &'static str {
+                    stringify!($y)
+                }
+            }
+        }
+    }
+
+    #[macro_export]
+    macro_rules! statevalue_registeredimpl {
+        ( $z:ty ) => {
+            unsafe impl $crate::resources::state::value::RegisteredImpl for $z {
+                fn vtable() -> usize {
+                    unsafe {
+                        ::core::mem::transmute(ptr_meta::metadata(
+                            ::core::ptr::null::<$z>() as *const dyn $crate::resources::state::value::ArchivedStateValue
+                        ))
+                    }
+                }
+                fn debug_info() -> $crate::resources::state::value::ImplDebugInfo {
+                    $crate::debug_info!()
+                }
+            }
+        }
+    }
+
+    #[macro_export]
+    macro_rules! statevalue_register {
+        ( $x:ident, $y:ty ) => {
+            $crate::oidvalue! {$x, $y, $y}
+        };
+        ( $x:ident, $y:ty, $z:ty ) => {
+            $crate::statevalue_typeoid! { $x, $y, $z }
+            $crate::statevalue_registeredimpl! { $z }
+
+            ::inventory::submit! {$crate::resources::state::value::ImplEntry::new::<$z>()}
+        };
+    }
+}
+
+/*
 /// Adding a custom type to BFFH state management:
 ///
 /// 1. Implement `serde`'s [`Serialize`](serde::Serialize) and [`Deserialize`](serde::Deserialize)
@@ -204,7 +590,6 @@ impl<'de> serde::de::DeserializeSeed<'de> for InitIntoSelf {
 pub trait TypeOid {
     fn type_oid() -> &'static ObjectIdentifier;
     fn type_name() -> &'static str;
-    fn type_desc() -> &'static str;
 }
 
 impl<S: ScratchSpace + Serializer + ?Sized> SerializeUnsized<S> for dyn SerializeValue {
@@ -217,12 +602,6 @@ impl<S: ScratchSpace + Serializer + ?Sized> SerializeUnsized<S> for dyn Serializ
         let oid = self.archived_type_oid();
         oid.serialize(serializer)
     }
-}
-
-/// Serialize dynamic types by storing an OID alongside
-pub trait SerializeDynOid {
-    fn serialize_dynoid(&self, serializer: &mut dyn DynSerializer) -> Result<usize, DynError>;
-    fn archived_type_oid(&self) -> &'static ObjectIdentifier;
 }
 
 impl<T> SerializeDynOid for T
@@ -254,16 +633,12 @@ pub trait DeserializeDynOid {
 
 #[ptr_meta::pointee]
 pub trait SerializeValue: Value + SerializeDynOid {
-    fn dyn_clone(&self) -> Box<dyn SerializeValue>;
 }
 
 impl<T: Archive + Value + SerializeDynOid + Clone> SerializeValue for T
 where
     T::Archived: RegisteredImpl,
 {
-    fn dyn_clone(&self) -> Box<dyn SerializeValue> {
-        Box::new(self.clone())
-    }
 }
 
 impl PartialEq for dyn SerializeValue {
@@ -323,230 +698,9 @@ impl ArchiveUnsized for dyn SerializeValue {
     }
 }
 
-#[derive(Debug)]
-pub struct ArchivedValueMetadata {
-    pub type_oid: Archived<ObjectIdentifier>,
-}
 
-impl ArchivedValueMetadata {
-    pub unsafe fn emplace(type_oid: Archived<ObjectIdentifier>, out: *mut Self) {
-        let p = ptr::addr_of_mut!((*out).type_oid);
-        ptr::write(p, type_oid);
-    }
 
-    pub fn vtable(&self) -> usize {
-        IMPL_REGISTRY
-            .get(ImplId::from_type_oid(&self.type_oid))
-            .expect(&format!(
-                "Unregistered \
-            type \
-            oid \
-            {:?}",
-                self.type_oid
-            ))
-            .vtable
-    }
 
-    pub fn pointer_metadata(&self) -> DynMetadata<dyn DeserializeValue> {
-        unsafe { core::mem::transmute(self.vtable()) }
-    }
-}
-
-#[derive(Copy, Clone, Debug, Hash, Eq, PartialEq)]
-pub struct ImplId<'a> {
-    type_oid: &'a [u8],
-}
-
-impl<'a> ImplId<'a> {
-    pub fn from_type_oid(type_oid: &'a [u8]) -> Self {
-        Self { type_oid }
-    }
-}
-
-impl ImplId<'static> {
-    fn new<T: TypeOid>() -> Self {
-        Self {
-            type_oid: &T::type_oid(),
-        }
-    }
-}
-
-#[derive(Copy, Clone, Debug)]
-struct ImplData<'a> {
-    pub vtable: usize,
-    pub name: &'a str,
-    pub desc: &'a str,
-    pub info: ImplDebugInfo,
-}
-
-#[derive(Copy, Clone, Debug)]
-#[doc(hidden)]
-pub struct ImplDebugInfo {
-    pub file: &'static str,
-    pub line: u32,
-    pub column: u32,
-}
-
-impl ImplData<'_> {
-    pub unsafe fn pointer_metadata<T: ?Sized>(&self) -> DynMetadata<T> {
-        core::mem::transmute(self.vtable)
-    }
-}
-
-#[derive(Debug)]
-pub struct ImplEntry<'a> {
-    id: ImplId<'a>,
-    data: ImplData<'a>,
-}
-inventory::collect!(ImplEntry<'static>);
-
-impl ImplEntry<'_> {
-    #[doc(hidden)]
-    pub fn new<T: TypeOid + RegisteredImpl>() -> Self {
-        Self {
-            id: ImplId::new::<T>(),
-            data: ImplData {
-                vtable: <T as RegisteredImpl>::vtable(),
-                name: <T as TypeOid>::type_name(),
-                desc: <T as TypeOid>::type_desc(),
-                info: <T as RegisteredImpl>::debug_info(),
-            },
-        }
-    }
-}
-
-#[derive(Debug)]
-struct ImplRegistry {
-    oid_to_data: HashMap<ImplId<'static>, ImplData<'static>>,
-}
-
-impl ImplRegistry {
-    fn new() -> Self {
-        Self {
-            oid_to_data: HashMap::new(),
-        }
-    }
-
-    fn add_entry(&mut self, entry: &'static ImplEntry) {
-        let old_val = self.oid_to_data.insert(entry.id, entry.data);
-
-        if let Some(old) = old_val {
-            eprintln!("Value impl oid conflict for {:?}", entry.id.type_oid);
-            eprintln!(
-                "Existing impl registered at {}:{}:{}",
-                old.info.file, old.info.line, old.info.column
-            );
-            eprintln!(
-                "New impl registered at {}:{}:{}",
-                entry.data.info.file, entry.data.info.line, entry.data.info.column
-            );
-        }
-        assert!(old_val.is_none());
-    }
-
-    fn get(&self, type_oid: ImplId) -> Option<ImplData> {
-        self.oid_to_data.get(&type_oid).map(|d| *d)
-    }
-}
-
-lazy_static::lazy_static! {
-    // FIXME: Dynamic modules *will* break this.
-    static ref IMPL_REGISTRY: ImplRegistry = {
-        let mut reg = ImplRegistry::new();
-        for entry in inventory::iter::<ImplEntry> {
-            reg.add_entry(entry);
-        }
-        reg
-    };
-}
-
-pub unsafe trait RegisteredImpl {
-    fn vtable() -> usize;
-    fn debug_info() -> ImplDebugInfo;
-}
-
-#[macro_use]
-pub mod macros {
-    #[macro_export]
-    macro_rules! debug_info {
-        () => {
-            $crate::resources::state::value::ImplDebugInfo {
-                file: ::core::file!(),
-                line: ::core::line!(),
-                column: ::core::column!(),
-            }
-        };
-    }
-    #[macro_export]
-    macro_rules! oiddeser {
-        ( $y:ty, $z:ty ) => {
-            impl $crate::resources::state::value::DeserializeDynOid for $y
-            where
-                $y: for<'a> ::rkyv::Deserialize<$z, (dyn ::rkyv_dyn::DynDeserializer + 'a)>,
-            {
-                unsafe fn deserialize_dynoid(
-                    &self,
-                    deserializer: &mut dyn ::rkyv_dyn::DynDeserializer,
-                    alloc: &mut dyn FnMut(::core::alloc::Layout) -> *mut u8,
-                ) -> Result<*mut (), ::rkyv_dyn::DynError> {
-                    let ptr = alloc(::core::alloc::Layout::new::<$z>()).cast::<$z>();
-                    ptr.write(self.deserialize(deserializer)?);
-                    Ok(ptr as *mut ())
-                }
-
-                fn deserialize_dynoid_metadata(
-                    &self,
-                    _: &mut dyn ::rkyv_dyn::DynDeserializer,
-                ) -> ::std::result::Result<<dyn $crate::resources::state::value::SerializeValue
-                as
-                ::ptr_meta::Pointee>::Metadata, ::rkyv_dyn::DynError> {
-                    unsafe {
-                        Ok(core::mem::transmute(ptr_meta::metadata(
-                            ::core::ptr::null::<$z>() as *const dyn $crate::resources::state::value::SerializeValue,
-                        )))
-                    }
-                }
-            }
-        };
-    }
-    #[macro_export]
-    macro_rules! oidvalue {
-        ( $x:ident, $y:ty ) => {
-            $crate::oidvalue! {$x, $y, $y}
-        };
-        ( $x:ident, $y:ty, $z:ty ) => {
-            $crate::oiddeser! {$z, $y}
-
-            impl $crate::resources::state::value::TypeOid for $z {
-                fn type_oid() -> &'static $crate::utils::oid::ObjectIdentifier {
-                    &$x
-                }
-
-                fn type_name() -> &'static str {
-                    stringify!($y)
-                }
-
-                fn type_desc() -> &'static str {
-                    "builtin"
-                }
-            }
-            unsafe impl $crate::resources::state::value::RegisteredImpl for $z {
-                fn vtable() -> usize {
-                    unsafe {
-                        ::core::mem::transmute(ptr_meta::metadata(
-                            ::core::ptr::null::<$z>() as *const dyn $crate::resources::state::value::DeserializeValue
-                        ))
-                    }
-                }
-                fn debug_info() -> $crate::resources::state::value::ImplDebugInfo {
-                    $crate::debug_info!()
-                }
-            }
-
-            ::inventory::submit! {$crate::resources::state::value::ImplEntry::new::<$z>()}
-        };
-    }
-}
 
 
 lazy_static::lazy_static! {
@@ -646,3 +800,5 @@ mod tests {
         }
     }
 }
+
+ */

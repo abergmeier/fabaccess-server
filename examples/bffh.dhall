@@ -23,7 +23,7 @@
         -- If bffh can not bind a port for the specified combination if will log an error but *continue with the remaining ports*
         { address = "127.0.0.1", port = 59661 },
         { address = "::1", port = 59661 },
-        { address = "192.168.0.114", port = 59661 }
+        { address = "steak.fritz.box", port = 59661 }
     ],
 
     -- Configure TLS. BFFH requires a PEM-encoded certificate and the associated key as two separate files

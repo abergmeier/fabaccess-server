@@ -1,7 +1,7 @@
 
 use crate::session::SessionHandle;
 use api::machinesystem_capnp::machine_system::{
-    info, InfoParams, InfoResults, Server as MachineSystem,
+    info,
 };
 use capnp::capability::Promise;
 use capnp_rpc::pry;
@@ -20,14 +20,6 @@ impl Machines {
     pub fn new(session: SessionHandle) -> Self {
         // FIXME no unwrap bad
         Self { session, resources: RESOURCES.get().unwrap().clone() }
-    }
-}
-
-impl MachineSystem for Machines {
-    fn info(&mut self, _: InfoParams, mut result: InfoResults) -> Promise<(), ::capnp::Error> {
-        // TODO permission checking
-        result.get().set_info(capnp_rpc::new_client(self.clone()));
-        Promise::ok(())
     }
 }
 

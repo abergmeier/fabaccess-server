@@ -1209,16 +1209,25 @@ pub mod session {
       self.reader.total_size()
     }
     #[inline]
-    pub fn get_machine_system(self) -> ::capnp::Result<crate::schema::machinesystem_capnp::machine_system::Client> {
-      match self.reader.get_pointer_field(0).get_capability() { ::core::result::Result::Ok(c) => ::core::result::Result::Ok(::capnp::capability::FromClientHook::new(c)), ::core::result::Result::Err(e) => ::core::result::Result::Err(e)}
+    pub fn get_machine_system(self) -> ::capnp::Result<crate::schema::machinesystem_capnp::machine_system::Reader<'a>> {
+      ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(0), ::core::option::Option::None)
+    }
+    pub fn has_machine_system(&self) -> bool {
+      !self.reader.get_pointer_field(0).is_null()
     }
     #[inline]
-    pub fn get_user_system(self) -> ::capnp::Result<crate::schema::usersystem_capnp::user_system::Client> {
-      match self.reader.get_pointer_field(1).get_capability() { ::core::result::Result::Ok(c) => ::core::result::Result::Ok(::capnp::capability::FromClientHook::new(c)), ::core::result::Result::Err(e) => ::core::result::Result::Err(e)}
+    pub fn get_user_system(self) -> ::capnp::Result<crate::schema::usersystem_capnp::user_system::Reader<'a>> {
+      ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(1), ::core::option::Option::None)
+    }
+    pub fn has_user_system(&self) -> bool {
+      !self.reader.get_pointer_field(1).is_null()
     }
     #[inline]
-    pub fn get_permission_system(self) -> ::capnp::Result<crate::schema::permissionsystem_capnp::permission_system::Client> {
-      match self.reader.get_pointer_field(2).get_capability() { ::core::result::Result::Ok(c) => ::core::result::Result::Ok(::capnp::capability::FromClientHook::new(c)), ::core::result::Result::Err(e) => ::core::result::Result::Err(e)}
+    pub fn get_permission_system(self) -> ::capnp::Result<crate::schema::permissionsystem_capnp::permission_system::Reader<'a>> {
+      ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(2), ::core::option::Option::None)
+    }
+    pub fn has_permission_system(&self) -> bool {
+      !self.reader.get_pointer_field(2).is_null()
     }
   }
 
@@ -1271,28 +1280,49 @@ pub mod session {
       self.builder.into_reader().total_size()
     }
     #[inline]
-    pub fn get_machine_system(self) -> ::capnp::Result<crate::schema::machinesystem_capnp::machine_system::Client> {
-      match self.builder.get_pointer_field(0).get_capability() { ::core::result::Result::Ok(c) => ::core::result::Result::Ok(::capnp::capability::FromClientHook::new(c)), ::core::result::Result::Err(e) => ::core::result::Result::Err(e)}
+    pub fn get_machine_system(self) -> ::capnp::Result<crate::schema::machinesystem_capnp::machine_system::Builder<'a>> {
+      ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(0), ::core::option::Option::None)
     }
     #[inline]
-    pub fn set_machine_system(&mut self, value: crate::schema::machinesystem_capnp::machine_system::Client)  {
-      self.builder.get_pointer_field(0).set_capability(value.client.hook);
+    pub fn set_machine_system(&mut self, value: crate::schema::machinesystem_capnp::machine_system::Reader<'_>) -> ::capnp::Result<()> {
+      ::capnp::traits::SetPointerBuilder::set_pointer_builder(self.builder.get_pointer_field(0), value, false)
     }
     #[inline]
-    pub fn get_user_system(self) -> ::capnp::Result<crate::schema::usersystem_capnp::user_system::Client> {
-      match self.builder.get_pointer_field(1).get_capability() { ::core::result::Result::Ok(c) => ::core::result::Result::Ok(::capnp::capability::FromClientHook::new(c)), ::core::result::Result::Err(e) => ::core::result::Result::Err(e)}
+    pub fn init_machine_system(self, ) -> crate::schema::machinesystem_capnp::machine_system::Builder<'a> {
+      ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(0), 0)
+    }
+    pub fn has_machine_system(&self) -> bool {
+      !self.builder.get_pointer_field(0).is_null()
     }
     #[inline]
-    pub fn set_user_system(&mut self, value: crate::schema::usersystem_capnp::user_system::Client)  {
-      self.builder.get_pointer_field(1).set_capability(value.client.hook);
+    pub fn get_user_system(self) -> ::capnp::Result<crate::schema::usersystem_capnp::user_system::Builder<'a>> {
+      ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(1), ::core::option::Option::None)
     }
     #[inline]
-    pub fn get_permission_system(self) -> ::capnp::Result<crate::schema::permissionsystem_capnp::permission_system::Client> {
-      match self.builder.get_pointer_field(2).get_capability() { ::core::result::Result::Ok(c) => ::core::result::Result::Ok(::capnp::capability::FromClientHook::new(c)), ::core::result::Result::Err(e) => ::core::result::Result::Err(e)}
+    pub fn set_user_system(&mut self, value: crate::schema::usersystem_capnp::user_system::Reader<'_>) -> ::capnp::Result<()> {
+      ::capnp::traits::SetPointerBuilder::set_pointer_builder(self.builder.get_pointer_field(1), value, false)
     }
     #[inline]
-    pub fn set_permission_system(&mut self, value: crate::schema::permissionsystem_capnp::permission_system::Client)  {
-      self.builder.get_pointer_field(2).set_capability(value.client.hook);
+    pub fn init_user_system(self, ) -> crate::schema::usersystem_capnp::user_system::Builder<'a> {
+      ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(1), 0)
+    }
+    pub fn has_user_system(&self) -> bool {
+      !self.builder.get_pointer_field(1).is_null()
+    }
+    #[inline]
+    pub fn get_permission_system(self) -> ::capnp::Result<crate::schema::permissionsystem_capnp::permission_system::Builder<'a>> {
+      ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(2), ::core::option::Option::None)
+    }
+    #[inline]
+    pub fn set_permission_system(&mut self, value: crate::schema::permissionsystem_capnp::permission_system::Reader<'_>) -> ::capnp::Result<()> {
+      ::capnp::traits::SetPointerBuilder::set_pointer_builder(self.builder.get_pointer_field(2), value, false)
+    }
+    #[inline]
+    pub fn init_permission_system(self, ) -> crate::schema::permissionsystem_capnp::permission_system::Builder<'a> {
+      ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(2), 0)
+    }
+    pub fn has_permission_system(&self) -> bool {
+      !self.builder.get_pointer_field(2).is_null()
     }
   }
 
@@ -1303,14 +1333,14 @@ pub mod session {
     }
   }
   impl Pipeline  {
-    pub fn get_machine_system(&self) -> crate::schema::machinesystem_capnp::machine_system::Client {
-      ::capnp::capability::FromClientHook::new(self._typeless.get_pointer_field(0).as_cap())
+    pub fn get_machine_system(&self) -> crate::schema::machinesystem_capnp::machine_system::Pipeline {
+      ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(0))
     }
-    pub fn get_user_system(&self) -> crate::schema::usersystem_capnp::user_system::Client {
-      ::capnp::capability::FromClientHook::new(self._typeless.get_pointer_field(1).as_cap())
+    pub fn get_user_system(&self) -> crate::schema::usersystem_capnp::user_system::Pipeline {
+      ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(1))
     }
-    pub fn get_permission_system(&self) -> crate::schema::permissionsystem_capnp::permission_system::Client {
-      ::capnp::capability::FromClientHook::new(self._typeless.get_pointer_field(2).as_cap())
+    pub fn get_permission_system(&self) -> crate::schema::permissionsystem_capnp::permission_system::Pipeline {
+      ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(2))
     }
   }
   mod _private {
