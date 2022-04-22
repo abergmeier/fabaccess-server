@@ -208,8 +208,8 @@ impl ManageServer for Machine {
     ) -> Promise<(), ::capnp::Error> {
         let mut builder = result.get();
         let user = User::new_self(self.session.clone());
-        user.build_else(self.resource.get_current_user(), builder.reborrow().init_current_user());
-        user.build_else(self.resource.get_previous_user(), builder.init_last_user());
+        user.build_optional(self.resource.get_current_user(), builder.reborrow().init_current_user());
+        user.build_optional(self.resource.get_previous_user(), builder.init_last_user());
         Promise::ok(())
     }
     fn set_property(

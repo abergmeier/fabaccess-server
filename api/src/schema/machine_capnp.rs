@@ -82,7 +82,7 @@ pub mod machine {
       ::capnp::traits::FromU16::from_u16(self.reader.get_data_field::<u16>(0))
     }
     #[inline]
-    pub fn get_manager(self) -> ::capnp::Result<crate::schema::user_capnp::user::Reader<'a>> {
+    pub fn get_manager(self) -> ::capnp::Result<crate::schema::general_capnp::optional::Reader<'a,crate::schema::user_capnp::user::Owned>> {
       ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(4), ::core::option::Option::None)
     }
     pub fn has_manager(&self) -> bool {
@@ -256,15 +256,15 @@ pub mod machine {
       self.builder.set_data_field::<u16>(0, value as u16)
     }
     #[inline]
-    pub fn get_manager(self) -> ::capnp::Result<crate::schema::user_capnp::user::Builder<'a>> {
+    pub fn get_manager(self) -> ::capnp::Result<crate::schema::general_capnp::optional::Builder<'a,crate::schema::user_capnp::user::Owned>> {
       ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(4), ::core::option::Option::None)
     }
     #[inline]
-    pub fn set_manager(&mut self, value: crate::schema::user_capnp::user::Reader<'_>) -> ::capnp::Result<()> {
-      ::capnp::traits::SetPointerBuilder::set_pointer_builder(self.builder.get_pointer_field(4), value, false)
+    pub fn set_manager(&mut self, value: crate::schema::general_capnp::optional::Reader<'_,crate::schema::user_capnp::user::Owned>) -> ::capnp::Result<()> {
+      <crate::schema::general_capnp::optional::Reader<'_,crate::schema::user_capnp::user::Owned> as ::capnp::traits::SetPointerBuilder>::set_pointer_builder(self.builder.get_pointer_field(4), value, false)
     }
     #[inline]
-    pub fn init_manager(self, ) -> crate::schema::user_capnp::user::Builder<'a> {
+    pub fn init_manager(self, ) -> crate::schema::general_capnp::optional::Builder<'a,crate::schema::user_capnp::user::Owned> {
       ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(4), 0)
     }
     pub fn has_manager(&self) -> bool {
@@ -383,7 +383,7 @@ pub mod machine {
     pub fn get_space(&self) -> crate::schema::space_capnp::space::Pipeline {
       ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(1))
     }
-    pub fn get_manager(&self) -> crate::schema::user_capnp::user::Pipeline {
+    pub fn get_manager(&self) -> crate::schema::general_capnp::optional::Pipeline<crate::schema::user_capnp::user::Owned> {
       ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(4))
     }
     pub fn get_info(&self) -> crate::schema::machine_capnp::machine::info::Client {
@@ -496,21 +496,21 @@ pub mod machine {
         self.reader.total_size()
       }
       #[inline]
-      pub fn get_current_user(self) -> ::capnp::Result<crate::schema::user_capnp::user::Reader<'a>> {
+      pub fn get_current_user(self) -> ::capnp::Result<crate::schema::general_capnp::optional::Reader<'a,crate::schema::user_capnp::user::Owned>> {
         ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(0), ::core::option::Option::None)
       }
       pub fn has_current_user(&self) -> bool {
         !self.reader.get_pointer_field(0).is_null()
       }
       #[inline]
-      pub fn get_last_user(self) -> ::capnp::Result<crate::schema::user_capnp::user::Reader<'a>> {
+      pub fn get_last_user(self) -> ::capnp::Result<crate::schema::general_capnp::optional::Reader<'a,crate::schema::user_capnp::user::Owned>> {
         ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(1), ::core::option::Option::None)
       }
       pub fn has_last_user(&self) -> bool {
         !self.reader.get_pointer_field(1).is_null()
       }
       #[inline]
-      pub fn get_instructor_user(self) -> ::capnp::Result<crate::schema::user_capnp::user::Reader<'a>> {
+      pub fn get_instructor_user(self) -> ::capnp::Result<crate::schema::general_capnp::optional::Reader<'a,crate::schema::user_capnp::user::Owned>> {
         ::capnp::traits::FromPointerReader::get_from_pointer(&self.reader.get_pointer_field(2), ::core::option::Option::None)
       }
       pub fn has_instructor_user(&self) -> bool {
@@ -567,45 +567,45 @@ pub mod machine {
         self.builder.into_reader().total_size()
       }
       #[inline]
-      pub fn get_current_user(self) -> ::capnp::Result<crate::schema::user_capnp::user::Builder<'a>> {
+      pub fn get_current_user(self) -> ::capnp::Result<crate::schema::general_capnp::optional::Builder<'a,crate::schema::user_capnp::user::Owned>> {
         ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(0), ::core::option::Option::None)
       }
       #[inline]
-      pub fn set_current_user(&mut self, value: crate::schema::user_capnp::user::Reader<'_>) -> ::capnp::Result<()> {
-        ::capnp::traits::SetPointerBuilder::set_pointer_builder(self.builder.get_pointer_field(0), value, false)
+      pub fn set_current_user(&mut self, value: crate::schema::general_capnp::optional::Reader<'_,crate::schema::user_capnp::user::Owned>) -> ::capnp::Result<()> {
+        <crate::schema::general_capnp::optional::Reader<'_,crate::schema::user_capnp::user::Owned> as ::capnp::traits::SetPointerBuilder>::set_pointer_builder(self.builder.get_pointer_field(0), value, false)
       }
       #[inline]
-      pub fn init_current_user(self, ) -> crate::schema::user_capnp::user::Builder<'a> {
+      pub fn init_current_user(self, ) -> crate::schema::general_capnp::optional::Builder<'a,crate::schema::user_capnp::user::Owned> {
         ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(0), 0)
       }
       pub fn has_current_user(&self) -> bool {
         !self.builder.get_pointer_field(0).is_null()
       }
       #[inline]
-      pub fn get_last_user(self) -> ::capnp::Result<crate::schema::user_capnp::user::Builder<'a>> {
+      pub fn get_last_user(self) -> ::capnp::Result<crate::schema::general_capnp::optional::Builder<'a,crate::schema::user_capnp::user::Owned>> {
         ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(1), ::core::option::Option::None)
       }
       #[inline]
-      pub fn set_last_user(&mut self, value: crate::schema::user_capnp::user::Reader<'_>) -> ::capnp::Result<()> {
-        ::capnp::traits::SetPointerBuilder::set_pointer_builder(self.builder.get_pointer_field(1), value, false)
+      pub fn set_last_user(&mut self, value: crate::schema::general_capnp::optional::Reader<'_,crate::schema::user_capnp::user::Owned>) -> ::capnp::Result<()> {
+        <crate::schema::general_capnp::optional::Reader<'_,crate::schema::user_capnp::user::Owned> as ::capnp::traits::SetPointerBuilder>::set_pointer_builder(self.builder.get_pointer_field(1), value, false)
       }
       #[inline]
-      pub fn init_last_user(self, ) -> crate::schema::user_capnp::user::Builder<'a> {
+      pub fn init_last_user(self, ) -> crate::schema::general_capnp::optional::Builder<'a,crate::schema::user_capnp::user::Owned> {
         ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(1), 0)
       }
       pub fn has_last_user(&self) -> bool {
         !self.builder.get_pointer_field(1).is_null()
       }
       #[inline]
-      pub fn get_instructor_user(self) -> ::capnp::Result<crate::schema::user_capnp::user::Builder<'a>> {
+      pub fn get_instructor_user(self) -> ::capnp::Result<crate::schema::general_capnp::optional::Builder<'a,crate::schema::user_capnp::user::Owned>> {
         ::capnp::traits::FromPointerBuilder::get_from_pointer(self.builder.get_pointer_field(2), ::core::option::Option::None)
       }
       #[inline]
-      pub fn set_instructor_user(&mut self, value: crate::schema::user_capnp::user::Reader<'_>) -> ::capnp::Result<()> {
-        ::capnp::traits::SetPointerBuilder::set_pointer_builder(self.builder.get_pointer_field(2), value, false)
+      pub fn set_instructor_user(&mut self, value: crate::schema::general_capnp::optional::Reader<'_,crate::schema::user_capnp::user::Owned>) -> ::capnp::Result<()> {
+        <crate::schema::general_capnp::optional::Reader<'_,crate::schema::user_capnp::user::Owned> as ::capnp::traits::SetPointerBuilder>::set_pointer_builder(self.builder.get_pointer_field(2), value, false)
       }
       #[inline]
-      pub fn init_instructor_user(self, ) -> crate::schema::user_capnp::user::Builder<'a> {
+      pub fn init_instructor_user(self, ) -> crate::schema::general_capnp::optional::Builder<'a,crate::schema::user_capnp::user::Owned> {
         ::capnp::traits::FromPointerBuilder::init_pointer(self.builder.get_pointer_field(2), 0)
       }
       pub fn has_instructor_user(&self) -> bool {
@@ -620,13 +620,13 @@ pub mod machine {
       }
     }
     impl Pipeline  {
-      pub fn get_current_user(&self) -> crate::schema::user_capnp::user::Pipeline {
+      pub fn get_current_user(&self) -> crate::schema::general_capnp::optional::Pipeline<crate::schema::user_capnp::user::Owned> {
         ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(0))
       }
-      pub fn get_last_user(&self) -> crate::schema::user_capnp::user::Pipeline {
+      pub fn get_last_user(&self) -> crate::schema::general_capnp::optional::Pipeline<crate::schema::user_capnp::user::Owned> {
         ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(1))
       }
-      pub fn get_instructor_user(&self) -> crate::schema::user_capnp::user::Pipeline {
+      pub fn get_instructor_user(&self) -> crate::schema::general_capnp::optional::Pipeline<crate::schema::user_capnp::user::Owned> {
         ::capnp::capability::FromTypelessPipeline::new(self._typeless.get_pointer_field(2))
       }
     }

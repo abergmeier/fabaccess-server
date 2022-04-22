@@ -1,7 +1,8 @@
 use capnp::capability::Promise;
 use capnp_rpc::pry;
 use crate::session::SessionHandle;
-use api::user_capnp::user::{admin, info, manage, Builder};
+use api::user_capnp::user::{admin, info, manage, self};
+use api::general_capnp::optional;
 use crate::authorization::permissions::Permission;
 use crate::users::{db, UserRef};
 
@@ -21,19 +22,20 @@ impl User {
         Self::new(session, user)
     }
 
-    pub fn build_else(&self, user: Option<UserRef>, builder: Builder) {
+    pub fn build_optional(&self, user: Option<UserRef>, builder: optional::Builder<user::Owned>) {
         if let Some(user) = user.and_then(|u| self.session.users.get_user(u.get_username())) {
+            let mut builder = builder.init_just();
             self.fill(user, builder);
         }
     }
 
-    pub fn build(session: SessionHandle, mut builder: Builder) {
+    pub fn build(session: SessionHandle, mut builder: user::Builder) {
         let this = Self::new_self(session);
         let user = this.session.get_user();
         this.fill(user, builder);
     }
 
-    pub fn fill(&self, user: db::User, mut builder: Builder) {
+    pub fn fill(&self, user: db::User, mut builder: user::Builder) {
         builder.set_username(user.id.as_str());
 
         let client = Self::new(self.session.clone(), UserRef::new(user.id.clone()));
