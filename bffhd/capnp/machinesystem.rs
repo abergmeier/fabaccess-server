@@ -54,7 +54,7 @@ impl info::Server for Machines {
 
         if let Some(resource) = self.resources.get_by_id(id) {
             let builder = result.get();
-            Machine::build(self.session.clone(), resource.clone(), builder);
+            Machine::optional_build(self.session.clone(), resource.clone(), builder);
         }
 
         Promise::ok(())
@@ -70,7 +70,7 @@ impl info::Server for Machines {
 
         if let Some(resource) = self.resources.get_by_urn(urn) {
             let builder = result.get();
-            Machine::build(self.session.clone(), resource.clone(), builder);
+            Machine::optional_build(self.session.clone(), resource.clone(), builder);
         }
 
         Promise::ok(())

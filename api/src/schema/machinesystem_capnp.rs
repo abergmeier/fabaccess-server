@@ -136,9 +136,9 @@ pub mod machine_system {
     pub type GetMachineListParams<> = ::capnp::capability::Params<crate::schema::machinesystem_capnp::machine_system::info::get_machine_list_params::Owned>;
     pub type GetMachineListResults<> = ::capnp::capability::Results<crate::schema::machinesystem_capnp::machine_system::info::get_machine_list_results::Owned>;
     pub type GetMachineParams<> = ::capnp::capability::Params<crate::schema::machinesystem_capnp::machine_system::info::get_machine_params::Owned>;
-    pub type GetMachineResults<> = ::capnp::capability::Results<crate::schema::machine_capnp::machine::Owned>;
+    pub type GetMachineResults<> = ::capnp::capability::Results<crate::schema::general_capnp::optional::Owned<crate::schema::machine_capnp::machine::Owned>>;
     pub type GetMachineURNParams<> = ::capnp::capability::Params<crate::schema::machinesystem_capnp::machine_system::info::get_machine_u_r_n_params::Owned>;
-    pub type GetMachineURNResults<> = ::capnp::capability::Results<crate::schema::machine_capnp::machine::Owned>;
+    pub type GetMachineURNResults<> = ::capnp::capability::Results<crate::schema::general_capnp::optional::Owned<crate::schema::machine_capnp::machine::Owned>>;
 
     pub struct Client {
       pub client: ::capnp::capability::Client,
@@ -185,10 +185,10 @@ pub mod machine_system {
       pub fn get_machine_list_request(&self) -> ::capnp::capability::Request<crate::schema::machinesystem_capnp::machine_system::info::get_machine_list_params::Owned,crate::schema::machinesystem_capnp::machine_system::info::get_machine_list_results::Owned> {
         self.client.new_call(_private::TYPE_ID, 0, None)
       }
-      pub fn get_machine_request(&self) -> ::capnp::capability::Request<crate::schema::machinesystem_capnp::machine_system::info::get_machine_params::Owned,crate::schema::machine_capnp::machine::Owned> {
+      pub fn get_machine_request(&self) -> ::capnp::capability::Request<crate::schema::machinesystem_capnp::machine_system::info::get_machine_params::Owned,crate::schema::general_capnp::optional::Owned<crate::schema::machine_capnp::machine::Owned>> {
         self.client.new_call(_private::TYPE_ID, 1, None)
       }
-      pub fn get_machine_u_r_n_request(&self) -> ::capnp::capability::Request<crate::schema::machinesystem_capnp::machine_system::info::get_machine_u_r_n_params::Owned,crate::schema::machine_capnp::machine::Owned> {
+      pub fn get_machine_u_r_n_request(&self) -> ::capnp::capability::Request<crate::schema::machinesystem_capnp::machine_system::info::get_machine_u_r_n_params::Owned,crate::schema::general_capnp::optional::Owned<crate::schema::machine_capnp::machine::Owned>> {
         self.client.new_call(_private::TYPE_ID, 2, None)
       }
     }

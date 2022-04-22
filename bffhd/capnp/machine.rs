@@ -2,12 +2,14 @@ use crate::resources::modules::fabaccess::{ArchivedStatus, Status};
 use crate::resources::Resource;
 use crate::session::SessionHandle;
 use api::machine_capnp::machine::{
+    self,
     admin, admin::Server as AdminServer, check, check::Server as CheckServer, in_use as inuse,
     in_use::Server as InUseServer, info, info::Server as InfoServer, manage,
     manage::Server as ManageServer, use_, use_::Server as UseServer,
 
-    Builder, MachineState,
+    MachineState,
 };
+use api::general_capnp::optional;
 use capnp::capability::Promise;
 use capnp_rpc::pry;
 use crate::capnp::user::User;
@@ -23,67 +25,72 @@ impl Machine {
         Self { session, resource }
     }
 
-    pub fn build_into(self, mut builder: Builder) {
-        if self.resource.visible(&self.session) {
-
-            builder.set_id(self.resource.get_id());
-            builder.set_name(self.resource.get_name());
-            if let Some(ref desc) = self.resource.get_description().description {
-                builder.set_description(desc);
-            }
-            if let Some(ref wiki) = self.resource.get_description().wiki {
-                builder.set_wiki(wiki);
-            }
-            if let Some(ref category) = self.resource.get_description().category {
-                builder.set_category(category);
-            }
-            builder.set_urn(&format!("urn:fabaccess:resource:{}", self.resource.get_id()));
-
-            {
-                let user = self.session.get_user_ref();
-                let state = self.resource.get_state_ref();
-                let state = state.as_ref();
-
-                if self.session.has_write(&self.resource) && match &state.inner.state {
-                    ArchivedStatus::Free => true,
-                    ArchivedStatus::Reserved(reserver) if reserver == &user => true,
-                    _ => false,
-                } {
-                    builder.set_use(capnp_rpc::new_client(self.clone()));
-                }
-
-                if self.session.has_manage(&self.resource) {
-                    builder.set_manage(capnp_rpc::new_client(self.clone()));
-                }
-
-                // TODO: admin perm
-
-                let s = match &state.inner.state {
-                    ArchivedStatus::Free => MachineState::Free,
-                    ArchivedStatus::Disabled => MachineState::Disabled,
-                    ArchivedStatus::Blocked(_) => MachineState::Blocked,
-                    ArchivedStatus::InUse(owner) => {
-                        if owner == &user {
-                            builder.set_inuse(capnp_rpc::new_client(self.clone()));
-                        }
-                        MachineState::InUse
-                    },
-                    ArchivedStatus::Reserved(_) => MachineState::Reserved,
-                    ArchivedStatus::ToCheck(_) => MachineState::ToCheck,
-                };
-                if self.session.has_read(&self.resource) {
-                    builder.set_state(s);
-                }
-            }
-
-            builder.set_info(capnp_rpc::new_client(self));
+    pub fn build_into(self, mut builder: machine::Builder) {
+        builder.set_id(self.resource.get_id());
+        builder.set_name(self.resource.get_name());
+        if let Some(ref desc) = self.resource.get_description().description {
+            builder.set_description(desc);
         }
+        if let Some(ref wiki) = self.resource.get_description().wiki {
+            builder.set_wiki(wiki);
+        }
+        if let Some(ref category) = self.resource.get_description().category {
+            builder.set_category(category);
+        }
+        builder.set_urn(&format!("urn:fabaccess:resource:{}", self.resource.get_id()));
+
+        {
+            let user = self.session.get_user_ref();
+            let state = self.resource.get_state_ref();
+            let state = state.as_ref();
+
+            if self.session.has_write(&self.resource) && match &state.inner.state {
+                ArchivedStatus::Free => true,
+                ArchivedStatus::Reserved(reserver) if reserver == &user => true,
+                _ => false,
+            } {
+                builder.set_use(capnp_rpc::new_client(self.clone()));
+            }
+
+            if self.session.has_manage(&self.resource) {
+                builder.set_manage(capnp_rpc::new_client(self.clone()));
+            }
+
+            // TODO: admin perm
+
+            let s = match &state.inner.state {
+                ArchivedStatus::Free => MachineState::Free,
+                ArchivedStatus::Disabled => MachineState::Disabled,
+                ArchivedStatus::Blocked(_) => MachineState::Blocked,
+                ArchivedStatus::InUse(owner) => {
+                    if owner == &user {
+                        builder.set_inuse(capnp_rpc::new_client(self.clone()));
+                    }
+                    MachineState::InUse
+                },
+                ArchivedStatus::Reserved(_) => MachineState::Reserved,
+                ArchivedStatus::ToCheck(_) => MachineState::ToCheck,
+            };
+            if self.session.has_read(&self.resource) {
+                builder.set_state(s);
+            }
+        }
+
+        builder.set_info(capnp_rpc::new_client(self));
     }
 
     /// Builds a machine into the given builder. Re
-    pub fn build(session: SessionHandle, resource: Resource, builder: Builder) {
+    pub fn build(session: SessionHandle, resource: Resource, builder: machine::Builder) {
         let this = Self::new(session.clone(), resource.clone());
         this.build_into(builder)
+    }
+
+    pub fn optional_build(session: SessionHandle, resource: Resource, builder: optional::Builder<machine::Owned>) {
+        let this = Self::new(session.clone(), resource.clone());
+        if this.resource.visible(&session) {
+            let mut builder = builder.init_just();
+            this.build_into(builder);
+        }
     }
 }
 
