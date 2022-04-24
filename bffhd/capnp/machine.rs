@@ -87,7 +87,7 @@ impl Machine {
 
     pub fn optional_build(session: SessionHandle, resource: Resource, builder: optional::Builder<machine::Owned>) {
         let this = Self::new(session.clone(), resource.clone());
-        if this.resource.visible(&session) {
+        if this.resource.visible(&session) || session.has_read(&resource) {
             let mut builder = builder.init_just();
             this.build_into(builder);
         }
