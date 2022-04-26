@@ -1,6 +1,5 @@
 use capnp::capability::Promise;
 use capnp_rpc::pry;
-use libc::user;
 use api::usersystem_capnp::user_system::{
     info, manage,
     self as system,

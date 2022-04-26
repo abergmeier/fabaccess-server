@@ -20,4 +20,4 @@ VOLUME /etc/bffh/
 VOLUME /var/lib/bffh/
 VOLUME /usr/local/lib/bffh/adapters/
 EXPOSE 59661
-ENTRYPOINT ["sh", "-c", "bffhd -c /etc/bffh/bffh.dhall --load=/etc/bffh; bffhd -c /etc/bffh/bffh.dhall"]
+ENTRYPOINT ["sh", "-c", "bffhd -c /etc/bffh/bffh.dhall --load=/etc/bffh/users.toml; bffhd -c /etc/bffh/bffh.dhall"]
