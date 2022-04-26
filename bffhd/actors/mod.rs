@@ -6,7 +6,7 @@ use executor::pool::Executor;
 use futures_signals::signal::{Signal};
 use futures_util::future::BoxFuture;
 use rumqttc::{AsyncClient, ConnectionError, Event, Incoming, MqttOptions};
-use std::cell::Cell;
+
 use std::collections::HashMap;
 use std::future::Future;
 
@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use once_cell::sync::Lazy;
 use rumqttc::ConnectReturnCode::Success;
-use rumqttc::Packet::ConnAck;
+
 use rustls::{RootCertStore};
 use url::Url;
 use crate::actors::dummy::Dummy;

@@ -1,8 +1,8 @@
 use rkyv::Infallible;
 use std::ops::Deref;
 use std::sync::Arc;
-use futures_signals::signal::{Mutable, Signal, SignalExt};
-use lmdb::RoTransaction;
+use futures_signals::signal::{Mutable, Signal};
+
 use rkyv::{Archived, Deserialize};
 use rkyv::option::ArchivedOption;
 use rkyv::ser::Serializer;

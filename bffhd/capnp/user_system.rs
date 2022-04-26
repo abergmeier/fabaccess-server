@@ -2,13 +2,12 @@ use capnp::capability::Promise;
 use capnp_rpc::pry;
 use api::usersystem_capnp::user_system::{
     info, manage,
-    self as system,
 };
-use crate::authorization::permissions::Permission;
+
 use crate::capnp::user::User;
 
 use crate::session::SessionHandle;
-use crate::users::UserRef;
+
 
 #[derive(Clone)]
 pub struct Users {

@@ -5,7 +5,7 @@ use rkyv::Infallible;
 use std::sync::Arc;
 use anyhow::Context;
 
-use rkyv::{Archived, Deserialize};
+use rkyv::{Deserialize};
 use rkyv::ser::Serializer;
 use rkyv::ser::serializers::AllocSerializer;
 use crate::db;
@@ -118,7 +118,7 @@ impl UserDB {
 
     pub fn get_all(&self) -> Result<Vec<(String, User)>, db::Error> {
         let txn = self.env.begin_ro_txn()?;
-        let mut iter = self.db.get_all(&txn)?;
+        let iter = self.db.get_all(&txn)?;
         let mut out = Vec::new();
         for (uid, user) in iter {
             let uid = unsafe { std::str::from_utf8_unchecked(uid).to_string() };

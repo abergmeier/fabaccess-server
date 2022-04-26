@@ -7,7 +7,7 @@ use rsasl::session::{Session, SessionData};
 use rsasl::validate::{validations, Validation};
 use rsasl::{Property, SASL};
 use std::sync::Arc;
-use rsasl::registry::Mechanism;
+
 use crate::authentication::fabfire::FabFireCardKey;
 
 mod fabfire;

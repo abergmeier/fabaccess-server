@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use futures_util::future;
 use futures_util::future::BoxFuture;
-use rkyv::Archived;
+
 use crate::actors::Actor;
 use crate::db::ArchivedValue;
 use crate::resources::state::State;

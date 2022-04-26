@@ -12,7 +12,7 @@ use std::convert::TryFrom;
 use std::sync::Arc;
 use desfire::desfire::desfire::MAX_BYTES_PER_TRANSACTION;
 use rsasl::property::AuthId;
-use tracing::{error, trace};
+
 use crate::authentication::fabfire::FabFireCardKey;
 
 enum FabFireError {
@@ -606,7 +606,7 @@ impl Authentication for FabFire {
                             }
                         };
                     }
-                    Err(e) => {
+                    Err(_e) => {
                         tracing::error!("Got invalid response: {:?}", apdu_response);
                         return Err(FabFireError::InvalidCredentials(format!("{}", apdu_response)).into());
                     }

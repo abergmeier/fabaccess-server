@@ -24,12 +24,12 @@ impl User {
 
     pub fn build_optional(&self, user: Option<UserRef>, builder: optional::Builder<user::Owned>) {
         if let Some(user) = user.and_then(|u| self.session.users.get_user(u.get_username())) {
-            let mut builder = builder.init_just();
+            let builder = builder.init_just();
             self.fill(user, builder);
         }
     }
 
-    pub fn build(session: SessionHandle, mut builder: user::Builder) {
+    pub fn build(session: SessionHandle, builder: user::Builder) {
         let this = Self::new_self(session);
         let user = this.session.get_user();
         this.fill(user, builder);
@@ -74,8 +74,8 @@ impl info::Server for User {
 impl manage::Server for User {
     fn pwd(
         &mut self,
-        params: manage::PwdParams,
-        mut results: manage::PwdResults,
+        _params: manage::PwdParams,
+        _results: manage::PwdResults,
     ) -> Promise<(), ::capnp::Error> {
         Promise::err(::capnp::Error::unimplemented(
             "method not implemented".to_string(),

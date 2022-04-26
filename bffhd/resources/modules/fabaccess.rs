@@ -1,5 +1,5 @@
 use std::fmt;
-use std::fmt::{Write, write};
+use std::fmt::{Write};
 use crate::utils::oid::ObjectIdentifier;
 use once_cell::sync::Lazy;
 use rkyv::{Archive, Archived, Deserialize, Infallible};

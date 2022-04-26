@@ -4,7 +4,7 @@ use once_cell::sync::OnceCell;
 use rkyv::{Archive, Deserialize, Infallible, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Write};
-use std::ops::Deref;
+
 use std::path::Path;
 use std::sync::Arc;
 

@@ -1,7 +1,7 @@
 use crate::db;
 use crate::db::{ArchivedValue, RawDB, DB, AlignedAdapter};
 use lmdb::{
-    DatabaseFlags, Environment, EnvironmentFlags, RoTransaction, RwTransaction, Transaction,
+    DatabaseFlags, Environment, EnvironmentFlags, Transaction,
     WriteFlags,
 };
 use std::{path::Path, sync::Arc};

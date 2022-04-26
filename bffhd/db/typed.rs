@@ -1,10 +1,10 @@
 use crate::db::RawDB;
 use lmdb::{Cursor, RwTransaction, Transaction, WriteFlags};
-use rkyv::{AlignedVec, Archive, Archived, Serialize};
+use rkyv::{AlignedVec, Archive, Archived};
 use std::fmt;
 use std::fmt::{Debug, Display, Formatter};
 use std::marker::PhantomData;
-use std::pin::Pin;
+
 use crate::db;
 
 #[derive(Clone)]
