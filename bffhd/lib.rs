@@ -1,7 +1,7 @@
 #![warn(unused_imports, unused_import_braces)]
-#![warn(missing_debug_implementations)]
-#![warn(missing_docs)]
-#![warn(missing_crate_level_docs)]
+//#![warn(missing_debug_implementations)]
+//#![warn(missing_docs)]
+//#![warn(missing_crate_level_docs)]
 
 //! Diflouroborane
 //!

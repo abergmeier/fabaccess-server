@@ -8,8 +8,6 @@ use std::{env, io, io::Write, path::PathBuf};
 
 
 use nix::NixPath;
-use diflouroborane::error::Error;
-
 
 fn main() -> anyhow::Result<()> {
     // Argument parsing
@@ -44,6 +42,10 @@ fn main() -> anyhow::Result<()> {
             .takes_value(true)
             .ignore_case(true)
             .possible_values(["Full", "Compact", "Pretty"]))
+        .arg(Arg::new("log level")
+            .help("Set the desired log levels.")
+            .long("log-level")
+            .takes_value(true))
         .arg(
             Arg::new("print default")
                 .help("Print a default config to stdout instead of running")

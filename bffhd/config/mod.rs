@@ -4,11 +4,6 @@ use std::collections::HashMap;
 
 use serde::{Serialize, Deserialize};
 
-
-
-
-
-
 mod dhall;
 pub use dhall::read_config_file as read;
 
