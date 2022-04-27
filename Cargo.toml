@@ -74,8 +74,6 @@ capnp = "0.14"
 capnp-rpc = "0.14.1"
 
 # API Authentication
-#rsasl = "2.0.0-preview3"
-rsasl = { git = "https://github.com/dequbed/rsasl.git", branch = "main", default_features = false, features = ["unstable_custom_mechanism", "provider", "registry_static", "plain"] }
 desfire = "0.2.0-alpha1"
 hex = { version = "0.4.3", features = ["serde"] }
 
@@ -100,6 +98,12 @@ rumqttc = "0.11.0"
 async-compat = "0.2.1"
 url = "2.2.2"
 rustls-native-certs = "0.6.1"
+
+[dependencies.rsasl]
+git = "https://github.com/dequbed/rsasl.git"
+rev = "0b5012d0"
+default_features = false
+features = ["unstable_custom_mechanism", "provider", "registry_static", "plain"]
 
 [dev-dependencies]
 futures-test = "0.3.16"
