@@ -82,7 +82,7 @@ impl manage::Server for Users {
         params: manage::RemoveUserParams,
         _: manage::RemoveUserResults,
     ) -> Promise<(), ::capnp::Error> {
-        let who: &str = pry!(pry!(params.get()).get_username());
+        let who: &str = pry!(pry!(pry!(params.get()).get_user()).get_username());
 
         if let Err(e) = self.session.users.del_user(who) {
             tracing::warn!("Failed to delete user: {:?}", e);
