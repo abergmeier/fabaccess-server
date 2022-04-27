@@ -1,8 +1,8 @@
 # Revision history for Difluoroborane
 
-## 0.4.0 -- 2021-10-27
+## 0.4.1 -- 2022-04-24
 
-* Second public development version
+* Initial implementation of the FabAccess 0.3 API, "Spigots of Berlin".
 
 ## 0.3.0 -- 2021-10-01
 
