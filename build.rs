@@ -14,8 +14,8 @@ fn main() {
 
     println!("cargo:rerun-if-env-changed=BFFHD_BUILD_TAGGED_RELEASE");
     let tagged_release = option_env!("BFFHD_BUILD_TAGGED_RELEASE") == Some("1");
-    let release = if tagged_release {
-        format!("BFFH {version} [{rustc}]",
+    let version_string = if tagged_release {
+        format!("{version} [{rustc}]",
                 version = env!("CARGO_PKG_VERSION"),
                 rustc = rustc_version)
     } else {
@@ -40,11 +40,12 @@ fn main() {
             .expect("git log output was not valid UTF8");
         let commit_date = commit_date.trim();
 
-        format!("BFFH {version} ({gitrev} {date}) [{rustc}]",
+        format!("{version} ({gitrev} {date}) [{rustc}]",
                 version=env!("CARGO_PKG_VERSION"),
                 gitrev=abbrev,
                 date=commit_date,
                 rustc=rustc_version)
     };
-    println!("cargo:rustc-env=BFFHD_RELEASE_STRING={}", release);
+    println!("cargo:rustc-env=BFFHD_VERSION_STRING={}", version_string);
+    println!("cargo:rustc-env=BFFHD_RELEASE_STRING=\"BFFH {}\"", version_string);
 }

@@ -64,6 +64,7 @@ use crate::tls::TlsConfig;
 use crate::users::db::UserDB;
 use crate::users::Users;
 
+pub const VERSION_STRING: &'static str = env!("BFFHD_VERSION_STRING");
 pub const RELEASE_STRING: &'static str = env!("BFFHD_RELEASE_STRING");
 
 pub struct Diflouroborane {
@@ -80,7 +81,7 @@ pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 impl Diflouroborane {
     pub fn new(config: Config) -> anyhow::Result<Self> {
         logging::init(&config.logging);
-        tracing::info!(version=RELEASE_STRING, "Starting");
+        tracing::info!(version=VERSION_STRING, "Starting BFFH");
 
         let span = tracing::info_span!("setup");
         let _guard = span.enter();

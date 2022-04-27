@@ -2028,7 +2028,7 @@ dependencies = [
 [[package]]
 name = "rsasl"
 version = "2.0.0-preview4"
-source = "git+https://github.com/dequbed/rsasl.git?branch=main#0b5012d0934925aed6eb8463b397c512a2cffbd9"
+source = "git+https://github.com/dequbed/rsasl.git?rev=0b5012d0#0b5012d0934925aed6eb8463b397c512a2cffbd9"
 dependencies = [
  "libc",
  "linkme",
