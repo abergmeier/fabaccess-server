@@ -1,4 +1,4 @@
-use clap::{Arg, Command, Parser};
+use clap::{Arg, Command};
 use diflouroborane::{config, Diflouroborane};
 
 

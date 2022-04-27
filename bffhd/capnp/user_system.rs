@@ -7,6 +7,7 @@ use api::usersystem_capnp::user_system::{
 use crate::capnp::user::User;
 
 use crate::session::SessionHandle;
+use crate::users::db;
 
 
 #[derive(Clone)]
@@ -42,28 +43,53 @@ impl manage::Server for Users {
         let users = pry!(userdb.get_all()
             .map_err(|e| capnp::Error::failed(format!("UserDB error: {:?}", e))));
         let mut builder = result.get().init_user_list(users.len() as u32);
-        let me = User::new_self(self.session.clone());
         for (i, (_, user)) in users.into_iter().enumerate() {
-            me.fill(user, builder.reborrow().get(i as u32));
+            User::fill(&self.session, user, builder.reborrow().get(i as u32));
         }
         Promise::ok(())
     }
     fn add_user(
         &mut self,
-        _: manage::AddUserParams,
-        _: manage::AddUserResults,
+        params: manage::AddUserParams,
+        mut result: manage::AddUserResults,
     ) -> Promise<(), ::capnp::Error> {
-        Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+        let params = pry!(params.get());
+        let username = pry!(params.get_username());
+        let password = pry!(params.get_password());
+        // FIXME: saslprep passwords & usernames before storing them
+
+        if !username.is_empty() && !password.is_empty() {
+            if self.session.users.get_user(username).is_none() {
+                let user = db::User::new_with_plain_pw(username, password);
+                self.session.users.put_user(username, &user);
+                let mut builder = result.get();
+                User::fill(&self.session, user, builder);
+            } else {
+                tracing::warn!("Failed to add user: Username taken");
+            }
+        } else {
+            if username.is_empty() {
+                tracing::warn!("Failed to add user: Username empty");
+            } else if password.is_empty() {
+                tracing::warn!("Failed to add user: Password empty");
+            }
+        }
+
+        Promise::ok(())
     }
     fn remove_user(
         &mut self,
-        _: manage::RemoveUserParams,
+        params: manage::RemoveUserParams,
         _: manage::RemoveUserResults,
     ) -> Promise<(), ::capnp::Error> {
-        Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+        let who: &str = pry!(pry!(params.get()).get_username());
+
+        if let Err(e) = self.session.users.del_user(who) {
+            tracing::warn!("Failed to delete user: {:?}", e);
+        } else {
+            tracing::info!("Deleted user {}", who);
+        }
+
+        Promise::ok(())
     }
 }

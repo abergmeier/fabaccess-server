@@ -36,6 +36,22 @@ impl User {
             Ok(false)
         }
     }
+
+    pub fn new_with_plain_pw(username: &str, password: impl AsRef<[u8]>) -> Self {
+        let config = argon2::Config::default();
+        let salt: [u8; 16] = rand::random();
+        let hash = argon2::hash_encoded(password.as_ref(), &salt, &config)
+            .expect(&format!("Failed to hash password for {}: ", username));
+        tracing::debug!("Hashed pw for {} to {}", username, hash);
+
+        User {
+            id: username.to_string(),
+            userdata: UserData {
+                passwd: Some(hash),
+                .. Default::default()
+            }
+        }
+    }
 }
 
 #[derive(
@@ -43,6 +59,7 @@ Clone,
 PartialEq,
 Eq,
 Debug,
+Default,
 rkyv::Archive,
 rkyv::Serialize,
 rkyv::Deserialize,
@@ -73,6 +90,7 @@ impl UserData {
     pub fn new_with_kv(roles: Vec<String>, kv: HashMap<String, String>) -> Self {
         Self { roles, kv, passwd: None }
     }
+
 }
 
 #[derive(Clone, Debug)]
@@ -112,6 +130,13 @@ impl UserDB {
         let mut txn = self.env.begin_rw_txn()?;
         let flags = WriteFlags::empty();
         self.db.put(&mut txn, &uid.as_bytes(), &value, flags)?;
+        txn.commit()?;
+        Ok(())
+    }
+
+    pub fn delete(&self, uid: &str) -> Result<(), db::Error> {
+        let mut txn = self.env.begin_rw_txn()?;
+        self.db.del(&mut txn, &uid)?;
         txn.commit()?;
         Ok(())
     }

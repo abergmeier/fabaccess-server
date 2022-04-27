@@ -25,31 +25,31 @@ impl User {
     pub fn build_optional(&self, user: Option<UserRef>, builder: optional::Builder<user::Owned>) {
         if let Some(user) = user.and_then(|u| self.session.users.get_user(u.get_username())) {
             let builder = builder.init_just();
-            self.fill(user, builder);
+            Self::fill(&self.session, user, builder);
         }
     }
 
     pub fn build(session: SessionHandle, builder: user::Builder) {
         let this = Self::new_self(session);
         let user = this.session.get_user();
-        this.fill(user, builder);
+        Self::fill(&this.session, user, builder);
     }
 
-    pub fn fill(&self, user: db::User, mut builder: user::Builder) {
+    pub fn fill(session: &SessionHandle, user: db::User, mut builder: user::Builder) {
         builder.set_username(user.id.as_str());
 
-        let client = Self::new(self.session.clone(), UserRef::new(user.id.clone()));
-
         // We have permissions on ourself
-        let is_me = &self.session.get_user_ref().id == &user.id;
+        let is_me = &session.get_user_ref().id == &user.id;
 
-        if is_me || self.session.has_perm(Permission::new("bffh.users.info")) {
+        let client = Self::new(session.clone(), UserRef::new(user.id));
+
+        if is_me || session.has_perm(Permission::new("bffh.users.info")) {
             builder.set_info(capnp_rpc::new_client(client.clone()));
         }
         if is_me {
             builder.set_manage(capnp_rpc::new_client(client.clone()));
         }
-        if self.session.has_perm(Permission::new("bffh.users.admin")) {
+        if session.has_perm(Permission::new("bffh.users.admin")) {
             builder.set_admin(capnp_rpc::new_client(client.clone()));
         }
     }
@@ -61,11 +61,12 @@ impl info::Server for User {
         _: info::ListRolesParams,
         mut result: info::ListRolesResults,
     ) -> Promise<(), ::capnp::Error> {
-        let user = self.session.get_user();
-        let mut builder = result.get().init_roles(user.userdata.roles.len() as u32);
-        for (i, role) in user.userdata.roles.into_iter().enumerate() {
-            let mut b = builder.reborrow().get(i as u32);
-            b.set_name(role.as_str());
+        if let Some(user) = self.session.users.get_user(self.user.get_username()) {
+            let mut builder = result.get().init_roles(user.userdata.roles.len() as u32);
+            for (i, role) in user.userdata.roles.into_iter().enumerate() {
+                let mut b = builder.reborrow().get(i as u32);
+                b.set_name(role.as_str());
+            }
         }
         Promise::ok(())
     }

@@ -98,6 +98,11 @@ impl Users {
         self.userdb.put(uid, user)
     }
 
+    pub fn del_user(&self, uid: &str) -> Result<(), lmdb::Error> {
+        tracing::trace!(uid, "Deleting user");
+        self.userdb.delete(uid)
+    }
+
     pub fn load_file<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
         let f = std::fs::read(path)?;
         let map: HashMap<String, UserData> = toml::from_slice(&f)?;
