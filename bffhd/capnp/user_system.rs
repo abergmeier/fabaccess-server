@@ -48,29 +48,37 @@ impl manage::Server for Users {
         }
         Promise::ok(())
     }
-    fn add_user(
+    fn add_user_fallible(
         &mut self,
-        params: manage::AddUserParams,
-        mut result: manage::AddUserResults,
+        params: manage::AddUserFallibleParams,
+        mut result: manage::AddUserFallibleResults,
     ) -> Promise<(), ::capnp::Error> {
         let params = pry!(params.get());
         let username = pry!(params.get_username());
         let password = pry!(params.get_password());
         // FIXME: saslprep passwords & usernames before storing them
 
+        let mut builder = result.get();
+
         if !username.is_empty() && !password.is_empty() {
             if self.session.users.get_user(username).is_none() {
                 let user = db::User::new_with_plain_pw(username, password);
                 self.session.users.put_user(username, &user);
-                let mut builder = result.get();
+                let mut builder = builder.init_successful();
                 User::fill(&self.session, user, builder);
             } else {
+                let mut builder = builder.init_failed();
+                builder.set_error(manage::add_user_error::AddUserError::AlreadyExists);
                 tracing::warn!("Failed to add user: Username taken");
             }
         } else {
             if username.is_empty() {
+                let mut builder = builder.init_failed();
+                builder.set_error(manage::add_user_error::AddUserError::UsernameInvalid);
                 tracing::warn!("Failed to add user: Username empty");
             } else if password.is_empty() {
+                let mut builder = builder.init_failed();
+                builder.set_error(manage::add_user_error::AddUserError::PasswordInvalid);
                 tracing::warn!("Failed to add user: Password empty");
             }
         }
