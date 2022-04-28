@@ -29,6 +29,7 @@ impl APISession {
             let u = Users::new(session.clone());
             if session.has_perm(Permission::new("bffh.users.manage")) {
                 b.set_manage(capnp_rpc::new_client(u.clone()));
+                b.set_search(capnp_rpc::new_client(u.clone()));
             }
             b.set_info(capnp_rpc::new_client(u));
         }
