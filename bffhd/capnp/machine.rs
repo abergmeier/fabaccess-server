@@ -1,18 +1,15 @@
+use crate::capnp::user::User;
 use crate::resources::modules::fabaccess::{ArchivedStatus, Status};
 use crate::resources::Resource;
 use crate::session::SessionHandle;
-use api::machine_capnp::machine::{
-    self,
-    admin, admin::Server as AdminServer, check, check::Server as CheckServer, in_use as inuse,
-    in_use::Server as InUseServer, info, info::Server as InfoServer, manage,
-    manage::Server as ManageServer, use_, use_::Server as UseServer,
-
-    MachineState,
-};
 use api::general_capnp::optional;
+use api::machine_capnp::machine::{
+    self, admin, admin::Server as AdminServer, check, check::Server as CheckServer,
+    in_use as inuse, in_use::Server as InUseServer, info, info::Server as InfoServer, manage,
+    manage::Server as ManageServer, use_, use_::Server as UseServer, MachineState,
+};
 use capnp::capability::Promise;
 use capnp_rpc::pry;
-use crate::capnp::user::User;
 
 #[derive(Clone)]
 pub struct Machine {
@@ -37,18 +34,23 @@ impl Machine {
         if let Some(ref category) = self.resource.get_description().category {
             builder.set_category(category);
         }
-        builder.set_urn(&format!("urn:fabaccess:resource:{}", self.resource.get_id()));
+        builder.set_urn(&format!(
+            "urn:fabaccess:resource:{}",
+            self.resource.get_id()
+        ));
 
         {
             let user = self.session.get_user_ref();
             let state = self.resource.get_state_ref();
             let state = state.as_ref();
 
-            if self.session.has_write(&self.resource) && match &state.inner.state {
-                ArchivedStatus::Free => true,
-                ArchivedStatus::Reserved(reserver) if reserver == &user => true,
-                _ => false,
-            } {
+            if self.session.has_write(&self.resource)
+                && match &state.inner.state {
+                    ArchivedStatus::Free => true,
+                    ArchivedStatus::Reserved(reserver) if reserver == &user => true,
+                    _ => false,
+                }
+            {
                 builder.set_use(capnp_rpc::new_client(self.clone()));
             }
 
@@ -67,7 +69,7 @@ impl Machine {
                         builder.set_inuse(capnp_rpc::new_client(self.clone()));
                     }
                     MachineState::InUse
-                },
+                }
                 ArchivedStatus::Reserved(_) => MachineState::Reserved,
                 ArchivedStatus::ToCheck(_) => MachineState::ToCheck,
             };
@@ -85,7 +87,11 @@ impl Machine {
         this.build_into(builder)
     }
 
-    pub fn optional_build(session: SessionHandle, resource: Resource, builder: optional::Builder<machine::Owned>) {
+    pub fn optional_build(
+        session: SessionHandle,
+        resource: Resource,
+        builder: optional::Builder<machine::Owned>,
+    ) {
         let this = Self::new(session.clone(), resource.clone());
         if this.resource.visible(&session) || session.has_read(&resource) {
             let builder = builder.init_just();
@@ -135,9 +141,7 @@ impl UseServer for Machine {
         let session = self.session.clone();
         Promise::from_future(async move {
             let user = session.get_user_ref();
-            resource
-                .try_update(session, Status::Reserved(user))
-                .await;
+            resource.try_update(session, Status::Reserved(user)).await;
             Ok(())
         })
     }
@@ -208,8 +212,16 @@ impl ManageServer for Machine {
     ) -> Promise<(), ::capnp::Error> {
         let mut builder = result.get();
         let user = User::new_self(self.session.clone());
-        user.build_optional(self.resource.get_current_user(), builder.reborrow().init_current_user());
-        user.build_optional(self.resource.get_previous_user(), builder.init_last_user());
+        User::build_optional(
+            &self.session,
+            self.resource.get_current_user(),
+            builder.reborrow().init_current_user(),
+        );
+        User::build_optional(
+            &self.session,
+            self.resource.get_previous_user(),
+            builder.init_last_user(),
+        );
         Promise::ok(())
     }
     fn set_property(
@@ -310,9 +322,11 @@ impl AdminServer for Machine {
             APIMState::InUse => Status::InUse(user),
             APIMState::Reserved => Status::Reserved(user),
             APIMState::ToCheck => Status::ToCheck(user),
-            APIMState::Totakeover => return Promise::err(::capnp::Error::unimplemented(
+            APIMState::Totakeover => {
+                return Promise::err(::capnp::Error::unimplemented(
                     "totakeover not implemented".to_string(),
-                )),
+                ))
+            }
         };
         let resource = self.resource.clone();
         Promise::from_future(async move {

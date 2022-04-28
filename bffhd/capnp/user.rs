@@ -22,10 +22,10 @@ impl User {
         Self::new(session, user)
     }
 
-    pub fn build_optional(&self, user: Option<UserRef>, builder: optional::Builder<user::Owned>) {
-        if let Some(user) = user.and_then(|u| self.session.users.get_user(u.get_username())) {
+    pub fn build_optional(session: &SessionHandle, user: Option<UserRef>, builder: optional::Builder<user::Owned>) {
+        if let Some(user) = user.and_then(|u| session.users.get_user(u.get_username())) {
             let builder = builder.init_just();
-            Self::fill(&self.session, user, builder);
+            Self::fill(&session, user, builder);
         }
     }
 

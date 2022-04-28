@@ -1,13 +1,13 @@
 use capnp::capability::Promise;
 use capnp_rpc::pry;
 use api::usersystem_capnp::user_system::{
-    info, manage,
+    info, manage, search
 };
 
 use crate::capnp::user::User;
 
 use crate::session::SessionHandle;
-use crate::users::db;
+use crate::users::{db, UserRef};
 
 
 #[derive(Clone)]
@@ -90,6 +90,19 @@ impl manage::Server for Users {
             tracing::info!("Deleted user {}", who);
         }
 
+        Promise::ok(())
+    }
+}
+
+impl search::Server for Users {
+    fn get_user_by_name(
+        &mut self,
+        params: search::GetUserByNameParams,
+        mut result: search::GetUserByNameResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let username: &str = pry!(pry!(params.get()).get_username());
+        let userref = UserRef::new(username.to_string());
+        User::build_optional(&self.session, Some(userref), result.get());
         Promise::ok(())
     }
 }
