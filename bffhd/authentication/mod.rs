@@ -14,10 +14,12 @@ mod fabfire;
 
 struct Callback {
     users: Users,
+    span: tracing::Span,
 }
 impl Callback {
     pub fn new(users: Users) -> Self {
-        Self { users }
+        let span = tracing::info_span!("SASL callback");
+        Self { users, span }
     }
 }
 impl rsasl::callback::Callback for Callback {
@@ -49,29 +51,40 @@ impl rsasl::callback::Callback for Callback {
         validation: Validation,
         _mechanism: &Mechname,
     ) -> Result<(), SessionError> {
+        let span = tracing::info_span!(parent: &self.span, "validate");
+        let _guard = span.enter();
         match validation {
             validations::SIMPLE => {
                 let authnid = session
                     .get_property::<AuthId>()
                     .ok_or(SessionError::no_property::<AuthId>())?;
-                let user = self
-                    .users
-                    .get_user(authnid.as_str())
-                    .ok_or(SessionError::AuthenticationFailure)?;
-                let passwd = session
-                    .get_property::<Password>()
-                    .ok_or(SessionError::no_property::<Password>())?;
+                tracing::debug!(authid=%authnid, "SIMPLE validation requested");
 
-                if user
-                    .check_password(passwd.as_bytes())
-                    .map_err(|_e| SessionError::AuthenticationFailure)?
-                {
-                    Ok(())
+                if let Some(user) = self
+                    .users
+                    .get_user(authnid.as_str()) {
+                    let passwd = session
+                        .get_property::<Password>()
+                        .ok_or(SessionError::no_property::<Password>())?;
+
+                    if user
+                        .check_password(passwd.as_bytes())
+                        .map_err(|_e| SessionError::AuthenticationFailure)?
+                    {
+                        return Ok(());
+                    } else {
+                        tracing::warn!(authid=%authnid, "AUTH FAILED: bad password");
+                    }
                 } else {
-                    Err(SessionError::AuthenticationFailure)
+                    tracing::warn!(authid=%authnid, "AUTH FAILED: no such user '{}'", authnid);
                 }
+
+                Err(SessionError::AuthenticationFailure)
             }
-            _ => Err(SessionError::no_validate(validation)),
+            _ => {
+                tracing::error!(?validation, "Unimplemented validation requested");
+                Err(SessionError::no_validate(validation))
+            },
         }
     }
 }
