@@ -142,6 +142,10 @@ impl<A: Adapter> DB<A> {
         self.db.del::<_, &[u8]>(txn, key, None)
     }
 
+    pub fn clear(&self, txn: &mut RwTransaction) -> Result<(), db::Error> {
+        self.db.clear(txn)
+    }
+
     pub fn get_all<'txn, T: Transaction>(&self, txn: &'txn T) -> Result<impl IntoIterator<Item=(&'txn [u8], A::Item)>, db::Error> {
         let mut cursor = self.db.open_ro_cursor(txn)?;
         let it = cursor.iter_start();

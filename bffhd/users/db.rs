@@ -1,4 +1,4 @@
-use lmdb::{DatabaseFlags, Environment, Transaction, WriteFlags};
+use lmdb::{DatabaseFlags, Environment, RwTransaction, Transaction, WriteFlags};
 use std::collections::{HashMap};
 use rkyv::Infallible;
 
@@ -100,6 +100,12 @@ pub struct UserDB {
 }
 
 impl UserDB {
+    // TODO: Make an userdb-specific Transaction newtype to make this safe
+    pub unsafe fn get_rw_txn(&self) -> Result<RwTransaction, db::Error> {
+        // The returned transaction is only valid for *this* environment.
+        self.env.begin_rw_txn()
+    }
+
     pub unsafe fn new(env: Arc<Environment>, db: RawDB) -> Self {
         let db = DB::new(db);
         Self { env, db }
@@ -134,10 +140,26 @@ impl UserDB {
         Ok(())
     }
 
+    pub fn put_txn(&self, txn: &mut RwTransaction, uid: &str, user: &User) -> Result<(), db::Error> {
+        let mut serializer = AllocSerializer::<1024>::default();
+        serializer.serialize_value(user).expect("rkyv error");
+        let v = serializer.into_serializer().into_inner();
+        let value = ArchivedValue::new(v);
+
+        let flags = WriteFlags::empty();
+        self.db.put(txn, &uid.as_bytes(), &value, flags)?;
+        Ok(())
+    }
+
     pub fn delete(&self, uid: &str) -> Result<(), db::Error> {
         let mut txn = self.env.begin_rw_txn()?;
         self.db.del(&mut txn, &uid)?;
         txn.commit()?;
+        Ok(())
+    }
+
+    pub fn clear_txn(&self, txn: &mut RwTransaction) -> Result<(), db::Error> {
+        self.db.clear(txn);
         Ok(())
     }
 

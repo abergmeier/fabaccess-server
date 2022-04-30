@@ -1,5 +1,5 @@
 use anyhow::Context;
-use lmdb::Environment;
+use lmdb::{Environment, Transaction};
 use once_cell::sync::OnceCell;
 use rkyv::{Archive, Deserialize, Infallible, Serialize};
 use std::collections::HashMap;
@@ -107,6 +107,10 @@ impl Users {
         let f = std::fs::read(path)?;
         let map: HashMap<String, UserData> = toml::from_slice(&f)?;
 
+        let mut txn = unsafe { self.userdb.get_rw_txn()? };
+
+        self.userdb.clear_txn(&mut txn)?;
+
         for (uid, mut userdata) in map {
             userdata.passwd = userdata.passwd.map(|pw| {
                 if !pw.starts_with("$argon2") {
@@ -126,9 +130,12 @@ impl Users {
                 userdata,
             };
             tracing::trace!(%uid, ?user, "Storing user object");
-            self.userdb.put(uid.as_str(), &user);
+            if let Err(e) = self.userdb.put_txn(&mut txn, uid.as_str(), &user) {
+                tracing::warn!(error=?e, "failed to add user")
+            }
         }
 
+        txn.commit()?;
         Ok(())
     }
 }

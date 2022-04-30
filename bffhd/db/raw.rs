@@ -52,6 +52,10 @@ impl RawDB {
         txn.del(self.db, key, value.map(AsRef::as_ref))
     }
 
+    pub fn clear(&self, txn: &mut RwTransaction) -> lmdb::Result<()> {
+        txn.clear_db(self.db)
+    }
+
     pub fn iter<'txn, C: lmdb::Cursor<'txn>>(&self, cursor: &'txn mut C) -> lmdb::Iter<'txn> {
         cursor.iter_start()
     }
