@@ -2,7 +2,7 @@
 
 ## 0.4.1 -- 2022-04-24
 
-* Initial implementation of the FabAccess 0.3 API, "Spigots of Berlin".
+* Initial full implementation of the FabAccess 0.3 API, "Spigots of Berlin".
 
 ## 0.3.0 -- 2021-10-01
 
