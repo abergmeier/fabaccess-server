@@ -40,8 +40,6 @@ before_script:
   stage: lint
   allow_failure: true
   only:
-    - main
-    - development
     - merge_requests
 
 # Use clippy lints
