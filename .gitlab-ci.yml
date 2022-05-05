@@ -62,7 +62,7 @@ lint:fmt:
 # Check if the code builds on rust stable
 stable:build:
   stage: build
-  needs: []
+  needs: ["lint:clippy", "lint:fmt"]
   only:
     - main
     - development
@@ -89,19 +89,23 @@ stable:build:
     reports:
       junit:
         - report.xml
+  only:
+    - main
+    - development
+    - merge_requests
 
 # Run unit tests
-unit test 1/3:
+unit test 1:3:
   variables:
     TEST_TARGET: "--lib"
   extends: .tests
 
-unit test 2/3:
+unit test 2:3:
   variables:
     TEST_TARGET: "--bins"
   extends: .tests
 
-unit test 3/3:
+unit test 3:3:
   variables:
     TEST_TARGET: "--examples"
   extends: .tests
