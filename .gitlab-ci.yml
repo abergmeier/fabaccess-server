@@ -1,86 +1,151 @@
-# Official language image. Look for the different tagged releases at:
-# https://hub.docker.com/r/library/rust/tags/
-image: "rust:latest"
+# Define slightly different stages.
+# Additionally, lint the code before anything else to fail more quickly
+stages:
+  - lint
+  - build
+  - test
+  - release
+  - dockerify
 
-# Optional: Pick zero or more services to be used on all builds.
-# Only needed when using a docker container to run your tests in.
-# Check out: http://docs.gitlab.com/ce/ci/docker/using_docker_images.html#what-is-a-service
-# services:
-#   - mysql:latest
-#   - redis:latest
-#   - postgres:latest
+default:
+  image: "rust:latest"
+  tags:
+    - linux
+    - docker
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
-  # CARGO_HOME: $CI_PROJECT_DIR/cargo
+  CARGO_HOME: $CI_PROJECT_DIR/cargo
   APT_CACHE_DIR: $CI_PROJECT_DIR/apt
+
+# cache dependencies and build environment to speed up setup
+cache:
+  key: "$CI_COMMIT_REF_SLUG"
+  paths:
+    - apt/
+    - cargo/
+    - target/
 
 # install build dependencies
 before_script:
   - apt-get update -yqq
-  - apt-get install -o dir::cache::archives="$APT_CACHE_DIR" -yqq --no-install-recommends capnproto build-essential cmake clang libclang-dev
-  - rustup update
+  - apt-get install -o dir::cache::archives="$APT_CACHE_DIR" -yqq --no-install-recommends capnproto build-essential cmake clang libclang-dev jq
   - rustup component add rustfmt
   - rustup component add clippy
+  - cargo install cargo2junit
 
-# Use clippy to lint the project
+.lists:
+  stage: lint
+  allow_failure: true
+  only:
+    - merge_requests
+
+# Use clippy lints
 lint:clippy:
-  allow_failure: true
+  extends: .lints
   script:
-    - rustc --version && cargo --version  # Print version info for debugging
-    - cargo clippy -- -D warnings
-  only:
-    - master
-    - development
-    - merge_requests
-  tags:
-    - linux
-    - docker
+    - cargo +stable clippy -V
+    - echo -e "\e[0Ksection_start:`date +%s`:clippy_output\r\e[0K`cargo clippy` output"
+    - cargo +stable clippy -- --no-deps
+    - echo -e "\e[0Ksection_end:`date +%s`:clippy_output\r\e[0K"
 
-# Use rustfmt to check formating of the project
+# Use rustfmt to check formating
 lint:fmt:
-  allow_failure: true
+  extends: .lints
   script:
-    - rustc --version && cargo --version  # Print version info for debugging
-    - cargo fmt -- --check # TODO: Do we want to enforce formating?
+    - cargo +stable fmt --version
+    - echo -e "\e[0Ksection_start:`date +%s`:rustfmt_output\r\e[0KChanges suggested by rustfmt"
+    - cargo +stable fmt --check -- -v
+    - echo -e "\e[0Ksection_end:`date +%s`:rustfmt_output\r\e[0K"
+
+.builds:
+  stage: build
   only:
-    - master
+    - main
     - development
     - merge_requests
-  tags:
-    - linux
-    - docker
 
-# Use cargo to test the project
-test:cargo:
+# Check if the code builds on rust stable
+stable:build:
+  extends: .builds
   script:
-    - rustc --version && cargo --version  # Print version info for debugging
-    - cargo test --workspace --verbose
-  only:
-    - master
-    - development
-    - merge_requests
-  tags:
-    - linux
-    - docker
+    - rustc +stable --version && cargo +stable --version
+    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo check`"
+    - cargo +stable check --verbose
+    - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
 
-build:docker-master:
-  image:
-    name: gcr.io/kaniko-project/executor:v1.6.0-debug
-    entrypoint: [""]
-  before_script:
-    - ''
+stable:test:
+  extends: .builds
+  needs: ["stable:build"]
   script:
-    - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
-    - /kaniko/executor --force --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $CI_REGISTRY_IMAGE:latest
-  only:
-    - master
-  tags:
-    - linux
-    - docker
+    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo test --no-run`"
+    - cargo +stable test --verbose --no-run --workspace
+    - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
+
+.tests:
+  stage: test
+  needs:
+    - "stable:test"
+  script:
+    - >
+      cargo +stable test --workspace $TEST_TARGET -- 
+        -Z unstable-options --format json --report-time 
+        | cargo2junit > report.xml
+  artifacts:
+    when: always
+    reports:
+      junit:
+        - report.xml
+
+# Run unit tests
+unit test 1/3:
+  variables:
+    TEST_TARGET: "--lib"
+  extends: .tests
+
+unit test 2/3:
+  variables:
+    TEST_TARGET: "--bins"
+  extends: .tests
+
+unit test 3/3:
+  variables:
+    TEST_TARGET: "--examples"
+  extends: .tests
+
+
+release_prepare:
+  stage: release
+  rules:
+    - if: $CI_COMMIT_TAG =~ "release/.*"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - VERSION="cargo metadata --format-version 1 | jq -C '.packages | .[] | select(.name == "diflouroborane") | .version' -r"
+    - echo $VERSION > release.env
+  artifacts:
+    reports:
+      dotenv: release.env
+
+release_job:
+  stage: release
+  needs:
+    - job: release_prepare
+      artifacts: true
+  image: registry.gitlab.com/gitlab-org/release-cli:latest
+  rules:
+    - if: $CI_COMMIT_TAG =~ "release/.*"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "main"
+  script:
+    - echo "Creating GitLab release…"
+  release:
+    name: "BFFH $VERSION"
+    description: "GitLab CI auto-created release"
+    tag_name: "release/$VERSION"
 
 build:docker-releases:
+  stage: dockerify
   image:
     name: gcr.io/kaniko-project/executor:v1.6.0-debug
     entrypoint: [""]
@@ -90,13 +155,11 @@ build:docker-releases:
     - mkdir -p /kaniko/.docker
     - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
     - /kaniko/executor --force --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
-  only:
-    - tags
-  tags:
-    - linux
-    - docker
+  rules:
+    - if: $CI_COMMIT_TAG =~ "release/.*"
 
 build:docker-development:
+  stage: dockerify
   image:
     name: gcr.io/kaniko-project/executor:v1.6.0-debug
     entrypoint: [""]
@@ -108,14 +171,3 @@ build:docker-development:
     - /kaniko/executor --force --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $CI_REGISTRY_IMAGE:dev-latest
   only:
     - development
-  tags:
-    - linux
-    - docker
-
-# cache dependencies and build environment to speed up setup
-cache:
-  key: "$CI_COMMIT_REF_SLUG"
-  paths:
-    - apt/
-    # - cargo/
-    - target/
