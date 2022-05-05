@@ -10,8 +10,6 @@ use std::sync::Arc;
 
 pub mod db;
 
-
-
 use crate::users::db::UserData;
 use crate::UserDB;
 
@@ -87,10 +85,9 @@ impl Users {
 
     pub fn get_user(&self, uid: &str) -> Option<db::User> {
         tracing::trace!(uid, "Looking up user");
-        self.userdb
-            .get(uid)
-            .unwrap()
-            .map(|user| Deserialize::<db::User, _>::deserialize(user.as_ref(), &mut Infallible).unwrap())
+        self.userdb.get(uid).unwrap().map(|user| {
+            Deserialize::<db::User, _>::deserialize(user.as_ref(), &mut Infallible).unwrap()
+        })
     }
 
     pub fn put_user(&self, uid: &str, user: &db::User) -> Result<(), lmdb::Error> {

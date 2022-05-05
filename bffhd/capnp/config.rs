@@ -2,7 +2,7 @@ use std::fmt::Formatter;
 use std::net::ToSocketAddrs;
 use std::path::PathBuf;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 use crate::config::deser_option;
 
@@ -14,7 +14,11 @@ use crate::config::deser_option;
 pub struct Listen {
     pub address: String,
 
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deser_option"
+    )]
     pub port: Option<u16>,
 }
 

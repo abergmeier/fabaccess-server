@@ -1,13 +1,13 @@
-use std::net::SocketAddr;
-pub use api::connection_capnp::bootstrap::Client;
 use api::connection_capnp::bootstrap;
+pub use api::connection_capnp::bootstrap::Client;
+use std::net::SocketAddr;
 
-use capnp::capability::Promise;
-use capnp_rpc::pry;
-use rsasl::mechname::Mechname;
 use crate::authentication::AuthenticationHandle;
 use crate::capnp::authenticationsystem::Authentication;
 use crate::session::SessionManager;
+use capnp::capability::Promise;
+use capnp_rpc::pry;
+use rsasl::mechname::Mechname;
 
 /// Cap'n Proto API Handler
 pub struct BootCap {
@@ -17,7 +17,11 @@ pub struct BootCap {
 }
 
 impl BootCap {
-    pub fn new(peer_addr: SocketAddr, authentication: AuthenticationHandle, sessionmanager: SessionManager) -> Self {
+    pub fn new(
+        peer_addr: SocketAddr,
+        authentication: AuthenticationHandle,
+        sessionmanager: SessionManager,
+    ) -> Self {
         tracing::trace!(%peer_addr, "bootstrapping RPC");
         Self {
             peer_addr,
@@ -62,12 +66,14 @@ impl bootstrap::Server for BootCap {
         tracing::trace!("mechanisms");
 
         let builder = result.get();
-        let mechs: Vec<_> = self.authentication.list_available_mechs()
+        let mechs: Vec<_> = self
+            .authentication
+            .list_available_mechs()
             .into_iter()
             .map(|m| m.as_str())
             .collect();
         let mut mechbuilder = builder.init_mechs(mechs.len() as u32);
-        for (i,m) in mechs.iter().enumerate() {
+        for (i, m) in mechs.iter().enumerate() {
             mechbuilder.set(i as u32, m);
         }
 

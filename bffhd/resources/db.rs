@@ -1,16 +1,16 @@
-use rkyv::{Archive, Serialize, Deserialize};
+use rkyv::{Archive, Deserialize, Serialize};
 
-
-
-
-
-
-
-
-
-#[derive(Clone, Debug, PartialEq, Eq)]
-#[derive(Archive, Serialize, Deserialize)]
-#[derive(serde::Serialize, serde::Deserialize)]
+#[derive(
+    Clone,
+    Debug,
+    PartialEq,
+    Eq,
+    Archive,
+    Serialize,
+    Deserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 pub struct Resource {
     uuid: u128,
     id: String,

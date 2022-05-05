@@ -14,15 +14,10 @@ where
 {
     let (sender, receiver) = channel::unbounded();
 
-    let future = async move {
-        fut.await
-    };
+    let future = async move { fut.await };
 
     let schedule = move |t| sender.send(t).unwrap();
-    let (proc, handle) = LightProc::build(
-        future,
-        schedule,
-    );
+    let (proc, handle) = LightProc::build(future, schedule);
 
     proc.schedule();
 

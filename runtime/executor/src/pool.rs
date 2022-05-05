@@ -7,19 +7,19 @@
 //! [`spawn`]: crate::pool::spawn
 //! [`Worker`]: crate::run_queue::Worker
 
-use std::cell::Cell;
-use crate::thread_manager::{ThreadManager, DynamicRunner};
+use crate::run::block;
+use crate::thread_manager::{DynamicRunner, ThreadManager};
+use crate::worker::{Sleeper, WorkerThread};
+use crossbeam_deque::{Injector, Stealer};
 use lightproc::lightproc::LightProc;
 use lightproc::recoverable_handle::RecoverableHandle;
+use std::cell::Cell;
 use std::future::Future;
 use std::iter::Iterator;
 use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::sync::Arc;
 use std::time::Duration;
-use crossbeam_deque::{Injector, Stealer};
-use crate::run::block;
-use crate::worker::{Sleeper, WorkerThread};
 
 #[derive(Debug)]
 struct Spooler<'a> {
@@ -31,10 +31,13 @@ struct Spooler<'a> {
 impl Spooler<'_> {
     pub fn new() -> Self {
         let spool = Arc::new(Injector::new());
-        let threads = Box::leak(Box::new(
-            ThreadManager::new(2, AsyncRunner, spool.clone())));
+        let threads = Box::leak(Box::new(ThreadManager::new(2, AsyncRunner, spool.clone())));
         threads.initialize();
-        Self { spool, threads, _marker: PhantomData }
+        Self {
+            spool,
+            threads,
+            _marker: PhantomData,
+        }
     }
 }
 
@@ -53,9 +56,7 @@ impl<'a, 'executor: 'a> Executor<'executor> {
 
     fn schedule(&self) -> impl Fn(LightProc) + 'a {
         let task_queue = self.spooler.spool.clone();
-        move |lightproc: LightProc| {
-            task_queue.push(lightproc)
-        }
+        move |lightproc: LightProc| task_queue.push(lightproc)
     }
 
     ///
@@ -94,23 +95,21 @@ impl<'a, 'executor: 'a> Executor<'executor> {
     /// # }
     /// ```
     pub fn spawn<F, R>(&self, future: F) -> RecoverableHandle<R>
-        where
-            F: Future<Output = R> + Send + 'a,
-            R: Send + 'a,
+    where
+        F: Future<Output = R> + Send + 'a,
+        R: Send + 'a,
     {
-        let (task, handle) =
-            LightProc::recoverable(future, self.schedule());
+        let (task, handle) = LightProc::recoverable(future, self.schedule());
         task.schedule();
         handle
     }
 
     pub fn spawn_local<F, R>(&self, future: F) -> RecoverableHandle<R>
-        where
-            F: Future<Output = R> + 'a,
-            R: Send + 'a,
+    where
+        F: Future<Output = R> + 'a,
+        R: Send + 'a,
     {
-        let (task, handle) =
-            LightProc::recoverable(future, schedule_local());
+        let (task, handle) = LightProc::recoverable(future, schedule_local());
         task.schedule();
         handle
     }
@@ -135,8 +134,8 @@ impl<'a, 'executor: 'a> Executor<'executor> {
     /// );
     /// ```
     pub fn run<F, R>(&self, future: F) -> R
-        where
-            F: Future<Output = R>,
+    where
+        F: Future<Output = R>,
     {
         unsafe {
             // An explicitly uninitialized `R`. Until `assume_init` is called this will not call any
@@ -174,17 +173,20 @@ impl DynamicRunner for AsyncRunner {
         sleeper
     }
 
-    fn run_static<'b>(fences: impl Iterator<Item=&'b Stealer<LightProc>>, park_timeout: Duration) -> ! {
+    fn run_static<'b>(
+        fences: impl Iterator<Item = &'b Stealer<LightProc>>,
+        park_timeout: Duration,
+    ) -> ! {
         let worker = get_worker();
         worker.run_timeout(fences, park_timeout)
     }
 
-    fn run_dynamic<'b>(fences: impl Iterator<Item=&'b Stealer<LightProc>>) -> ! {
+    fn run_dynamic<'b>(fences: impl Iterator<Item = &'b Stealer<LightProc>>) -> ! {
         let worker = get_worker();
         worker.run(fences)
     }
 
-    fn run_standalone<'b>(fences: impl Iterator<Item=&'b Stealer<LightProc>>) {
+    fn run_standalone<'b>(fences: impl Iterator<Item = &'b Stealer<LightProc>>) {
         let worker = get_worker();
         worker.run_once(fences)
     }
@@ -196,10 +198,9 @@ thread_local! {
 
 fn get_worker() -> &'static WorkerThread<'static, LightProc> {
     WORKER.with(|cell| {
-        let worker = unsafe {
-            &*cell.as_ptr() as &'static Option<WorkerThread<_>>
-        };
-        worker.as_ref()
+        let worker = unsafe { &*cell.as_ptr() as &'static Option<WorkerThread<_>> };
+        worker
+            .as_ref()
             .expect("AsyncRunner running outside Executor context")
     })
 }

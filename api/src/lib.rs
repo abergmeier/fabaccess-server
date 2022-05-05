@@ -1,4 +1,3 @@
-
 //! FabAccess generated API bindings
 //!
 //! This crate contains slightly nicer and better documented bindings for the FabAccess API.

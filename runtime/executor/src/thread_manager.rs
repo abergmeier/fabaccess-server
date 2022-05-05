@@ -45,13 +45,18 @@
 //! Throughput hogs determined by a combination of job in / job out frequency and current scheduler task assignment frequency.
 //! Threshold of EMA difference is eluded by machine epsilon for floating point arithmetic errors.
 
+use crate::worker::Sleeper;
 use crate::{load_balancer, placement};
 use core::fmt;
+use crossbeam_channel::bounded;
+use crossbeam_deque::{Injector, Stealer};
 use crossbeam_queue::ArrayQueue;
 use fmt::{Debug, Formatter};
 use lazy_static::lazy_static;
+use lightproc::lightproc::LightProc;
 use placement::CoreId;
 use std::collections::VecDeque;
+use std::sync::{Arc, RwLock};
 use std::time::Duration;
 use std::{
     sync::{
@@ -60,12 +65,7 @@ use std::{
     },
     thread,
 };
-use std::sync::{Arc, RwLock};
-use crossbeam_channel::bounded;
-use crossbeam_deque::{Injector, Stealer};
 use tracing::{debug, trace};
-use lightproc::lightproc::LightProc;
-use crate::worker::Sleeper;
 
 /// The default thread park timeout before checking for new tasks.
 const THREAD_PARK_TIMEOUT: Duration = Duration::from_millis(1);
@@ -113,10 +113,12 @@ lazy_static! {
 pub trait DynamicRunner {
     fn setup(task_queue: Arc<Injector<LightProc>>) -> Sleeper<LightProc>;
 
-    fn run_static<'b>(fences: impl Iterator<Item=&'b Stealer<LightProc>>,
-                  park_timeout: Duration) -> !;
-    fn run_dynamic<'b>(fences: impl Iterator<Item=&'b Stealer<LightProc>>) -> !;
-    fn run_standalone<'b>(fences: impl Iterator<Item=&'b Stealer<LightProc>>);
+    fn run_static<'b>(
+        fences: impl Iterator<Item = &'b Stealer<LightProc>>,
+        park_timeout: Duration,
+    ) -> !;
+    fn run_dynamic<'b>(fences: impl Iterator<Item = &'b Stealer<LightProc>>) -> !;
+    fn run_standalone<'b>(fences: impl Iterator<Item = &'b Stealer<LightProc>>);
 }
 
 /// The `ThreadManager` is creates and destroys worker threads depending on demand according to
@@ -183,11 +185,14 @@ impl<Runner: Debug> Debug for ThreadManager<Runner> {
         }
 
         fmt.debug_struct("DynamicPoolManager")
-            .field("thread pool", &ThreadCount(
-                &self.static_threads,
-                &self.dynamic_threads,
-                &self.parked_threads.len(),
-            ))
+            .field(
+                "thread pool",
+                &ThreadCount(
+                    &self.static_threads,
+                    &self.dynamic_threads,
+                    &self.parked_threads.len(),
+                ),
+            )
             .field("runner", &self.runner)
             .field("last_frequency", &self.last_frequency)
             .finish()
@@ -195,7 +200,11 @@ impl<Runner: Debug> Debug for ThreadManager<Runner> {
 }
 
 impl<Runner: DynamicRunner + Sync + Send> ThreadManager<Runner> {
-    pub fn new(static_threads: usize, runner: Runner, task_queue: Arc<Injector<LightProc>>) -> Self {
+    pub fn new(
+        static_threads: usize,
+        runner: Runner,
+        task_queue: Arc<Injector<LightProc>>,
+    ) -> Self {
         let dynamic_threads = 1.max(num_cpus::get().checked_sub(static_threads).unwrap_or(0));
         let parked_threads = ArrayQueue::new(1.max(static_threads + dynamic_threads));
         let fences = Arc::new(RwLock::new(Vec::new()));
@@ -252,7 +261,10 @@ impl<Runner: DynamicRunner + Sync + Send> ThreadManager<Runner> {
         });
 
         // Dynamic thread manager that will allow us to unpark threads when needed
-        debug!("spooling up {} dynamic worker threads", self.dynamic_threads);
+        debug!(
+            "spooling up {} dynamic worker threads",
+            self.dynamic_threads
+        );
         (0..self.dynamic_threads).for_each(|_| {
             let tx = tx.clone();
             let fencelock = fencelock.clone();
@@ -302,10 +314,11 @@ impl<Runner: DynamicRunner + Sync + Send> ThreadManager<Runner> {
 
     /// Provision threads takes a number of threads that need to be made available.
     /// It will try to unpark threads from the dynamic pool, and spawn more threads if needs be.
-    pub fn provision_threads(&'static self,
-                             n: usize,
-                             fencelock: &Arc<RwLock<Vec<Stealer<LightProc>>>>)
-    {
+    pub fn provision_threads(
+        &'static self,
+        n: usize,
+        fencelock: &Arc<RwLock<Vec<Stealer<LightProc>>>>,
+    ) {
         let rem = self.unpark_thread(n);
         if rem != 0 {
             debug!("no more threads to unpark, spawning {} new threads", rem);
@@ -391,7 +404,5 @@ impl<Runner: DynamicRunner + Sync + Send> ThreadManager<Runner> {
     /// on the request rate.
     ///
     /// It uses frequency based calculation to define work. Utilizing average processing rate.
-    fn scale_pool(&'static self) {
-
-    }
+    fn scale_pool(&'static self) {}
 }

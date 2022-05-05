@@ -1,7 +1,7 @@
-use std::io;
-use std::fmt;
-use rsasl::error::SessionError;
 use crate::db;
+use rsasl::error::SessionError;
+use std::fmt;
+use std::io;
 
 type DBError = db::Error;
 
@@ -21,19 +21,19 @@ impl fmt::Display for Error {
         match self {
             Error::SASL(e) => {
                 write!(f, "SASL Error: {}", e)
-            },
+            }
             Error::IO(e) => {
                 write!(f, "IO Error: {}", e)
-            },
+            }
             Error::Boxed(e) => {
                 write!(f, "{}", e)
-            },
+            }
             Error::Capnp(e) => {
                 write!(f, "Cap'n Proto Error: {}", e)
-            },
+            }
             Error::DB(e) => {
                 write!(f, "DB Error: {:?}", e)
-            },
+            }
             Error::Denied => {
                 write!(f, "You do not have the permission required to do that.")
             }

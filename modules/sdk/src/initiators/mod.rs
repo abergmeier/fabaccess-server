@@ -1,10 +1,4 @@
 pub use diflouroborane::{
-    initiators::{
-        UpdateSink,
-        UpdateError,
-
-        Initiator,
-        InitiatorError,
-    },
+    initiators::{Initiator, InitiatorError, UpdateError, UpdateSink},
     resource::claim::ResourceID,
 };

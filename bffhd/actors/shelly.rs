@@ -1,11 +1,11 @@
-use std::collections::HashMap;
 use futures_util::future::BoxFuture;
+use std::collections::HashMap;
 
-use rumqttc::{AsyncClient, QoS};
 use crate::actors::Actor;
 use crate::db::ArchivedValue;
 use crate::resources::modules::fabaccess::ArchivedStatus;
 use crate::resources::state::State;
+use rumqttc::{AsyncClient, QoS};
 
 /// An actuator for a Shellie connected listening on one MQTT broker
 ///
@@ -28,7 +28,11 @@ impl Shelly {
 
         tracing::debug!(%name,%topic,"Starting shelly module");
 
-        Shelly { name, client, topic, }
+        Shelly {
+            name,
+            client,
+            topic,
+        }
     }
 
     /// Set the name to a new one. This changes the shelly that will be activated
@@ -37,7 +41,6 @@ impl Shelly {
         self.name = new_name;
     }
 }
-
 
 impl Actor for Shelly {
     fn apply(&mut self, state: ArchivedValue<State>) -> BoxFuture<'static, ()> {

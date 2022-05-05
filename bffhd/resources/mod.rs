@@ -1,21 +1,21 @@
+use futures_signals::signal::{Mutable, Signal};
 use rkyv::Infallible;
 use std::ops::Deref;
 use std::sync::Arc;
-use futures_signals::signal::{Mutable, Signal};
 
-use rkyv::{Archived, Deserialize};
-use rkyv::option::ArchivedOption;
-use rkyv::ser::Serializer;
-use rkyv::ser::serializers::AllocSerializer;
 use crate::audit::AUDIT;
 use crate::authorization::permissions::PrivilegesBuf;
 use crate::config::MachineDescription;
 use crate::db::ArchivedValue;
-use crate::resources::modules::fabaccess::{MachineState, Status, ArchivedStatus};
+use crate::resources::modules::fabaccess::{ArchivedStatus, MachineState, Status};
 use crate::resources::state::db::StateDB;
 use crate::resources::state::State;
 use crate::session::SessionHandle;
 use crate::users::UserRef;
+use rkyv::option::ArchivedOption;
+use rkyv::ser::serializers::AllocSerializer;
+use rkyv::ser::Serializer;
+use rkyv::{Archived, Deserialize};
 
 pub mod db;
 pub mod search;
@@ -43,27 +43,35 @@ impl Inner {
             let update = state.to_state();
 
             let mut serializer = AllocSerializer::<1024>::default();
-            serializer.serialize_value(&update).expect("failed to serialize new default state");
+            serializer
+                .serialize_value(&update)
+                .expect("failed to serialize new default state");
             let val = ArchivedValue::new(serializer.into_serializer().into_inner());
             db.put(&id.as_bytes(), &val).unwrap();
             val
         };
         let signal = Mutable::new(state);
 
-        Self { id, db, signal, desc }
+        Self {
+            id,
+            db,
+            signal,
+            desc,
+        }
     }
 
-    pub fn signal(&self) -> impl Signal<Item=ArchivedValue<State>> {
+    pub fn signal(&self) -> impl Signal<Item = ArchivedValue<State>> {
         Box::pin(self.signal.signal_cloned())
     }
 
     fn get_state(&self) -> ArchivedValue<State> {
-        self.db.get(self.id.as_bytes())
+        self.db
+            .get(self.id.as_bytes())
             .expect("lmdb error")
             .expect("state should never be None")
     }
 
-    fn get_state_ref(&self) -> impl Deref<Target=ArchivedValue<State>> + '_ {
+    fn get_state_ref(&self) -> impl Deref<Target = ArchivedValue<State>> + '_ {
         self.signal.lock_ref()
     }
 
@@ -76,7 +84,10 @@ impl Inner {
         self.db.put(&self.id.as_bytes(), &state).unwrap();
         tracing::trace!("Updated DB, sending update signal");
 
-        AUDIT.get().unwrap().log(self.id.as_str(), &format!("{}", state));
+        AUDIT
+            .get()
+            .unwrap()
+            .log(self.id.as_str(), &format!("{}", state));
 
         self.signal.set(state);
         tracing::trace!("Sent update signal");
@@ -85,7 +96,7 @@ impl Inner {
 
 #[derive(Clone)]
 pub struct Resource {
-    inner: Arc<Inner>
+    inner: Arc<Inner>,
 }
 
 impl Resource {
@@ -97,7 +108,7 @@ impl Resource {
         self.inner.get_state()
     }
 
-    pub fn get_state_ref(&self) -> impl Deref<Target=ArchivedValue<State>> + '_ {
+    pub fn get_state_ref(&self) -> impl Deref<Target = ArchivedValue<State>> + '_ {
         self.inner.get_state_ref()
     }
 
@@ -109,7 +120,7 @@ impl Resource {
         self.inner.desc.name.as_str()
     }
 
-    pub fn get_signal(&self) -> impl Signal<Item=ArchivedValue<State>> {
+    pub fn get_signal(&self) -> impl Signal<Item = ArchivedValue<State>> {
         self.inner.signal()
     }
 
@@ -125,13 +136,13 @@ impl Resource {
         let state = self.get_state_ref();
         let state: &Archived<State> = state.as_ref();
         match &state.inner.state {
-            ArchivedStatus::Blocked(user) |
-            ArchivedStatus::InUse(user) |
-            ArchivedStatus::Reserved(user) |
-            ArchivedStatus::ToCheck(user) => {
+            ArchivedStatus::Blocked(user)
+            | ArchivedStatus::InUse(user)
+            | ArchivedStatus::Reserved(user)
+            | ArchivedStatus::ToCheck(user) => {
                 let user = Deserialize::<UserRef, _>::deserialize(user, &mut Infallible).unwrap();
                 Some(user)
-            },
+            }
             _ => None,
         }
     }
@@ -158,8 +169,9 @@ impl Resource {
         let old = self.inner.get_state();
         let oldref: &Archived<State> = old.as_ref();
         let previous: &Archived<Option<UserRef>> = &oldref.inner.previous;
-        let previous = Deserialize::<Option<UserRef>, _>::deserialize(previous, &mut rkyv::Infallible)
-            .expect("Infallible deserializer failed");
+        let previous =
+            Deserialize::<Option<UserRef>, _>::deserialize(previous, &mut rkyv::Infallible)
+                .expect("Infallible deserializer failed");
         let new = MachineState { state, previous };
         self.set_state(new);
     }

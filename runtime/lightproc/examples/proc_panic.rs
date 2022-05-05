@@ -1,11 +1,11 @@
-use std::any::Any;
-use std::fmt::Debug;
-use std::ops::Deref;
 use crossbeam::channel::{unbounded, Sender};
 use futures_executor as executor;
 use lazy_static::lazy_static;
 use lightproc::prelude::*;
+use std::any::Any;
+use std::fmt::Debug;
 use std::future::Future;
+use std::ops::Deref;
 use std::thread;
 
 fn spawn_on_thread<F, R>(future: F) -> RecoverableHandle<R>
@@ -30,20 +30,17 @@ where
     }
 
     let schedule = |t| (QUEUE.deref()).send(t).unwrap();
-    let (proc, handle) = LightProc::recoverable(
-        future,
-        schedule
-    );
+    let (proc, handle) = LightProc::recoverable(future, schedule);
 
-    let handle = handle
-        .on_panic(|err: Box<dyn Any + Send>| {
-            match err.downcast::<&'static str>() {
-                Ok(reason) => println!("Future panicked: {}", &reason),
-                Err(err) =>
-                    println!("Future panicked with a non-text reason of typeid {:?}",
-                             err.type_id()),
-            }
-        });
+    let handle = handle.on_panic(
+        |err: Box<dyn Any + Send>| match err.downcast::<&'static str>() {
+            Ok(reason) => println!("Future panicked: {}", &reason),
+            Err(err) => println!(
+                "Future panicked with a non-text reason of typeid {:?}",
+                err.type_id()
+            ),
+        },
+    );
 
     proc.schedule();
 

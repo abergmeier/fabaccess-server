@@ -1,6 +1,5 @@
-
 use crate::users::Users;
-use rsasl::error::{SessionError};
+use rsasl::error::SessionError;
 use rsasl::mechname::Mechname;
 use rsasl::property::{AuthId, Password};
 use rsasl::session::{Session, SessionData};
@@ -31,13 +30,19 @@ impl rsasl::callback::Callback for Callback {
         match property {
             fabfire::FABFIRECARDKEY => {
                 let authcid = session.get_property_or_callback::<AuthId>()?;
-                let user = self.users.get_user(authcid.unwrap().as_ref())
+                let user = self
+                    .users
+                    .get_user(authcid.unwrap().as_ref())
                     .ok_or(SessionError::AuthenticationFailure)?;
-                let kv = user.userdata.kv.get("cardkey")
+                let kv = user
+                    .userdata
+                    .kv
+                    .get("cardkey")
                     .ok_or(SessionError::AuthenticationFailure)?;
-                let card_key = <[u8; 16]>::try_from(hex::decode(kv)
-                    .map_err(|_| SessionError::AuthenticationFailure)?)
-                    .map_err(|_| SessionError::AuthenticationFailure)?;
+                let card_key = <[u8; 16]>::try_from(
+                    hex::decode(kv).map_err(|_| SessionError::AuthenticationFailure)?,
+                )
+                .map_err(|_| SessionError::AuthenticationFailure)?;
                 session.set_property::<FabFireCardKey>(Arc::new(card_key));
                 Ok(())
             }
@@ -60,9 +65,7 @@ impl rsasl::callback::Callback for Callback {
                     .ok_or(SessionError::no_property::<AuthId>())?;
                 tracing::debug!(authid=%authnid, "SIMPLE validation requested");
 
-                if let Some(user) = self
-                    .users
-                    .get_user(authnid.as_str()) {
+                if let Some(user) = self.users.get_user(authnid.as_str()) {
                     let passwd = session
                         .get_property::<Password>()
                         .ok_or(SessionError::no_property::<Password>())?;
@@ -84,7 +87,7 @@ impl rsasl::callback::Callback for Callback {
             _ => {
                 tracing::error!(?validation, "Unimplemented validation requested");
                 Err(SessionError::no_validate(validation))
-            },
+            }
         }
     }
 }
@@ -111,10 +114,12 @@ impl AuthenticationHandle {
         let mut rsasl = SASL::new();
         rsasl.install_callback(Arc::new(Callback::new(userdb)));
 
-        let mechs: Vec<&'static str> = rsasl.server_mech_list().into_iter()
+        let mechs: Vec<&'static str> = rsasl
+            .server_mech_list()
+            .into_iter()
             .map(|m| m.mechanism.as_str())
             .collect();
-        tracing::info!(available_mechs=mechs.len(), "initialized sasl backend");
+        tracing::info!(available_mechs = mechs.len(), "initialized sasl backend");
         tracing::debug!(?mechs, "available mechs");
 
         Self {

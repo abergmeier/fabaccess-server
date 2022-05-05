@@ -73,25 +73,22 @@ bitflags::bitflags! {
 #[repr(packed)]
 #[derive(Copy, Clone, Ord, PartialOrd, Eq, PartialEq, Hash)]
 pub struct State {
-    bytes: [u8; 8]
+    bytes: [u8; 8],
 }
 
 impl State {
     #[inline(always)]
     pub const fn new(flags: StateFlags, references: u32) -> Self {
-        let [a,b,c,d] = references.to_ne_bytes();
-        let [e,f,g,h] = flags.bits.to_ne_bytes();
-        Self::from_bytes([a,b,c,d,e,f,g,h])
+        let [a, b, c, d] = references.to_ne_bytes();
+        let [e, f, g, h] = flags.bits.to_ne_bytes();
+        Self::from_bytes([a, b, c, d, e, f, g, h])
     }
-
 
     #[inline(always)]
     pub const fn parts(self: Self) -> (StateFlags, u32) {
-        let [a,b,c,d,e,f,g,h] = self.bytes;
-        let refcount = u32::from_ne_bytes([a,b,c,d]);
-        let state = unsafe {
-            StateFlags::from_bits_unchecked(u32::from_ne_bytes([e,f,g,h]))
-        };
+        let [a, b, c, d, e, f, g, h] = self.bytes;
+        let refcount = u32::from_ne_bytes([a, b, c, d]);
+        let state = unsafe { StateFlags::from_bits_unchecked(u32::from_ne_bytes([e, f, g, h])) };
         (state, refcount)
     }
 
@@ -101,8 +98,8 @@ impl State {
     /// Note that the reference counter only tracks the `LightProc` and `Waker`s. The `ProcHandle` is
     /// tracked separately by the `HANDLE` flag.
     pub const fn get_refcount(self) -> u32 {
-        let [a,b,c,d,_,_,_,_] = self.bytes;
-        u32::from_ne_bytes([a,b,c,d])
+        let [a, b, c, d, _, _, _, _] = self.bytes;
+        u32::from_ne_bytes([a, b, c, d])
     }
 
     #[inline(always)]
@@ -116,7 +113,7 @@ impl State {
     #[inline(always)]
     pub const fn get_flags(self) -> StateFlags {
         let [_, _, _, _, e, f, g, h] = self.bytes;
-        unsafe { StateFlags::from_bits_unchecked(u32::from_ne_bytes([e,f,g,h])) }
+        unsafe { StateFlags::from_bits_unchecked(u32::from_ne_bytes([e, f, g, h])) }
     }
 
     #[inline(always)]
@@ -207,10 +204,10 @@ impl AtomicState {
         current: State,
         new: State,
         success: Ordering,
-        failure: Ordering
-    ) -> Result<State, State>
-    {
-        self.inner.compare_exchange(current.into_u64(), new.into_u64(), success, failure)
+        failure: Ordering,
+    ) -> Result<State, State> {
+        self.inner
+            .compare_exchange(current.into_u64(), new.into_u64(), success, failure)
             .map(|u| State::from_u64(u))
             .map_err(|u| State::from_u64(u))
     }
@@ -220,37 +217,37 @@ impl AtomicState {
         current: State,
         new: State,
         success: Ordering,
-        failure: Ordering
-    ) -> Result<State, State>
-    {
-        self.inner.compare_exchange_weak(current.into_u64(), new.into_u64(), success, failure)
+        failure: Ordering,
+    ) -> Result<State, State> {
+        self.inner
+            .compare_exchange_weak(current.into_u64(), new.into_u64(), success, failure)
             .map(|u| State::from_u64(u))
             .map_err(|u| State::from_u64(u))
     }
 
     pub fn fetch_or(&self, val: StateFlags, order: Ordering) -> State {
-        let [a,b,c,d] = val.bits.to_ne_bytes();
-        let store = u64::from_ne_bytes([0,0,0,0,a,b,c,d]);
+        let [a, b, c, d] = val.bits.to_ne_bytes();
+        let store = u64::from_ne_bytes([0, 0, 0, 0, a, b, c, d]);
         State::from_u64(self.inner.fetch_or(store, order))
     }
 
     pub fn fetch_and(&self, val: StateFlags, order: Ordering) -> State {
-        let [a,b,c,d] = val.bits.to_ne_bytes();
-        let store = u64::from_ne_bytes([!0,!0,!0,!0,a,b,c,d]);
+        let [a, b, c, d] = val.bits.to_ne_bytes();
+        let store = u64::from_ne_bytes([!0, !0, !0, !0, a, b, c, d]);
         State::from_u64(self.inner.fetch_and(store, order))
     }
 
     // FIXME: Do this properly
     pub fn fetch_add(&self, val: u32, order: Ordering) -> State {
-        let [a,b,c,d] = val.to_ne_bytes();
-        let store = u64::from_ne_bytes([a,b,c,d,0,0,0,0]);
+        let [a, b, c, d] = val.to_ne_bytes();
+        let store = u64::from_ne_bytes([a, b, c, d, 0, 0, 0, 0]);
         State::from_u64(self.inner.fetch_add(store, order))
     }
 
     // FIXME: Do this properly
     pub fn fetch_sub(&self, val: u32, order: Ordering) -> State {
-        let [a,b,c,d] = val.to_ne_bytes();
-        let store = u64::from_ne_bytes([a,b,c,d,0,0,0,0]);
+        let [a, b, c, d] = val.to_ne_bytes();
+        let store = u64::from_ne_bytes([a, b, c, d, 0, 0, 0, 0]);
         State::from_u64(self.inner.fetch_sub(store, order))
     }
 }

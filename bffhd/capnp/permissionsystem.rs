@@ -10,6 +10,4 @@ impl Permissions {
     }
 }
 
-impl PermissionSystem for Permissions {
-
-}
+impl PermissionSystem for Permissions {}

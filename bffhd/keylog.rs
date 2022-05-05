@@ -1,9 +1,9 @@
-use std::fs::{File, OpenOptions};
-use std::{fmt, io};
 use std::fmt::Formatter;
+use std::fs::{File, OpenOptions};
 use std::io::Write;
 use std::path::Path;
 use std::sync::Mutex;
+use std::{fmt, io};
 
 // Internal mutable state for KeyLogFile
 struct KeyLogFileInner {
@@ -18,10 +18,7 @@ impl fmt::Debug for KeyLogFileInner {
 
 impl KeyLogFileInner {
     fn new(path: impl AsRef<Path>) -> io::Result<Self> {
-        let file = OpenOptions::new()
-            .append(true)
-            .create(true)
-            .open(path)?;
+        let file = OpenOptions::new().append(true).create(true).open(path)?;
 
         Ok(Self {
             file,

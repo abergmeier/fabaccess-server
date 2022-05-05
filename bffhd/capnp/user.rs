@@ -1,10 +1,10 @@
+use crate::authorization::permissions::Permission;
+use crate::session::SessionHandle;
+use crate::users::{db, UserRef};
+use api::general_capnp::optional;
+use api::user_capnp::user::{self, admin, info, manage};
 use capnp::capability::Promise;
 use capnp_rpc::pry;
-use crate::session::SessionHandle;
-use api::user_capnp::user::{admin, info, manage, self};
-use api::general_capnp::optional;
-use crate::authorization::permissions::Permission;
-use crate::users::{db, UserRef};
 
 #[derive(Clone)]
 pub struct User {
@@ -22,7 +22,11 @@ impl User {
         Self::new(session, user)
     }
 
-    pub fn build_optional(session: &SessionHandle, user: Option<UserRef>, builder: optional::Builder<user::Owned>) {
+    pub fn build_optional(
+        session: &SessionHandle,
+        user: Option<UserRef>,
+        builder: optional::Builder<user::Owned>,
+    ) {
         if let Some(user) = user.and_then(|u| session.users.get_user(u.get_username())) {
             let builder = builder.init_just();
             Self::fill(&session, user, builder);
@@ -102,12 +106,18 @@ impl admin::Server for User {
         let rolename = pry!(pry!(pry!(param.get()).get_role()).get_name());
 
         if let Some(_role) = self.session.roles.get(rolename) {
-            let mut target = self.session.users.get_user(self.user.get_username()).unwrap();
+            let mut target = self
+                .session
+                .users
+                .get_user(self.user.get_username())
+                .unwrap();
 
             // Only update if needed
             if !target.userdata.roles.iter().any(|r| r.as_str() == rolename) {
                 target.userdata.roles.push(rolename.to_string());
-                self.session.users.put_user(self.user.get_username(), &target);
+                self.session
+                    .users
+                    .put_user(self.user.get_username(), &target);
             }
         }
 
@@ -121,22 +131,24 @@ impl admin::Server for User {
         let rolename = pry!(pry!(pry!(param.get()).get_role()).get_name());
 
         if let Some(_role) = self.session.roles.get(rolename) {
-            let mut target = self.session.users.get_user(self.user.get_username()).unwrap();
+            let mut target = self
+                .session
+                .users
+                .get_user(self.user.get_username())
+                .unwrap();
 
             // Only update if needed
             if target.userdata.roles.iter().any(|r| r.as_str() == rolename) {
                 target.userdata.roles.retain(|r| r.as_str() != rolename);
-                self.session.users.put_user(self.user.get_username(), &target);
+                self.session
+                    .users
+                    .put_user(self.user.get_username(), &target);
             }
         }
 
         Promise::ok(())
     }
-    fn pwd(
-        &mut self,
-        _: admin::PwdParams,
-        _: admin::PwdResults,
-    ) -> Promise<(), ::capnp::Error> {
+    fn pwd(&mut self, _: admin::PwdParams, _: admin::PwdResults) -> Promise<(), ::capnp::Error> {
         Promise::err(::capnp::Error::unimplemented(
             "method not implemented".to_string(),
         ))

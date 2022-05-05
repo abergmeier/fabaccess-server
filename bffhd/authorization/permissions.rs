@@ -1,10 +1,9 @@
 //! Access control logic
 //!
 
-use std::fmt;
 use std::cmp::Ordering;
-use std::convert::{TryFrom, Into};
-
+use std::convert::{Into, TryFrom};
+use std::fmt;
 
 fn is_sep_char(c: char) -> bool {
     c == '.'
@@ -20,7 +19,7 @@ pub struct PrivilegesBuf {
     /// Which permission is required to write parts of this thing
     pub write: PermissionBuf,
     /// Which permission is required to manage all parts of this thing
-    pub manage: PermissionBuf
+    pub manage: PermissionBuf,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, serde::Serialize, serde::Deserialize)]
@@ -39,13 +38,17 @@ impl PermissionBuf {
     #[inline(always)]
     /// Allocate an empty `PermissionBuf`
     pub fn new() -> Self {
-        PermissionBuf { inner: String::new() }
+        PermissionBuf {
+            inner: String::new(),
+        }
     }
 
     #[inline(always)]
     /// Allocate a `PermissionBuf` with the given capacity given to the internal [`String`]
     pub fn with_capacity(cap: usize) -> Self {
-        PermissionBuf { inner: String::with_capacity(cap) }
+        PermissionBuf {
+            inner: String::with_capacity(cap),
+        }
     }
 
     #[inline(always)]
@@ -59,7 +62,13 @@ impl PermissionBuf {
 
     pub fn _push(&mut self, perm: &Permission) {
         // in general we always need a separator unless the last byte is one or the string is empty
-        let need_sep = self.inner.chars().rev().next().map(|c| !is_sep_char(c)).unwrap_or(false);
+        let need_sep = self
+            .inner
+            .chars()
+            .rev()
+            .next()
+            .map(|c| !is_sep_char(c))
+            .unwrap_or(false);
         if need_sep {
             self.inner.push('.')
         }
@@ -73,7 +82,9 @@ impl PermissionBuf {
 
     #[inline]
     pub fn from_perm(perm: &Permission) -> Self {
-        Self { inner: perm.as_str().to_string() }
+        Self {
+            inner: perm.as_str().to_string(),
+        }
     }
 
     #[inline(always)]
@@ -119,7 +130,7 @@ impl fmt::Display for PermissionBuf {
 #[derive(PartialEq, Eq, Hash, Debug)]
 #[repr(transparent)]
 /// A borrowed permission string
-/// 
+///
 /// Permissions have total equality and partial ordering.
 /// Specifically permissions on the same path in a tree can be compared for specificity.
 /// This means that ```(bffh.perm) > (bffh.perm.sub) == true```
@@ -141,7 +152,7 @@ impl Permission {
     }
 
     #[inline(always)]
-    pub fn iter(&self) -> std::str::Split<char>  {
+    pub fn iter(&self) -> std::str::Split<char> {
         self.0.split('.')
     }
 }
@@ -162,12 +173,14 @@ impl PartialOrd for Permission {
             }
         }
 
-        match (l,r) {
+        match (l, r) {
             (None, None) => Some(Ordering::Equal),
             (Some(_), None) => Some(Ordering::Less),
             (None, Some(_)) => Some(Ordering::Greater),
-            (Some(_), Some(_)) => unreachable!("Broken contract in Permission::partial_cmp: sides \
-            should never be both Some!"),
+            (Some(_), Some(_)) => unreachable!(
+                "Broken contract in Permission::partial_cmp: sides \
+            should never be both Some!"
+            ),
         }
     }
 }
@@ -183,7 +196,7 @@ impl AsRef<Permission> for Permission {
 #[serde(try_from = "String")]
 #[serde(into = "String")]
 pub enum PermRule {
-    /// The permission is precise, 
+    /// The permission is precise,
     ///
     /// i.e. `Base("bffh.perm")` grants bffh.perm but does not grant permission for bffh.perm.sub
     Base(PermissionBuf),
@@ -208,7 +221,7 @@ impl PermRule {
     pub fn match_perm<P: AsRef<Permission> + ?Sized>(&self, perm: &P) -> bool {
         match self {
             PermRule::Base(ref base) => base.as_permission() == perm.as_ref(),
-            PermRule::Children(ref parent) => parent.as_permission() > perm.as_ref() ,
+            PermRule::Children(ref parent) => parent.as_permission() > perm.as_ref(),
             PermRule::Subtree(ref parent) => parent.as_permission() >= perm.as_ref(),
         }
     }
@@ -217,12 +230,9 @@ impl PermRule {
 impl fmt::Display for PermRule {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            PermRule::Base(perm)
-                => write!(f, "{}", perm),
-            PermRule::Children(parent)
-                => write!(f,"{}.+", parent),
-            PermRule::Subtree(parent)
-                => write!(f,"{}.*", parent),
+            PermRule::Base(perm) => write!(f, "{}", perm),
+            PermRule::Children(parent) => write!(f, "{}.+", parent),
+            PermRule::Subtree(parent) => write!(f, "{}.*", parent),
         }
     }
 }
@@ -234,7 +244,7 @@ impl Into<String> for PermRule {
             PermRule::Children(mut perm) => {
                 perm.push(Permission::new("+"));
                 perm.into_string()
-            },
+            }
             PermRule::Subtree(mut perm) => {
                 perm.push(Permission::new("+"));
                 perm.into_string()
@@ -252,15 +262,19 @@ impl TryFrom<String> for PermRule {
         if len <= 2 {
             Err("Input string for PermRule is too short")
         } else {
-            match &input[len-2..len] {
+            match &input[len - 2..len] {
                 ".+" => {
-                    input.truncate(len-2);
-                    Ok(PermRule::Children(PermissionBuf::from_string_unchecked(input)))
-                },
+                    input.truncate(len - 2);
+                    Ok(PermRule::Children(PermissionBuf::from_string_unchecked(
+                        input,
+                    )))
+                }
                 ".*" => {
-                    input.truncate(len-2);
-                    Ok(PermRule::Subtree(PermissionBuf::from_string_unchecked(input)))
-                },
+                    input.truncate(len - 2);
+                    Ok(PermRule::Subtree(PermissionBuf::from_string_unchecked(
+                        input,
+                    )))
+                }
                 _ => Ok(PermRule::Base(PermissionBuf::from_string_unchecked(input))),
             }
         }
@@ -273,8 +287,10 @@ mod tests {
 
     #[test]
     fn permission_ord_test() {
-        assert!(PermissionBuf::from_string_unchecked("bffh.perm".to_string())
-            > PermissionBuf::from_string_unchecked("bffh.perm.sub".to_string()));
+        assert!(
+            PermissionBuf::from_string_unchecked("bffh.perm".to_string())
+                > PermissionBuf::from_string_unchecked("bffh.perm.sub".to_string())
+        );
     }
 
     #[test]
@@ -316,11 +332,9 @@ mod tests {
     fn format_and_read_compatible() {
         use std::convert::TryInto;
 
-        let testdata = vec![
-            ("testrole", "testsource"),
-            ("", "norole"),
-            ("nosource", "")
-        ].into_iter().map(|(n,s)| (n.to_string(), s.to_string()));
+        let testdata = vec![("testrole", "testsource"), ("", "norole"), ("nosource", "")]
+            .into_iter()
+            .map(|(n, s)| (n.to_string(), s.to_string()));
 
         for (name, source) in testdata {
             let role = RoleIdentifier { name, source };
@@ -337,19 +351,24 @@ mod tests {
         }
     }
 
-
     #[test]
     fn rules_from_string_test() {
         assert_eq!(
-            PermRule::Base(PermissionBuf::from_string_unchecked("bffh.perm".to_string())),
+            PermRule::Base(PermissionBuf::from_string_unchecked(
+                "bffh.perm".to_string()
+            )),
             PermRule::try_from("bffh.perm".to_string()).unwrap()
         );
         assert_eq!(
-            PermRule::Children(PermissionBuf::from_string_unchecked("bffh.perm".to_string())),
+            PermRule::Children(PermissionBuf::from_string_unchecked(
+                "bffh.perm".to_string()
+            )),
             PermRule::try_from("bffh.perm.+".to_string()).unwrap()
         );
         assert_eq!(
-            PermRule::Subtree(PermissionBuf::from_string_unchecked("bffh.perm".to_string())),
+            PermRule::Subtree(PermissionBuf::from_string_unchecked(
+                "bffh.perm".to_string()
+            )),
             PermRule::try_from("bffh.perm.*".to_string()).unwrap()
         );
     }

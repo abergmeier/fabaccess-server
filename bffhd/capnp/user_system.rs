@@ -1,14 +1,11 @@
+use api::usersystem_capnp::user_system::{info, manage, search};
 use capnp::capability::Promise;
 use capnp_rpc::pry;
-use api::usersystem_capnp::user_system::{
-    info, manage, search
-};
 
 use crate::capnp::user::User;
 
 use crate::session::SessionHandle;
 use crate::users::{db, UserRef};
-
 
 #[derive(Clone)]
 pub struct Users {
@@ -40,7 +37,8 @@ impl manage::Server for Users {
         mut result: manage::GetUserListResults,
     ) -> Promise<(), ::capnp::Error> {
         let userdb = self.session.users.into_inner();
-        let users = pry!(userdb.get_all()
+        let users = pry!(userdb
+            .get_all()
             .map_err(|e| capnp::Error::failed(format!("UserDB error: {:?}", e))));
         let mut builder = result.get().init_user_list(users.len() as u32);
         for (i, (_, user)) in users.into_iter().enumerate() {

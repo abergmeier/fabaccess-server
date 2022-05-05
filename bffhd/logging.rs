@@ -1,7 +1,6 @@
-use tracing_subscriber::{EnvFilter};
+use tracing_subscriber::EnvFilter;
 
-
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogConfig {
@@ -32,8 +31,7 @@ pub fn init(config: &LogConfig) {
         EnvFilter::from_env("BFFH_LOG")
     };
 
-    let builder = tracing_subscriber::fmt()
-        .with_env_filter(filter);
+    let builder = tracing_subscriber::fmt().with_env_filter(filter);
 
     let format = config.format.to_lowercase();
     match format.as_str() {

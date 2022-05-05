@@ -1,14 +1,11 @@
-
+use crate::capnp::machine::Machine;
+use crate::resources::search::ResourcesHandle;
+use crate::resources::Resource;
 use crate::session::SessionHandle;
-use api::machinesystem_capnp::machine_system::{
-    info,
-};
+use crate::RESOURCES;
+use api::machinesystem_capnp::machine_system::info;
 use capnp::capability::Promise;
 use capnp_rpc::pry;
-use crate::capnp::machine::Machine;
-use crate::RESOURCES;
-use crate::resources::Resource;
-use crate::resources::search::ResourcesHandle;
 
 #[derive(Clone)]
 pub struct Machines {
@@ -19,7 +16,10 @@ pub struct Machines {
 impl Machines {
     pub fn new(session: SessionHandle) -> Self {
         // FIXME no unwrap bad
-        Self { session, resources: RESOURCES.get().unwrap().clone() }
+        Self {
+            session,
+            resources: RESOURCES.get().unwrap().clone(),
+        }
     }
 }
 
@@ -29,7 +29,9 @@ impl info::Server for Machines {
         _: info::GetMachineListParams,
         mut result: info::GetMachineListResults,
     ) -> Promise<(), ::capnp::Error> {
-        let machine_list: Vec<(usize, &Resource)> = self.resources.list_all()
+        let machine_list: Vec<(usize, &Resource)> = self
+            .resources
+            .list_all()
             .into_iter()
             .filter(|resource| resource.visible(&self.session))
             .enumerate()

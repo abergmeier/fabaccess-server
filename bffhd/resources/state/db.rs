@@ -1,9 +1,6 @@
 use crate::db;
-use crate::db::{ArchivedValue, RawDB, DB, AlignedAdapter};
-use lmdb::{
-    DatabaseFlags, Environment, EnvironmentFlags, Transaction,
-    WriteFlags,
-};
+use crate::db::{AlignedAdapter, ArchivedValue, RawDB, DB};
+use lmdb::{DatabaseFlags, Environment, EnvironmentFlags, Transaction, WriteFlags};
 use std::{path::Path, sync::Arc};
 
 use crate::resources::state::State;
@@ -67,7 +64,7 @@ impl StateDB {
     pub fn get_all<'txn, T: Transaction>(
         &self,
         txn: &'txn T,
-    ) -> Result<impl IntoIterator<Item = (&'txn [u8], ArchivedValue<State>)>, db::Error, > {
+    ) -> Result<impl IntoIterator<Item = (&'txn [u8], ArchivedValue<State>)>, db::Error> {
         self.db.get_all(txn)
     }
 

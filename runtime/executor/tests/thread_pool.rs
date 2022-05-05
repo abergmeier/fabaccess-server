@@ -1,11 +1,11 @@
 use executor::blocking;
+use executor::prelude::ProcStack;
 use executor::run::run;
 use futures_util::future::join_all;
 use lightproc::recoverable_handle::RecoverableHandle;
 use std::thread;
 use std::time::Duration;
 use std::time::Instant;
-use executor::prelude::ProcStack;
 
 // Test for slow joins without task bursts during joins.
 #[test]
@@ -17,12 +17,10 @@ fn slow_join() {
     // Send an initial batch of million bursts.
     let handles = (0..1_000_000)
         .map(|_| {
-            blocking::spawn_blocking(
-                async {
-                    let duration = Duration::from_millis(1);
-                    thread::sleep(duration);
-                },
-            )
+            blocking::spawn_blocking(async {
+                let duration = Duration::from_millis(1);
+                thread::sleep(duration);
+            })
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 
@@ -35,12 +33,10 @@ fn slow_join() {
     // Spawn yet another batch of work on top of it
     let handles = (0..10_000)
         .map(|_| {
-            blocking::spawn_blocking(
-                async {
-                    let duration = Duration::from_millis(100);
-                    thread::sleep(duration);
-                },
-            )
+            blocking::spawn_blocking(async {
+                let duration = Duration::from_millis(100);
+                thread::sleep(duration);
+            })
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 
@@ -63,12 +59,10 @@ fn slow_join_interrupted() {
     // Send an initial batch of million bursts.
     let handles = (0..1_000_000)
         .map(|_| {
-            blocking::spawn_blocking(
-                async {
-                    let duration = Duration::from_millis(1);
-                    thread::sleep(duration);
-                },
-            )
+            blocking::spawn_blocking(async {
+                let duration = Duration::from_millis(1);
+                thread::sleep(duration);
+            })
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 
@@ -82,12 +76,10 @@ fn slow_join_interrupted() {
     // Spawn yet another batch of work on top of it
     let handles = (0..10_000)
         .map(|_| {
-            blocking::spawn_blocking(
-                async {
-                    let duration = Duration::from_millis(100);
-                    thread::sleep(duration);
-                },
-            )
+            blocking::spawn_blocking(async {
+                let duration = Duration::from_millis(100);
+                thread::sleep(duration);
+            })
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 
@@ -111,12 +103,10 @@ fn longhauling_task_join() {
     // First batch of overhauling tasks
     let _ = (0..100_000)
         .map(|_| {
-            blocking::spawn_blocking(
-                async {
-                    let duration = Duration::from_millis(1000);
-                    thread::sleep(duration);
-                },
-            )
+            blocking::spawn_blocking(async {
+                let duration = Duration::from_millis(1000);
+                thread::sleep(duration);
+            })
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 
@@ -127,12 +117,10 @@ fn longhauling_task_join() {
     // Send yet another medium sized batch to see how it scales.
     let handles = (0..10_000)
         .map(|_| {
-            blocking::spawn_blocking(
-                async {
-                    let duration = Duration::from_millis(100);
-                    thread::sleep(duration);
-                },
-            )
+            blocking::spawn_blocking(async {
+                let duration = Duration::from_millis(100);
+                thread::sleep(duration);
+            })
         })
         .collect::<Vec<RecoverableHandle<()>>>();
 

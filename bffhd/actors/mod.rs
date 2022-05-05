@@ -3,7 +3,7 @@ use crate::resources::state::State;
 use crate::{Config, ResourcesHandle};
 use async_compat::CompatExt;
 use executor::pool::Executor;
-use futures_signals::signal::{Signal};
+use futures_signals::signal::Signal;
 use futures_util::future::BoxFuture;
 use rumqttc::{AsyncClient, ConnectionError, Event, Incoming, MqttOptions};
 
@@ -18,15 +18,15 @@ use std::time::Duration;
 use once_cell::sync::Lazy;
 use rumqttc::ConnectReturnCode::Success;
 
-use rustls::{RootCertStore};
-use url::Url;
 use crate::actors::dummy::Dummy;
 use crate::actors::process::Process;
 use crate::db::ArchivedValue;
+use rustls::RootCertStore;
+use url::Url;
 
-mod shelly;
-mod process;
 mod dummy;
+mod process;
+mod shelly;
 
 pub trait Actor {
     fn apply(&mut self, state: ArchivedValue<State>) -> BoxFuture<'static, ()>;
@@ -102,7 +102,7 @@ static ROOT_CERTS: Lazy<RootCertStore> = Lazy::new(|| {
             } else {
                 tracing::info!(loaded, "certificates loaded");
             }
-        },
+        }
         Err(error) => {
             tracing::error!(%error, "failed to load system certificates");
         }
@@ -219,8 +219,10 @@ pub fn load(executor: Executor, config: &Config, resources: ResourcesHandle) -> 
         .compat(),
     );
 
-    let mut actor_map: HashMap<String, _> = config.actor_connections.iter()
-        .filter_map(|(k,v)| {
+    let mut actor_map: HashMap<String, _> = config
+        .actor_connections
+        .iter()
+        .filter_map(|(k, v)| {
             if let Some(resource) = resources.get_by_id(v) {
                 Some((k.clone(), resource.get_signal()))
             } else {
@@ -258,8 +260,6 @@ fn load_single(
         "Dummy" => Some(Box::new(Dummy::new(name.clone(), params.clone()))),
         "Process" => Process::new(name.clone(), params).map(|a| a.into_boxed_actuator()),
         "Shelly" => Some(Box::new(Shelly::new(name.clone(), client, params))),
-        _ => {
-            None
-        }
+        _ => None,
     }
 }

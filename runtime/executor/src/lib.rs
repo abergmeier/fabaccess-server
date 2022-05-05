@@ -28,10 +28,10 @@
 #![forbid(unused_import_braces)]
 
 pub mod load_balancer;
+pub mod manage;
 pub mod placement;
 pub mod pool;
 pub mod run;
-pub mod manage;
 mod thread_manager;
 mod worker;
 

@@ -27,7 +27,6 @@ impl<const N: usize> VarUInt<N> {
     pub const fn into_bytes(self) -> [u8; N] {
         self.bytes
     }
-
 }
 
 impl<const N: usize> Default for VarUInt<N> {
@@ -52,7 +51,7 @@ macro_rules! convert_from {
             let bytes = this.as_mut_bytes();
 
             let mut more = 0u8;
-            let mut idx: usize = bytes.len()-1;
+            let mut idx: usize = bytes.len() - 1;
 
             while num > 0x7f {
                 bytes[idx] = ((num & 0x7f) as u8 | more);
@@ -65,7 +64,7 @@ macro_rules! convert_from {
             this.offset = idx;
             this
         }
-    }
+    };
 }
 
 macro_rules! convert_into {
@@ -84,7 +83,7 @@ macro_rules! convert_into {
             let mut shift = 0;
 
             for neg in 1..=len {
-                let idx = len-neg;
+                let idx = len - neg;
                 let val = (bytes[idx] & 0x7f) as $x;
                 let shifted = val << shift;
                 out |= shifted;
@@ -93,7 +92,7 @@ macro_rules! convert_into {
 
             out
         }
-    }
+    };
 }
 
 macro_rules! impl_convert_from_to {
@@ -105,7 +104,7 @@ macro_rules! impl_convert_from_to {
         impl Into<$num> for VarUInt<$req> {
             convert_into! { $num }
         }
-    }
+    };
 }
 
 impl_convert_from_to!(u8, 2, VarU8);
@@ -123,8 +122,9 @@ type VarUsize = VarU32;
 type VarUsize = VarU16;
 
 impl<T, const N: usize> From<&T> for VarUInt<N>
-    where T: Copy,
-          VarUInt<N>: From<T>
+where
+    T: Copy,
+    VarUInt<N>: From<T>,
 {
     fn from(t: &T) -> Self {
         (*t).into()

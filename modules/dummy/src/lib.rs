@@ -1,5 +1,5 @@
-use sdk::BoxFuture;
 use sdk::initiators::{Initiator, InitiatorError, ResourceID, UpdateSink};
+use sdk::BoxFuture;
 
 #[sdk::module]
 struct Dummy {
@@ -10,11 +10,17 @@ struct Dummy {
 }
 
 impl Initiator for Dummy {
-    fn start_for(&mut self, machine: ResourceID) -> BoxFuture<'static, Result<(), Box<dyn InitiatorError>>> {
+    fn start_for(
+        &mut self,
+        machine: ResourceID,
+    ) -> BoxFuture<'static, Result<(), Box<dyn InitiatorError>>> {
         todo!()
     }
 
-    fn run(&mut self, request: &mut UpdateSink) -> BoxFuture<'static, Result<(), Box<dyn InitiatorError>>> {
+    fn run(
+        &mut self,
+        request: &mut UpdateSink,
+    ) -> BoxFuture<'static, Result<(), Box<dyn InitiatorError>>> {
         todo!()
     }
 }

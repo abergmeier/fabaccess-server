@@ -1,9 +1,9 @@
 //!
 //! Handle for recoverable process
-use std::any::Any;
 use crate::proc_data::ProcData;
 use crate::proc_handle::ProcHandle;
 use crate::state::State;
+use std::any::Any;
 use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
 use std::pin::Pin;
@@ -80,12 +80,12 @@ impl<R> RecoverableHandle<R> {
     ///     });
     /// ```
     pub fn on_panic<F>(mut self, callback: F) -> Self
-        where F: FnOnce(Box<dyn Any + Send>) + Send + Sync + 'static,
+    where
+        F: FnOnce(Box<dyn Any + Send>) + Send + Sync + 'static,
     {
         self.panicked = Some(Box::new(callback));
         self
     }
-
 }
 
 impl<R> Future for RecoverableHandle<R> {
@@ -102,7 +102,7 @@ impl<R> Future for RecoverableHandle<R> {
                 }
 
                 Poll::Ready(None)
-            },
+            }
         }
     }
 }

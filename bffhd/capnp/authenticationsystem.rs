@@ -5,7 +5,6 @@ use rsasl::property::AuthId;
 use rsasl::session::{Session, Step};
 use std::io::Cursor;
 
-
 use crate::capnp::session::APISession;
 use crate::session::SessionManager;
 use api::authenticationsystem_capnp::authentication::{

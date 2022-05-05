@@ -273,9 +273,7 @@ where
         let raw = Self::from_ptr(ptr);
 
         // Decrement the reference count.
-        let new = (*raw.pdata)
-            .state
-            .fetch_sub(1, Ordering::AcqRel);
+        let new = (*raw.pdata).state.fetch_sub(1, Ordering::AcqRel);
         let new = new.set_refcount(new.get_refcount().saturating_sub(1));
 
         // If this was the last reference to the proc and the `ProcHandle` has been dropped as
@@ -444,12 +442,11 @@ where
                     // was woken and then clean up its resources.
                     let (flags, references) = state.parts();
                     let flags = if state.is_closed() {
-                        flags & !( RUNNING | SCHEDULED )
+                        flags & !(RUNNING | SCHEDULED)
                     } else {
                         flags & !RUNNING
                     };
                     let new = State::new(flags, references);
-
 
                     // Mark the proc as not running.
                     match (*raw.pdata).state.compare_exchange_weak(
@@ -502,10 +499,10 @@ impl<'a, F, R, S> Copy for RawProc<'a, F, R, S> {}
 
 /// A guard that closes the proc if polling its future panics.
 struct Guard<'a, F, R, S>(RawProc<'a, F, R, S>)
-    where
-        F: Future<Output = R> + 'a,
-        R: 'a,
-        S: Fn(LightProc) + 'a;
+where
+    F: Future<Output = R> + 'a,
+    R: 'a,
+    S: Fn(LightProc) + 'a;
 
 impl<'a, F, R, S> Drop for Guard<'a, F, R, S>
 where

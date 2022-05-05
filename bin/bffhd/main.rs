@@ -1,11 +1,8 @@
 use clap::{Arg, Command};
 use diflouroborane::{config, Diflouroborane};
 
-
 use std::str::FromStr;
 use std::{env, io, io::Write, path::PathBuf};
-
-
 
 use nix::NixPath;
 
@@ -125,12 +122,19 @@ fn main() -> anyhow::Result<()> {
         unimplemented!()
     } else if matches.is_present("load") {
         let bffh = Diflouroborane::new(config)?;
-        if bffh.users.load_file(matches.value_of("load").unwrap()).is_ok() {
+        if bffh
+            .users
+            .load_file(matches.value_of("load").unwrap())
+            .is_ok()
+        {
             tracing::info!("loaded users from {}", matches.value_of("load").unwrap());
         } else {
-            tracing::error!("failed to load users from {}", matches.value_of("load").unwrap());
+            tracing::error!(
+                "failed to load users from {}",
+                matches.value_of("load").unwrap()
+            );
         }
-        return Ok(())
+        return Ok(());
     } else {
         let keylog = matches.value_of("keylog");
         // When passed an empty string (i.e no value) take the value from the env

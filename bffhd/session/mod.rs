@@ -1,20 +1,13 @@
-
-
-
-
-
 use crate::authorization::permissions::Permission;
-use crate::authorization::roles::{Roles};
+use crate::authorization::roles::Roles;
 use crate::resources::Resource;
-use crate::Users;
 use crate::users::{db, UserRef};
-
+use crate::Users;
 
 #[derive(Clone)]
 pub struct SessionManager {
     users: Users,
     roles: Roles,
-
     // cache: SessionCache // todo
 }
 impl SessionManager {
@@ -52,33 +45,39 @@ impl SessionHandle {
     }
 
     pub fn get_user(&self) -> db::User {
-        self.users.get_user(self.user.get_username()).expect("Failed to get user self")
+        self.users
+            .get_user(self.user.get_username())
+            .expect("Failed to get user self")
     }
 
     pub fn has_disclose(&self, resource: &Resource) -> bool {
         if let Some(user) = self.users.get_user(self.user.get_username()) {
-            self.roles.is_permitted(&user.userdata, &resource.get_required_privs().disclose)
+            self.roles
+                .is_permitted(&user.userdata, &resource.get_required_privs().disclose)
         } else {
             false
         }
     }
     pub fn has_read(&self, resource: &Resource) -> bool {
         if let Some(user) = self.users.get_user(self.user.get_username()) {
-            self.roles.is_permitted(&user.userdata, &resource.get_required_privs().read)
+            self.roles
+                .is_permitted(&user.userdata, &resource.get_required_privs().read)
         } else {
             false
         }
     }
     pub fn has_write(&self, resource: &Resource) -> bool {
         if let Some(user) = self.users.get_user(self.user.get_username()) {
-            self.roles.is_permitted(&user.userdata, &resource.get_required_privs().write)
+            self.roles
+                .is_permitted(&user.userdata, &resource.get_required_privs().write)
         } else {
             false
         }
     }
     pub fn has_manage(&self, resource: &Resource) -> bool {
         if let Some(user) = self.users.get_user(self.user.get_username()) {
-            self.roles.is_permitted(&user.userdata, &resource.get_required_privs().manage)
+            self.roles
+                .is_permitted(&user.userdata, &resource.get_required_privs().manage)
         } else {
             false
         }

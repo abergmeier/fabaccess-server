@@ -1,8 +1,8 @@
-use std::io::Write;
+use executor::prelude::{spawn, ProcStack};
 use executor::run::run;
+use std::io::Write;
 use std::thread;
 use std::time::Duration;
-use executor::prelude::{ProcStack, spawn};
 
 #[cfg(feature = "tokio-runtime")]
 mod tokio_tests {
@@ -21,13 +21,11 @@ mod no_tokio_tests {
 }
 
 fn run_test() {
-    let handle = spawn(
-        async {
-            let duration = Duration::from_millis(1);
-            thread::sleep(duration);
-            //42
-        },
-    );
+    let handle = spawn(async {
+        let duration = Duration::from_millis(1);
+        thread::sleep(duration);
+        //42
+    });
 
     let output = run(handle, ProcStack {});
 

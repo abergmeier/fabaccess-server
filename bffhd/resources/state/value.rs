@@ -1,9 +1,11 @@
-use std::{hash::Hash};
+use std::hash::Hash;
 
 use ptr_meta::{DynMetadata, Pointee};
-use rkyv::{out_field, Archive, ArchivePointee, ArchiveUnsized, Archived, ArchivedMetadata, Serialize, SerializeUnsized, RelPtr};
+use rkyv::{
+    out_field, Archive, ArchivePointee, ArchiveUnsized, Archived, ArchivedMetadata, RelPtr,
+    Serialize, SerializeUnsized,
+};
 use rkyv_dyn::{DynError, DynSerializer};
-
 
 use crate::utils::oid::ObjectIdentifier;
 
@@ -15,7 +17,6 @@ use rkyv::ser::{ScratchSpace, Serializer};
 use serde::ser::SerializeMap;
 
 use std::collections::HashMap;
-
 
 use std::ops::Deref;
 use std::sync::atomic::{AtomicUsize, Ordering};
@@ -61,7 +62,7 @@ struct NewStateBuilder {
 
 // turns into
 struct NewState {
-    inner: ArchivedVec<ArchivedMetaBox<dyn ArchivedStateValue>>
+    inner: ArchivedVec<ArchivedMetaBox<dyn ArchivedStateValue>>,
 }
 impl NewState {
     pub fn get_value<T: TypeOid>(&self) -> Option<&T> {
@@ -148,9 +149,9 @@ pub trait TypeOid {
 }
 
 impl<T> SerializeDynOid for T
-    where
-        T: for<'a> Serialize<dyn DynSerializer + 'a>,
-        T::Archived: TypeOid,
+where
+    T: for<'a> Serialize<dyn DynSerializer + 'a>,
+    T::Archived: TypeOid,
 {
     fn archived_type_oid(&self) -> &'static ObjectIdentifier {
         Archived::<T>::type_oid()
@@ -371,7 +372,7 @@ pub mod macros {
                     stringify!($y)
                 }
             }
-        }
+        };
     }
 
     #[macro_export]
@@ -380,16 +381,15 @@ pub mod macros {
             unsafe impl $crate::resources::state::value::RegisteredImpl for $z {
                 fn vtable() -> usize {
                     unsafe {
-                        ::core::mem::transmute(ptr_meta::metadata(
-                            ::core::ptr::null::<$z>() as *const dyn $crate::resources::state::value::ArchivedStateValue
-                        ))
+                        ::core::mem::transmute(ptr_meta::metadata(::core::ptr::null::<$z>()
+                            as *const dyn $crate::resources::state::value::ArchivedStateValue))
                     }
                 }
                 fn debug_info() -> $crate::resources::state::value::ImplDebugInfo {
                     $crate::debug_info!()
                 }
             }
-        }
+        };
     }
 
     #[macro_export]

@@ -1,13 +1,13 @@
+use crate::resources::Resource;
 use std::collections::HashMap;
 use std::sync::Arc;
-use crate::resources::Resource;
 
 struct Inner {
     id: HashMap<String, Resource>,
 }
 
 impl Inner {
-    pub fn new(resources: impl IntoIterator<Item=Resource>) -> Self {
+    pub fn new(resources: impl IntoIterator<Item = Resource>) -> Self {
         let mut id = HashMap::new();
 
         for resource in resources {
@@ -25,13 +25,13 @@ pub struct ResourcesHandle {
 }
 
 impl ResourcesHandle {
-    pub fn new(resources: impl IntoIterator<Item=Resource>) -> Self {
+    pub fn new(resources: impl IntoIterator<Item = Resource>) -> Self {
         Self {
             inner: Arc::new(Inner::new(resources)),
         }
     }
 
-    pub fn list_all(&self) -> impl IntoIterator<Item=&Resource> {
+    pub fn list_all(&self) -> impl IntoIterator<Item = &Resource> {
         self.inner.id.values()
     }
 

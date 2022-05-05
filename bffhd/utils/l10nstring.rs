@@ -1,20 +1,16 @@
 use std::collections::HashMap;
 
-
-
 use once_cell::sync::Lazy;
 
 struct Locales {
-    map: HashMap<&'static str, HashMap<&'static str, &'static str>>
+    map: HashMap<&'static str, HashMap<&'static str, &'static str>>,
 }
 
 impl Locales {
-    pub fn get(&self, lang: &str, msg: &str)
-        -> Option<(&'static str, &'static str)>
-    {
-        self.map.get(msg).and_then(|map| {
-            map.get_key_value(lang).map(|(k,v)| (*k, *v))
-        })
+    pub fn get(&self, lang: &str, msg: &str) -> Option<(&'static str, &'static str)> {
+        self.map
+            .get(msg)
+            .and_then(|map| map.get_key_value(lang).map(|(k, v)| (*k, *v)))
     }
 
     pub fn available(&self, _msg: &str) -> &[&'static str] {
@@ -22,8 +18,8 @@ impl Locales {
     }
 }
 
-static LANG: Lazy<Locales> = Lazy::new(|| {
-    Locales { map: HashMap::new() }
+static LANG: Lazy<Locales> = Lazy::new(|| Locales {
+    map: HashMap::new(),
 });
 
 struct L10NString {
