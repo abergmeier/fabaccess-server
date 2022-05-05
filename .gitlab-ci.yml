@@ -58,16 +58,15 @@ lint:fmt:
     - cargo +stable fmt --check -- -v
     - echo -e "\e[0Ksection_end:`date +%s`:rustfmt_output\r\e[0K"
 
-.builds:
+
+# Check if the code builds on rust stable
+stable:build:
   stage: build
+  needs: []
   only:
     - main
     - development
     - merge_requests
-
-# Check if the code builds on rust stable
-stable:build:
-  extends: .builds
   script:
     - rustc +stable --version && cargo +stable --version
     - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo check`"
@@ -79,8 +78,7 @@ stable:build:
 
 .tests:
   stage: test
-  needs:
-    - "stable:build"
+  needs: ["stable:build"]
   script:
     - >
       cargo +stable test --workspace $TEST_TARGET -- 
