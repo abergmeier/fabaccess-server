@@ -18,7 +18,7 @@ variables:
 # install build dependencies
 before_script:
   - apt-get update -yqq
-  - apt-get install -o dir::cache::archives="$APT_CACHE_DIR" -yqq --no-install-recommends capnproto build-essential cmake clang libclang-dev libgsasl7-dev
+  - apt-get install -o dir::cache::archives="$APT_CACHE_DIR" -yqq --no-install-recommends capnproto build-essential cmake clang libclang-dev
   - rustup update
   - rustup component add rustfmt
   - rustup component add clippy
