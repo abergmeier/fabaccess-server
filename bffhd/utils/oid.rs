@@ -510,19 +510,6 @@ pub(crate) mod tests {
     }
 
     #[test]
-    fn bincode_serde_roundtrip() {
-        let expected = ObjectIdentifier::build(
-            ObjectIdentifierRoot::ItuT,
-            0x01,
-            vec![1, 2, 3, 5, 8, 13, 21],
-        )
-        .unwrap();
-        let buffer: Vec<u8> = bincode::serialize(&expected).unwrap();
-        let actual = bincode::deserialize(&buffer).unwrap();
-        assert_eq!(expected, actual);
-    }
-
-    #[test]
     fn encode_binary_root_node_0() {
         let expected: Vec<u8> = vec![0];
         let oid = ObjectIdentifier::build(ObjectIdentifierRoot::ItuT, 0x00, vec![]).unwrap();

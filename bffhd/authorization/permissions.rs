@@ -329,29 +329,6 @@ mod tests {
     }
 
     #[test]
-    fn format_and_read_compatible() {
-        use std::convert::TryInto;
-
-        let testdata = vec![("testrole", "testsource"), ("", "norole"), ("nosource", "")]
-            .into_iter()
-            .map(|(n, s)| (n.to_string(), s.to_string()));
-
-        for (name, source) in testdata {
-            let role = RoleIdentifier { name, source };
-
-            let fmt_string = format!("{}", &role);
-
-            println!("{:?} is formatted: {}", &role, &fmt_string);
-
-            let parsed: RoleIdentifier = fmt_string.try_into().unwrap();
-
-            println!("Which parses into {:?}", &parsed);
-
-            assert_eq!(role, parsed);
-        }
-    }
-
-    #[test]
     fn rules_from_string_test() {
         assert_eq!(
             PermRule::Base(PermissionBuf::from_string_unchecked(

@@ -80,34 +80,6 @@ impl StateDB {
 mod tests {
     use super::*;
 
-    use crate::resource::state::value::Vec3u8;
-    use crate::resource::state::value::{OID_COLOUR, OID_INTENSITY, OID_POWERED};
     use std::ops::Deref;
 
-    #[test]
-    fn construct_state() {
-        let tmpdir = tempfile::tempdir().unwrap();
-        let mut tmppath = tmpdir.path().to_owned();
-        tmppath.push("db");
-        let db = StateDB::create(tmppath).unwrap();
-        let b = State::build()
-            .add(OID_COLOUR.clone(), Box::new(Vec3u8 { a: 1, b: 2, c: 3 }))
-            .add(OID_POWERED.clone(), Box::new(true))
-            .add(OID_INTENSITY.clone(), Box::new(1023))
-            .finish();
-        println!("({}) {:?}", b.hash(), b);
-
-        let c = State::build()
-            .add(OID_COLOUR.clone(), Box::new(Vec3u8 { a: 1, b: 2, c: 3 }))
-            .add(OID_POWERED.clone(), Box::new(true))
-            .add(OID_INTENSITY.clone(), Box::new(1023))
-            .finish();
-
-        let key = rand::random();
-        db.update(key, &b, &c).unwrap();
-        let d = db.get_input(key).unwrap().unwrap();
-        let e = db.get_output(key).unwrap().unwrap();
-        assert_eq!(&b, d.deref());
-        assert_eq!(&c, e.deref());
-    }
 }
