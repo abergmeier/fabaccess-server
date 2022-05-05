@@ -52,33 +52,37 @@ lint:clippy:
 # Use rustfmt to check formating
 lint:fmt:
   extends: .lints
+  allow_failure: false
   script:
     - cargo +stable fmt --version
     - echo -e "\e[0Ksection_start:`date +%s`:rustfmt_output\r\e[0KChanges suggested by rustfmt"
     - cargo +stable fmt --check -- -v
     - echo -e "\e[0Ksection_end:`date +%s`:rustfmt_output\r\e[0K"
 
-
 # Check if the code builds on rust stable
 stable:build:
   stage: build
-  needs: ["lint:clippy", "lint:fmt"]
-  only:
-    - main
-    - development
-    - merge_requests
   script:
     - rustc +stable --version && cargo +stable --version
     - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo check`"
     - cargo +stable check --verbose
     - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
+
+stable:test:
+  stage: build
+  needs: ["stable:build"]
+  only:
+    - main
+    - development
+    - merge_requests
+  script:
     - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo test --no-run`"
     - cargo +stable test --verbose --no-run --workspace
     - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
 
 .tests:
   stage: test
-  needs: ["stable:build"]
+  needs: ["stable:test"]
   script:
     - >
       cargo +stable test --workspace $TEST_TARGET -- 
@@ -143,7 +147,6 @@ release_job:
 
 build:docker-releases:
   stage: dockerify
-  needs: ["stable:build"]
   image:
     name: gcr.io/kaniko-project/executor:v1.6.0-debug
     entrypoint: [""]
@@ -159,7 +162,6 @@ build:docker-releases:
 
 build:docker-development:
   stage: dockerify
-  needs: ["stable:build"]
   image:
     name: gcr.io/kaniko-project/executor:v1.6.0-debug
     entrypoint: [""]
