@@ -31,7 +31,6 @@ before_script:
   - apt-get update -yqq
   - apt-get install -o dir::cache::archives="$APT_CACHE_DIR" -yqq --no-install-recommends capnproto build-essential cmake clang libclang-dev jq
   - rustup install stable
-  - rustup default stable
   - rustup component add rustfmt
   - rustup component add clippy
   - cargo install cargo2junit
