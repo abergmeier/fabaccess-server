@@ -81,5 +81,4 @@ mod tests {
     use super::*;
 
     use std::ops::Deref;
-
 }

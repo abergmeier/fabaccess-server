@@ -83,5 +83,4 @@ impl<'de> serde::de::Visitor<'de> for StateVisitor {
 pub mod tests {
     use super::value::*;
     use super::*;
-
 }
