@@ -40,6 +40,8 @@ before_script:
   stage: lint
   allow_failure: true
   only:
+    - main
+    - development
     - merge_requests
 
 # Use clippy lints
@@ -64,6 +66,10 @@ lint:fmt:
 # Check if the code builds on rust stable
 stable:build:
   stage: build
+  only:
+    - main
+    - development
+    - merge_requests
   script:
     - rustc +stable --version && cargo +stable --version
     - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo check`"
