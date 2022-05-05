@@ -73,11 +73,6 @@ stable:build:
     - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo check`"
     - cargo +stable check --verbose
     - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
-
-stable:test:
-  extends: .builds
-  needs: ["stable:build"]
-  script:
     - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo test --no-run`"
     - cargo +stable test --verbose --no-run --workspace
     - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
@@ -85,7 +80,7 @@ stable:test:
 .tests:
   stage: test
   needs:
-    - "stable:test"
+    - "stable:build"
   script:
     - >
       cargo +stable test --workspace $TEST_TARGET -- 
