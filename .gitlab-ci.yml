@@ -30,9 +30,6 @@ cache:
 before_script:
   - apt-get update -yqq
   - apt-get install -o dir::cache::archives="$APT_CACHE_DIR" -yqq --no-install-recommends capnproto build-essential cmake clang libclang-dev jq
-  - rustup component add rustfmt
-  - rustup component add clippy
-  - cargo install cargo2junit
 
 .lints:
   stage: lint
@@ -44,6 +41,7 @@ before_script:
 lint:clippy:
   extends: .lints
   script:
+    - rustup component add clippy
     - cargo clippy -V
     - echo -e "\e[0Ksection_start:`date +%s`:clippy_output\r\e[0K`cargo clippy` output"
     - cargo clippy -- --no-deps
@@ -53,6 +51,7 @@ lint:clippy:
 lint:fmt:
   extends: .lints
   script:
+    - rustup component add rustfmt
     - cargo fmt --version
     - echo -e "\e[0Ksection_start:`date +%s`:rustfmt_output\r\e[0KChanges suggested by rustfmt"
     - cargo fmt --check -- -v
@@ -87,6 +86,7 @@ stable:test:
   stage: test
   needs: ["stable:test"]
   script:
+    - cargo install cargo2junit
     - >
       cargo test --workspace $TEST_TARGET -- 
         -Z unstable-options --format json --report-time 
