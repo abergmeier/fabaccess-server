@@ -81,12 +81,12 @@ stable:test:
     - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of cargo test --no-run"
     - cargo test --verbose --no-run --workspace
     - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
+    - cargo install cargo2junit
 
 .tests:
   stage: test
   needs: ["stable:test"]
   script:
-    - cargo install cargo2junit
     - cargo test --workspace $TEST_TARGET -- -Z unstable-options --format json --report-time | cargo2junit > report.xml
   artifacts:
     when: always
