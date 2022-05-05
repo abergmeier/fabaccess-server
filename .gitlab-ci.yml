@@ -52,7 +52,6 @@ lint:clippy:
 # Use rustfmt to check formating
 lint:fmt:
   extends: .lints
-  allow_failure: false
   script:
     - cargo fmt --version
     - echo -e "\e[0Ksection_start:`date +%s`:rustfmt_output\r\e[0KChanges suggested by rustfmt"
