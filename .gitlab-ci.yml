@@ -43,7 +43,7 @@ lint:clippy:
   script:
     - rustup component add clippy
     - cargo clippy -V
-    - echo -e "\e[0Ksection_start:`date +%s`:clippy_output\r\e[0K`cargo clippy` output"
+    - echo -e "\e[0Ksection_start:`date +%s`:clippy_output\r\e[0Kcargo clippy output"
     - cargo clippy -- --no-deps
     - echo -e "\e[0Ksection_end:`date +%s`:clippy_output\r\e[0K"
 
@@ -66,7 +66,7 @@ stable:build:
     - merge_requests
   script:
     - rustc +stable --version && cargo --version
-    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo check`"
+    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of cargo check"
     - cargo check --verbose
     - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
 
@@ -78,7 +78,7 @@ stable:test:
     - development
     - merge_requests
   script:
-    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo test --no-run`"
+    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of cargo test --no-run"
     - cargo test --verbose --no-run --workspace
     - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
 
