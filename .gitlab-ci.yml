@@ -34,7 +34,7 @@ before_script:
   - rustup component add clippy
   - cargo install cargo2junit
 
-.lists:
+.lints:
   stage: lint
   allow_failure: true
   only:
