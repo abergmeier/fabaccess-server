@@ -87,10 +87,7 @@ stable:test:
   needs: ["stable:test"]
   script:
     - cargo install cargo2junit
-    - >
-      cargo test --workspace $TEST_TARGET -- 
-        -Z unstable-options --format json --report-time 
-        | cargo2junit > report.xml
+    - cargo test --workspace $TEST_TARGET -- -Z unstable-options --format json --report-time | cargo2junit > report.xml
   artifacts:
     when: always
     reports:
