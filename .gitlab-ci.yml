@@ -45,9 +45,9 @@ before_script:
 lint:clippy:
   extends: .lints
   script:
-    - cargo +stable clippy -V
+    - cargo clippy -V
     - echo -e "\e[0Ksection_start:`date +%s`:clippy_output\r\e[0K`cargo clippy` output"
-    - cargo +stable clippy -- --no-deps
+    - cargo clippy -- --no-deps
     - echo -e "\e[0Ksection_end:`date +%s`:clippy_output\r\e[0K"
 
 # Use rustfmt to check formating
@@ -55,9 +55,9 @@ lint:fmt:
   extends: .lints
   allow_failure: false
   script:
-    - cargo +stable fmt --version
+    - cargo fmt --version
     - echo -e "\e[0Ksection_start:`date +%s`:rustfmt_output\r\e[0KChanges suggested by rustfmt"
-    - cargo +stable fmt --check -- -v
+    - cargo fmt --check -- -v
     - echo -e "\e[0Ksection_end:`date +%s`:rustfmt_output\r\e[0K"
 
 # Check if the code builds on rust stable
@@ -68,9 +68,9 @@ stable:build:
     - development
     - merge_requests
   script:
-    - rustc +stable --version && cargo +stable --version
+    - rustc +stable --version && cargo --version
     - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo check`"
-    - cargo +stable check --verbose
+    - cargo check --verbose
     - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
 
 stable:test:
@@ -82,7 +82,7 @@ stable:test:
     - merge_requests
   script:
     - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of `cargo test --no-run`"
-    - cargo +stable test --verbose --no-run --workspace
+    - cargo test --verbose --no-run --workspace
     - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
 
 .tests:
@@ -90,7 +90,7 @@ stable:test:
   needs: ["stable:test"]
   script:
     - >
-      cargo +stable test --workspace $TEST_TARGET -- 
+      cargo test --workspace $TEST_TARGET -- 
         -Z unstable-options --format json --report-time 
         | cargo2junit > report.xml
   artifacts:
