@@ -1,4 +1,4 @@
 [submodule "schema"]
 	path = api/schema
-	url = https://gitlab.com/fabinfra/fabaccess/fabaccess-api
+	url = ../fabaccess-api
 	branch = main
