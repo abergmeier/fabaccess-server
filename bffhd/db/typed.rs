@@ -119,7 +119,11 @@ impl<A> DB<A> {
 }
 
 impl<A: Adapter> DB<A> {
-    pub fn get<T: Transaction>(&self, txn: &T, key: &impl AsRef<[u8]>) -> Result<Option<A::Item>, db::Error> {
+    pub fn get<T: Transaction>(
+        &self,
+        txn: &T,
+        key: &impl AsRef<[u8]>,
+    ) -> Result<Option<A::Item>, db::Error> {
         Ok(self.db.get(txn, key)?.map(A::decode))
     }
 
@@ -129,8 +133,7 @@ impl<A: Adapter> DB<A> {
         key: &impl AsRef<[u8]>,
         value: &A::Item,
         flags: WriteFlags,
-    ) -> Result<(), db::Error>
-    {
+    ) -> Result<(), db::Error> {
         let len = A::encoded_len(value);
         let buf = self.db.reserve(txn, key, len, flags)?;
         assert_eq!(buf.len(), len, "Reserved buffer is not of requested size!");
@@ -146,11 +149,12 @@ impl<A: Adapter> DB<A> {
         self.db.clear(txn)
     }
 
-    pub fn get_all<'txn, T: Transaction>(&self, txn: &'txn T) -> Result<impl IntoIterator<Item=(&'txn [u8], A::Item)>, db::Error> {
+    pub fn get_all<'txn, T: Transaction>(
+        &self,
+        txn: &'txn T,
+    ) -> Result<impl IntoIterator<Item = (&'txn [u8], A::Item)>, db::Error> {
         let mut cursor = self.db.open_ro_cursor(txn)?;
         let it = cursor.iter_start();
-        Ok(it.filter_map(|buf| buf.ok().map(|(kbuf,vbuf)| {
-            (kbuf, A::decode(vbuf))
-        })))
+        Ok(it.filter_map(|buf| buf.ok().map(|(kbuf, vbuf)| (kbuf, A::decode(vbuf)))))
     }
 }

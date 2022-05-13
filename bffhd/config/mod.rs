@@ -1,13 +1,13 @@
-use std::default::Default;
-use std::path::{PathBuf};
 use std::collections::HashMap;
+use std::default::Default;
+use std::path::PathBuf;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 mod dhall;
 pub use dhall::read_config_file as read;
 
-use crate::authorization::permissions::{PrivilegesBuf};
+use crate::authorization::permissions::PrivilegesBuf;
 use crate::authorization::roles::Role;
 use crate::capnp::{Listen, TlsListen};
 use crate::logging::LogConfig;
@@ -23,13 +23,25 @@ pub struct MachineDescription {
     pub name: String,
 
     /// An optional description of the Machine.
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deser_option"
+    )]
     pub description: Option<String>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deser_option"
+    )]
     pub wiki: Option<String>,
 
-    #[serde(default, skip_serializing_if = "Option::is_none", deserialize_with = "deser_option")]
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deser_option"
+    )]
     pub category: Option<String>,
 
     /// The permission required
@@ -83,48 +95,49 @@ impl Config {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ModuleConfig {
     pub module: String,
-    pub params: HashMap<String, String>
+    pub params: HashMap<String, String>,
 }
 
 pub(crate) fn deser_option<'de, D, T>(d: D) -> std::result::Result<Option<T>, D::Error>
-    where D: serde::Deserializer<'de>, T: serde::Deserialize<'de>,
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
 {
     Ok(T::deserialize(d).ok())
 }
 
-
 impl Default for Config {
     fn default() -> Self {
-        let mut actors: HashMap::<String, ModuleConfig> = HashMap::new();
-        let mut initiators: HashMap::<String, ModuleConfig> = HashMap::new();
+        let mut actors: HashMap<String, ModuleConfig> = HashMap::new();
+        let mut initiators: HashMap<String, ModuleConfig> = HashMap::new();
         let machines = HashMap::new();
 
-        actors.insert("Actor".to_string(), ModuleConfig {
-            module: "Shelly".to_string(),
-            params: HashMap::new(),
-        });
-        initiators.insert("Initiator".to_string(), ModuleConfig {
-            module: "TCP-Listen".to_string(),
-            params: HashMap::new(),
-        });
+        actors.insert(
+            "Actor".to_string(),
+            ModuleConfig {
+                module: "Shelly".to_string(),
+                params: HashMap::new(),
+            },
+        );
+        initiators.insert(
+            "Initiator".to_string(),
+            ModuleConfig {
+                module: "TCP-Listen".to_string(),
+                params: HashMap::new(),
+            },
+        );
 
         Config {
-            listens: vec![
-                Listen {
-                    address: "127.0.0.1".to_string(),
-                    port: None,
-                }
-            ],
+            listens: vec![Listen {
+                address: "127.0.0.1".to_string(),
+                port: None,
+            }],
             actors,
             initiators,
             machines,
             mqtt_url: "tcp://localhost:1883".to_string(),
-            actor_connections: vec![
-                ("Testmachine".to_string(), "Actor".to_string()),
-            ],
-            init_connections: vec![
-                ("Initiator".to_string(), "Testmachine".to_string()),
-            ],
+            actor_connections: vec![("Testmachine".to_string(), "Actor".to_string())],
+            init_connections: vec![("Initiator".to_string(), "Testmachine".to_string())],
 
             db_path: PathBuf::from("/run/bffh/database"),
             auditlog_path: PathBuf::from("/var/log/bffh/audit.log"),
@@ -133,7 +146,7 @@ impl Default for Config {
             tlsconfig: TlsListen {
                 certfile: PathBuf::from("./bffh.crt"),
                 keyfile: PathBuf::from("./bffh.key"),
-                .. Default::default()
+                ..Default::default()
             },
 
             tlskeylog: None,

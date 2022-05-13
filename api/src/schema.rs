@@ -1,6 +1,5 @@
 pub use capnpc::schema_capnp;
 
-
 #[cfg(feature = "generated")]
 pub mod authenticationsystem_capnp {
     include!(concat!(env!("OUT_DIR"), "/authenticationsystem_capnp.rs"));

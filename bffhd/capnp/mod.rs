@@ -1,6 +1,5 @@
 use async_net::TcpListener;
 
-
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::RpcSystem;
@@ -69,9 +68,7 @@ impl APIServer {
 
         listens
             .into_iter()
-            .map(|a| async move {
-                (async_net::resolve(a.to_tuple()).await, a)
-            })
+            .map(|a| async move { (async_net::resolve(a.to_tuple()).await, a) })
             .collect::<FuturesUnordered<_>>()
             .filter_map(|(res, addr)| async move {
                 match res {
@@ -111,7 +108,13 @@ impl APIServer {
             tracing::warn!("No usable listen addresses configured for the API server!");
         }
 
-        Ok(Self::new(executor, sockets, acceptor, sessionmanager, authentication))
+        Ok(Self::new(
+            executor,
+            sockets,
+            acceptor,
+            sessionmanager,
+            authentication,
+        ))
     }
 
     pub async fn handle_until(self, stop: impl Future) {
@@ -129,10 +132,11 @@ impl APIServer {
                     } else {
                         tracing::error!(?stream, "failing a TCP connection with no peer addr");
                     }
-                },
+                }
                 Err(e) => tracing::warn!("Failed to accept stream: {}", e),
             }
-        }).await;
+        })
+        .await;
         tracing::info!("closing down API handler");
     }
 
@@ -153,7 +157,11 @@ impl APIServer {
             let (rx, tx) = futures_lite::io::split(stream);
             let vat = VatNetwork::new(rx, tx, Side::Server, Default::default());
 
-            let bootstrap: connection::Client = capnp_rpc::new_client(connection::BootCap::new(peer_addr, self.authentication.clone(), self.sessionmanager.clone()));
+            let bootstrap: connection::Client = capnp_rpc::new_client(connection::BootCap::new(
+                peer_addr,
+                self.authentication.clone(),
+                self.sessionmanager.clone(),
+            ));
 
             if let Err(e) = RpcSystem::new(Box::new(vat), Some(bootstrap.client)).await {
                 tracing::error!("Error during RPC handling: {}", e);

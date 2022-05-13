@@ -1,14 +1,13 @@
-use std::fmt;
-use std::fmt::{Write};
 use crate::utils::oid::ObjectIdentifier;
 use once_cell::sync::Lazy;
 use rkyv::{Archive, Archived, Deserialize, Infallible};
+use std::fmt;
+use std::fmt::Write;
 
 use std::str::FromStr;
 
 //use crate::oidvalue;
-use crate::resources::state::{State};
-
+use crate::resources::state::State;
 
 use crate::users::UserRef;
 
@@ -80,13 +79,12 @@ impl MachineState {
     }
 
     pub fn from(dbstate: &Archived<State>) -> Self {
-        
         let state: &Archived<MachineState> = &dbstate.inner;
         Deserialize::deserialize(state, &mut Infallible).unwrap()
     }
     pub fn to_state(&self) -> State {
         State {
-            inner: self.clone()
+            inner: self.clone(),
         }
     }
 

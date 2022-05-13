@@ -1,7 +1,7 @@
+use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use executor::load_balancer::{core_count, get_cores, stats, SmpStats};
 use executor::placement;
 use std::thread;
-use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
 fn stress_stats<S: SmpStats + Sync + Send>(stats: &'static S) {
     let mut handles = Vec::with_capacity(*core_count());
@@ -27,9 +27,11 @@ fn stress_stats<S: SmpStats + Sync + Send>(stats: &'static S) {
 
 // 158,278 ns/iter (+/- 117,103)
 fn lockless_stats_bench(b: &mut Criterion) {
-    b.bench_function("stress_stats", |b| b.iter(|| {
-        stress_stats(stats());
-    }));
+    b.bench_function("stress_stats", |b| {
+        b.iter(|| {
+            stress_stats(stats());
+        })
+    });
 }
 
 fn lockless_stats_bad_load(b: &mut Criterion) {
@@ -45,9 +47,11 @@ fn lockless_stats_bad_load(b: &mut Criterion) {
         }
     }
 
-    b.bench_function("get_sorted_load", |b| b.iter(|| {
-        let _sorted_load = stats.get_sorted_load();
-    }));
+    b.bench_function("get_sorted_load", |b| {
+        b.iter(|| {
+            let _sorted_load = stats.get_sorted_load();
+        })
+    });
 }
 
 fn lockless_stats_good_load(b: &mut Criterion) {
@@ -59,11 +63,17 @@ fn lockless_stats_good_load(b: &mut Criterion) {
         stats.store_load(i, i);
     }
 
-    b.bench_function("get_sorted_load", |b| b.iter(|| {
-        let _sorted_load = stats.get_sorted_load();
-    }));
+    b.bench_function("get_sorted_load", |b| {
+        b.iter(|| {
+            let _sorted_load = stats.get_sorted_load();
+        })
+    });
 }
 
-criterion_group!(stats_bench, lockless_stats_bench, lockless_stats_bad_load,
-    lockless_stats_good_load);
+criterion_group!(
+    stats_bench,
+    lockless_stats_bench,
+    lockless_stats_bad_load,
+    lockless_stats_good_load
+);
 criterion_main!(stats_bench);

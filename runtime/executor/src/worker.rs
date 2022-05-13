@@ -1,10 +1,10 @@
-use std::marker::PhantomData;
-use std::sync::Arc;
-use std::time::Duration;
 use crossbeam_deque::{Injector, Steal, Stealer, Worker};
 use crossbeam_queue::SegQueue;
 use crossbeam_utils::sync::{Parker, Unparker};
 use lightproc::prelude::LightProc;
+use std::marker::PhantomData;
+use std::sync::Arc;
+use std::time::Duration;
 
 pub trait Runnable {
     fn run(self);
@@ -61,8 +61,14 @@ impl<'a, T: Runnable + 'a> WorkerThread<'a, T> {
         let unparker = parker.unparker().clone();
 
         (
-            Self { task_queue, tasks, local_tasks, parker, _marker },
-            Sleeper { stealer, unparker }
+            Self {
+                task_queue,
+                tasks,
+                local_tasks,
+                parker,
+                _marker,
+            },
+            Sleeper { stealer, unparker },
         )
     }
 
@@ -71,10 +77,8 @@ impl<'a, T: Runnable + 'a> WorkerThread<'a, T> {
     }
 
     /// Run this worker thread "forever" (i.e. until the thread panics or is otherwise killed)
-    pub fn run(&self, fences: impl Iterator<Item=&'a Stealer<T>>) -> ! {
-        let fences: Vec<Stealer<T>> = fences
-            .map(|stealer| stealer.clone())
-            .collect();
+    pub fn run(&self, fences: impl Iterator<Item = &'a Stealer<T>>) -> ! {
+        let fences: Vec<Stealer<T>> = fences.map(|stealer| stealer.clone()).collect();
 
         loop {
             self.run_inner(&fences);
@@ -82,10 +86,12 @@ impl<'a, T: Runnable + 'a> WorkerThread<'a, T> {
         }
     }
 
-    pub fn run_timeout(&self, fences: impl Iterator<Item=&'a Stealer<T>>, timeout: Duration) -> ! {
-        let fences: Vec<Stealer<T>> = fences
-            .map(|stealer| stealer.clone())
-            .collect();
+    pub fn run_timeout(
+        &self,
+        fences: impl Iterator<Item = &'a Stealer<T>>,
+        timeout: Duration,
+    ) -> ! {
+        let fences: Vec<Stealer<T>> = fences.map(|stealer| stealer.clone()).collect();
 
         loop {
             self.run_inner(&fences);
@@ -93,10 +99,8 @@ impl<'a, T: Runnable + 'a> WorkerThread<'a, T> {
         }
     }
 
-    pub fn run_once(&self, fences: impl Iterator<Item=&'a Stealer<T>>) {
-        let fences: Vec<Stealer<T>> = fences
-            .map(|stealer| stealer.clone())
-            .collect();
+    pub fn run_once(&self, fences: impl Iterator<Item = &'a Stealer<T>>) {
+        let fences: Vec<Stealer<T>> = fences.map(|stealer| stealer.clone()).collect();
 
         self.run_inner(fences);
     }
@@ -123,17 +127,19 @@ impl<'a, T: Runnable + 'a> WorkerThread<'a, T> {
                         Steal::Success(task) => {
                             task.run();
                             continue 'work;
-                        },
+                        }
 
                         // If there is no more work to steal from the global queue, try other
                         // workers next
                         Steal::Empty => break,
 
                         // If a race condition occurred try again with backoff
-                        Steal::Retry => for _ in 0..(1 << i) {
-                            core::hint::spin_loop();
-                            i += 1;
-                        },
+                        Steal::Retry => {
+                            for _ in 0..(1 << i) {
+                                core::hint::spin_loop();
+                                i += 1;
+                            }
+                        }
                     }
                 }
 
@@ -145,7 +151,7 @@ impl<'a, T: Runnable + 'a> WorkerThread<'a, T> {
                         Steal::Success(task) => {
                             task.run();
                             continue 'work;
-                        },
+                        }
 
                         // If no other worker has work to do we're done once again.
                         Steal::Empty => break,
@@ -169,6 +175,6 @@ impl<'a, T: Runnable + 'a> WorkerThread<'a, T> {
 }
 
 #[inline(always)]
-fn select_fence<'a, T>(fences: impl Iterator<Item=&'a Stealer<T>>) -> Option<&'a Stealer<T>> {
+fn select_fence<'a, T>(fences: impl Iterator<Item = &'a Stealer<T>>) -> Option<&'a Stealer<T>> {
     fences.max_by_key(|fence| fence.len())
 }

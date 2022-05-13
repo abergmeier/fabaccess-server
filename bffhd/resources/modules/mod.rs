@@ -1,6 +1,3 @@
-
 pub mod fabaccess;
 
-pub trait MachineModel {
-
-}
+pub trait MachineModel {}

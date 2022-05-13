@@ -1,12 +1,10 @@
-use api::authenticationsystem_capnp::response::successful::Builder;
 use crate::authorization::permissions::Permission;
-
+use api::authenticationsystem_capnp::response::successful::Builder;
 
 use crate::capnp::machinesystem::Machines;
 use crate::capnp::permissionsystem::Permissions;
 use crate::capnp::user_system::Users;
-use crate::session::{SessionHandle};
-
+use crate::session::SessionHandle;
 
 #[derive(Debug, Clone)]
 pub struct APISession;

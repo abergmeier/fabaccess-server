@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+
+echo -e "Checking code formatting:\n=========================\n\n" 1>&2
+
+cargo fmt --check
+
+if [[ $? -ne 0 ]]
+then
+    o=$?
+    echo -e "\n\nRun \`cargo fmt --all\` before pushing please." 1>&2
+    exit $o
+fi

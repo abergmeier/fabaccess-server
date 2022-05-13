@@ -1,6 +1,6 @@
-use std::collections::HashMap;
 use futures_util::future;
 use futures_util::future::BoxFuture;
+use std::collections::HashMap;
 
 use crate::actors::Actor;
 use crate::db::ArchivedValue;

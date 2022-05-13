@@ -1,8 +1,8 @@
+use crate::authorization::permissions::{PermRule, Permission};
+use crate::users::db::UserData;
+use once_cell::sync::OnceCell;
 use std::collections::{HashMap, HashSet};
 use std::fmt;
-use once_cell::sync::OnceCell;
-use crate::authorization::permissions::{Permission, PermRule};
-use crate::users::db::UserData;
 
 static ROLES: OnceCell<HashMap<String, Role>> = OnceCell::new();
 
@@ -26,7 +26,6 @@ impl Roles {
     pub fn get(self, roleid: &str) -> Option<&Role> {
         self.roles.get(roleid)
     }
-
 
     /// Tally a role dependency tree into a set
     ///
@@ -62,10 +61,11 @@ impl Roles {
         output
     }
 
-    fn permitted_tally(&self,
-                       roles: &mut HashSet<String>,
-                       role_id: &String,
-                       perm: &Permission
+    fn permitted_tally(
+        &self,
+        roles: &mut HashSet<String>,
+        role_id: &String,
+        perm: &Permission,
     ) -> bool {
         if let Some(role) = self.get(role_id) {
             // Only check and tally parents of a role at the role itself if it's the first time we
@@ -130,7 +130,10 @@ pub struct Role {
 
 impl Role {
     pub fn new(parents: Vec<String>, permissions: Vec<PermRule>) -> Self {
-        Self { parents, permissions }
+        Self {
+            parents,
+            permissions,
+        }
     }
 }
 

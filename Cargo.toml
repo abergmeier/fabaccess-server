@@ -1,6 +1,6 @@
 [package]
 name = "diflouroborane"
-version = "0.4.1"
+version = "0.4.2"
 authors = [ "dequbed <me@dequbed.space>"
           , "Kai Jan Kriegel <kai@kjkriegel.de>"
           , "Joseph Langosch <thejoklla@gmail.com>"
@@ -19,10 +19,14 @@ lto = "thin"
 
 [lib]
 path = "bffhd/lib.rs"
+# Don't run unit tests on `cargo test --tests`, only run integration tests.
+test = false
 
 [[bin]]
 name = "bffhd"
 path = "bin/bffhd/main.rs"
+# Don't run unit tests on `cargo test --tests`, only run integration tests.
+test = false
 
 [dependencies]
 libc = "0.2.101"

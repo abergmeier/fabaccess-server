@@ -44,12 +44,10 @@ impl ProcData {
             let (flags, references) = state.parts();
             let new = State::new(flags | CLOSED, references);
             // Mark the proc as closed.
-            match self.state.compare_exchange_weak(
-                state,
-                new,
-                Ordering::AcqRel,
-                Ordering::Acquire,
-            ) {
+            match self
+                .state
+                .compare_exchange_weak(state, new, Ordering::AcqRel, Ordering::Acquire)
+            {
                 Ok(_) => {
                     // Notify the awaiter that the proc has been closed.
                     if state.is_awaiter() {
@@ -117,7 +115,8 @@ impl ProcData {
 
         // Release the lock. If we've cleared the awaiter, then also unset the awaiter flag.
         if new_is_none {
-            self.state.fetch_and((!LOCKED & !AWAITER).into(), Ordering::Release);
+            self.state
+                .fetch_and((!LOCKED & !AWAITER).into(), Ordering::Release);
         } else {
             self.state.fetch_and((!LOCKED).into(), Ordering::Release);
         }
@@ -142,9 +141,7 @@ impl Debug for ProcData {
                 .field("ref_count", &state.get_refcount())
                 .finish()
         } else {
-            fmt.debug_struct("ProcData")
-                .field("state", &state)
-                .finish()
+            fmt.debug_struct("ProcData").field("state", &state).finish()
         }
     }
 }

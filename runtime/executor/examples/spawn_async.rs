@@ -1,12 +1,12 @@
+use executor::pool;
+use executor::prelude::*;
+use futures_util::{stream::FuturesUnordered, Stream};
+use futures_util::{FutureExt, StreamExt};
+use lightproc::prelude::RecoverableHandle;
 use std::io::Write;
 use std::panic::resume_unwind;
 use std::rc::Rc;
 use std::time::Duration;
-use futures_util::{stream::FuturesUnordered, Stream};
-use futures_util::{FutureExt, StreamExt};
-use executor::pool;
-use executor::prelude::*;
-use lightproc::prelude::RecoverableHandle;
 
 fn main() {
     tracing_subscriber::fmt()
@@ -24,9 +24,9 @@ fn main() {
 
     let executor = Executor::new();
 
-    let mut handles: FuturesUnordered<RecoverableHandle<usize>> = (0..2000).map(|n| {
-        executor.spawn(
-            async move {
+    let mut handles: FuturesUnordered<RecoverableHandle<usize>> = (0..2000)
+        .map(|n| {
+            executor.spawn(async move {
                 let m: u64 = rand::random::<u64>() % 200;
                 tracing::debug!("Will sleep {} * 1 ms", m);
                 // simulate some really heavy load.
@@ -34,9 +34,9 @@ fn main() {
                     async_std::task::sleep(Duration::from_millis(1)).await;
                 }
                 return n;
-            },
-        )
-    }).collect();
+            })
+        })
+        .collect();
     //let handle = handles.fuse().all(|opt| async move { opt.is_some() });
 
     /* Futures passed to `spawn` need to be `Send` so this won't work:
@@ -58,12 +58,12 @@ fn main() {
     // However, you can't pass it a future outright but have to hand it a generator creating the
     // future on the correct thread.
     let fut = async {
-        let local_futs: FuturesUnordered<_> = (0..200).map(|ref n| {
-            let n = *n;
-            let exe = executor.clone();
-            async move {
-                exe.spawn(
-                    async {
+        let local_futs: FuturesUnordered<_> = (0..200)
+            .map(|ref n| {
+                let n = *n;
+                let exe = executor.clone();
+                async move {
+                    exe.spawn(async {
                         let tid = std::thread::current().id();
                         tracing::info!("spawn_local({}) is on thread {:?}", n, tid);
                         exe.spawn_local(async move {
@@ -86,10 +86,11 @@ fn main() {
 
                             *rc
                         })
-                    }
-                ).await
-            }
-        }).collect();
+                    })
+                    .await
+                }
+            })
+            .collect();
         local_futs
     };
 
@@ -108,12 +109,10 @@ fn main() {
         async_std::task::sleep(Duration::from_secs(20)).await;
         tracing::info!("This is taking too long.");
     };
-    executor.run(
-        async {
-            let res = futures_util::select! {
-                _ = a.fuse() => {},
-                _ = b.fuse() => {},
-            };
-        },
-    );
+    executor.run(async {
+        let res = futures_util::select! {
+            _ = a.fuse() => {},
+            _ = b.fuse() => {},
+        };
+    });
 }

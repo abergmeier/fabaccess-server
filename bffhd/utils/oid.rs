@@ -52,16 +52,16 @@
 //! [Object Identifiers]: https://en.wikipedia.org/wiki/Object_identifier
 //! [ITU]: https://en.wikipedia.org/wiki/International_Telecommunications_Union
 
-use rkyv::{Archive, Serialize};
+use crate::utils::varint::VarU128;
+use rkyv::ser::Serializer;
 use rkyv::vec::{ArchivedVec, VecResolver};
+use rkyv::{Archive, Serialize};
 use std::convert::TryFrom;
-use std::ops::Deref;
+use std::convert::TryInto;
 use std::fmt;
 use std::fmt::Formatter;
-use rkyv::ser::Serializer;
+use std::ops::Deref;
 use std::str::FromStr;
-use crate::utils::varint::VarU128;
-use std::convert::TryInto;
 
 type Node = u128;
 type VarNode = VarU128;
@@ -69,8 +69,8 @@ type VarNode = VarU128;
 /// Convenience module for quickly importing the public interface (e.g., `use oid::prelude::*`)
 pub mod prelude {
     pub use super::ObjectIdentifier;
-    pub use super::ObjectIdentifierRoot::*;
     pub use super::ObjectIdentifierError;
+    pub use super::ObjectIdentifierRoot::*;
     pub use core::convert::{TryFrom, TryInto};
 }
 
@@ -132,7 +132,8 @@ impl ObjectIdentifier {
         let mut parsing_big_int = false;
         let mut big_int: Node = 0;
         for i in 1..nodes.len() {
-            if !parsing_big_int && nodes[i] < 128 {} else {
+            if !parsing_big_int && nodes[i] < 128 {
+            } else {
                 if big_int > 0 {
                     if big_int >= Node::MAX >> 7 {
                         return Err(ObjectIdentifierError::IllegalChildNodeValue);
@@ -149,9 +150,11 @@ impl ObjectIdentifier {
         Ok(Self { nodes })
     }
 
-    pub fn build<B: AsRef<[Node]>>(root: ObjectIdentifierRoot, first: u8, children: B)
-        -> Result<Self, ObjectIdentifierError>
-    {
+    pub fn build<B: AsRef<[Node]>>(
+        root: ObjectIdentifierRoot,
+        first: u8,
+        children: B,
+    ) -> Result<Self, ObjectIdentifierError> {
         if first > 40 {
             return Err(ObjectIdentifierError::IllegalFirstChildNode);
         }
@@ -163,7 +166,9 @@ impl ObjectIdentifier {
             let var: VarNode = child.into();
             vec.extend_from_slice(var.as_bytes())
         }
-        Ok(Self { nodes: vec.into_boxed_slice() })
+        Ok(Self {
+            nodes: vec.into_boxed_slice(),
+        })
     }
 
     #[inline(always)]
@@ -196,12 +201,14 @@ impl FromStr for ObjectIdentifier {
 
     fn from_str(value: &str) -> Result<Self, Self::Err> {
         let mut nodes = value.split(".");
-        let root = nodes.next()
+        let root = nodes
+            .next()
             .and_then(|n| n.parse::<u8>().ok())
             .and_then(|n| n.try_into().ok())
             .ok_or(ObjectIdentifierError::IllegalRootNode)?;
 
-        let first = nodes.next()
+        let first = nodes
+            .next()
             .and_then(|n| parse_string_first_node(n).ok())
             .ok_or(ObjectIdentifierError::IllegalFirstChildNode)?;
 
@@ -238,7 +245,7 @@ impl fmt::Debug for ObjectIdentifier {
 
 #[repr(transparent)]
 pub struct ArchivedObjectIdentifier {
-    archived: ArchivedVec<u8>
+    archived: ArchivedVec<u8>,
 }
 
 impl Deref for ArchivedObjectIdentifier {
@@ -250,8 +257,12 @@ impl Deref for ArchivedObjectIdentifier {
 
 impl fmt::Debug for ArchivedObjectIdentifier {
     fn fmt(&self, f: &mut Formatter<'_>) -> fmt::Result {
-         write!(f, "{}", &convert_to_string(self.archived.as_slice())
-             .unwrap_or_else(|e| format!("Invalid OID: {:?}", e)))
+        write!(
+            f,
+            "{}",
+            &convert_to_string(self.archived.as_slice())
+                .unwrap_or_else(|e| format!("Invalid OID: {:?}", e))
+        )
     }
 }
 
@@ -275,7 +286,8 @@ impl Archive for &'static ObjectIdentifier {
 }
 
 impl<S: Serializer + ?Sized> Serialize<S> for ObjectIdentifier
-    where [u8]: rkyv::SerializeUnsized<S>
+where
+    [u8]: rkyv::SerializeUnsized<S>,
 {
     fn serialize(&self, serializer: &mut S) -> Result<Self::Resolver, S::Error> {
         ArchivedVec::serialize_from_slice(self.nodes.as_ref(), serializer)
@@ -340,8 +352,7 @@ fn convert_to_string(nodes: &[u8]) -> Result<String, ObjectIdentifierError> {
 
 impl Into<String> for &ObjectIdentifier {
     fn into(self) -> String {
-        convert_to_string(&self.nodes)
-            .expect("Valid OID object couldn't be serialized.")
+        convert_to_string(&self.nodes).expect("Valid OID object couldn't be serialized.")
     }
 }
 
@@ -468,16 +479,13 @@ mod serde_support {
         }
     }
     impl ser::Serialize for ArchivedObjectIdentifier {
-        fn serialize<S>(
-            &self,
-            serializer: S,
-        ) -> Result<S::Ok, S::Error>
-            where
-                S: ser::Serializer,
+        fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
+        where
+            S: ser::Serializer,
         {
             if serializer.is_human_readable() {
-                let encoded: String = convert_to_string(self.deref())
-                    .expect("Failed to convert valid OID to String");
+                let encoded: String =
+                    convert_to_string(self.deref()).expect("Failed to convert valid OID to String");
                 serializer.serialize_str(&encoded)
             } else {
                 serializer.serialize_bytes(self.deref())
@@ -498,30 +506,13 @@ pub(crate) mod tests {
             children.push(rand::random());
         }
 
-        ObjectIdentifier::build(ObjectIdentifierRoot::JointIsoItuT, 25, children)
-            .unwrap()
-    }
-
-    #[test]
-    fn bincode_serde_roundtrip() {
-        let expected = ObjectIdentifier::build(
-            ObjectIdentifierRoot::ItuT,
-            0x01,
-            vec![1, 2, 3, 5, 8, 13, 21],
-        ).unwrap();
-        let buffer: Vec<u8> = bincode::serialize(&expected).unwrap();
-        let actual = bincode::deserialize(&buffer).unwrap();
-        assert_eq!(expected, actual);
+        ObjectIdentifier::build(ObjectIdentifierRoot::JointIsoItuT, 25, children).unwrap()
     }
 
     #[test]
     fn encode_binary_root_node_0() {
         let expected: Vec<u8> = vec![0];
-        let oid = ObjectIdentifier::build(
-            ObjectIdentifierRoot::ItuT,
-            0x00,
-            vec![],
-        ).unwrap();
+        let oid = ObjectIdentifier::build(ObjectIdentifierRoot::ItuT, 0x00, vec![]).unwrap();
         let actual: Vec<u8> = oid.into();
         assert_eq!(expected, actual);
     }
@@ -529,11 +520,7 @@ pub(crate) mod tests {
     #[test]
     fn encode_binary_root_node_1() {
         let expected: Vec<u8> = vec![40];
-        let oid = ObjectIdentifier::build(
-            ObjectIdentifierRoot::Iso,
-            0x00,
-            vec![],
-        ).unwrap();
+        let oid = ObjectIdentifier::build(ObjectIdentifierRoot::Iso, 0x00, vec![]).unwrap();
         let actual: Vec<u8> = oid.into();
         assert_eq!(expected, actual);
     }
@@ -541,11 +528,8 @@ pub(crate) mod tests {
     #[test]
     fn encode_binary_root_node_2() {
         let expected: Vec<u8> = vec![80];
-        let oid = ObjectIdentifier::build(
-            ObjectIdentifierRoot::JointIsoItuT,
-            0x00,
-            vec![],
-        ).unwrap();
+        let oid =
+            ObjectIdentifier::build(ObjectIdentifierRoot::JointIsoItuT, 0x00, vec![]).unwrap();
         let actual: Vec<u8> = oid.into();
         assert_eq!(expected, actual);
     }
@@ -557,7 +541,8 @@ pub(crate) mod tests {
             ObjectIdentifierRoot::ItuT,
             0x01,
             vec![1, 2, 3, 5, 8, 13, 21],
-        ).unwrap();
+        )
+        .unwrap();
         let actual: Vec<u8> = oid.into();
         assert_eq!(expected, actual);
     }
@@ -572,7 +557,8 @@ pub(crate) mod tests {
             ObjectIdentifierRoot::JointIsoItuT,
             39,
             vec![42, 2501, 65535, 2147483647, 1235, 2352],
-        ).unwrap();
+        )
+        .unwrap();
         let actual: Vec<u8> = (oid).into();
         assert_eq!(expected, actual);
     }
@@ -580,11 +566,7 @@ pub(crate) mod tests {
     #[test]
     fn encode_string_root_node_0() {
         let expected = "0.0";
-        let oid = ObjectIdentifier::build(
-            ObjectIdentifierRoot::ItuT,
-            0x00,
-            vec![],
-        ).unwrap();
+        let oid = ObjectIdentifier::build(ObjectIdentifierRoot::ItuT, 0x00, vec![]).unwrap();
         let actual: String = (oid).into();
         assert_eq!(expected, actual);
     }
@@ -592,11 +574,7 @@ pub(crate) mod tests {
     #[test]
     fn encode_string_root_node_1() {
         let expected = "1.0";
-        let oid = ObjectIdentifier::build(
-            ObjectIdentifierRoot::Iso,
-            0x00,
-            vec![],
-        ).unwrap();
+        let oid = ObjectIdentifier::build(ObjectIdentifierRoot::Iso, 0x00, vec![]).unwrap();
         let actual: String = (&oid).into();
         assert_eq!(expected, actual);
     }
@@ -604,11 +582,8 @@ pub(crate) mod tests {
     #[test]
     fn encode_string_root_node_2() {
         let expected = "2.0";
-        let oid = ObjectIdentifier::build(
-            ObjectIdentifierRoot::JointIsoItuT,
-            0x00,
-            vec![],
-        ).unwrap();
+        let oid =
+            ObjectIdentifier::build(ObjectIdentifierRoot::JointIsoItuT, 0x00, vec![]).unwrap();
         let actual: String = (&oid).into();
         assert_eq!(expected, actual);
     }
@@ -620,7 +595,8 @@ pub(crate) mod tests {
             ObjectIdentifierRoot::ItuT,
             0x01,
             vec![1, 2, 3, 5, 8, 13, 21],
-        ).unwrap();
+        )
+        .unwrap();
         let actual: String = (&oid).into();
         assert_eq!(expected, actual);
     }
@@ -632,40 +608,29 @@ pub(crate) mod tests {
             ObjectIdentifierRoot::JointIsoItuT,
             39,
             vec![42, 2501, 65535, 2147483647, 1235, 2352],
-        ).unwrap();
+        )
+        .unwrap();
         let actual: String = (&oid).into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_binary_root_node_0() {
-        let expected = ObjectIdentifier::build(
-            ObjectIdentifierRoot::ItuT,
-            0x00,
-            vec![],
-        );
+        let expected = ObjectIdentifier::build(ObjectIdentifierRoot::ItuT, 0x00, vec![]);
         let actual = vec![0x00].try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_binary_root_node_1() {
-        let expected = ObjectIdentifier::build(
-            ObjectIdentifierRoot::Iso,
-            0x00,
-            vec![],
-        );
+        let expected = ObjectIdentifier::build(ObjectIdentifierRoot::Iso, 0x00, vec![]);
         let actual = vec![40].try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_binary_root_node_2() {
-        let expected = ObjectIdentifier::build(
-            ObjectIdentifierRoot::JointIsoItuT,
-            0x00,
-            vec![],
-        );
+        let expected = ObjectIdentifier::build(ObjectIdentifierRoot::JointIsoItuT, 0x00, vec![]);
         let actual = vec![80].try_into();
         assert_eq!(expected, actual);
     }
@@ -698,33 +663,21 @@ pub(crate) mod tests {
 
     #[test]
     fn parse_string_root_node_0() {
-        let expected = ObjectIdentifier::build(
-            ObjectIdentifierRoot::ItuT,
-            0x00,
-            vec![],
-        );
+        let expected = ObjectIdentifier::build(ObjectIdentifierRoot::ItuT, 0x00, vec![]);
         let actual = "0.0".try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_string_root_node_1() {
-        let expected = ObjectIdentifier::build(
-            ObjectIdentifierRoot::Iso,
-            0x00,
-            vec![],
-        );
+        let expected = ObjectIdentifier::build(ObjectIdentifierRoot::Iso, 0x00, vec![]);
         let actual = "1.0".try_into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn parse_string_root_node_2() {
-        let expected = ObjectIdentifier::build(
-            ObjectIdentifierRoot::JointIsoItuT,
-            0x00,
-            vec![],
-        );
+        let expected = ObjectIdentifier::build(ObjectIdentifierRoot::JointIsoItuT, 0x00, vec![]);
         let actual = "2.0".try_into();
         assert_eq!(expected, actual);
     }
@@ -852,18 +805,21 @@ pub(crate) mod tests {
 
     #[test]
     fn parse_string_large_children_ok() {
-        let expected =
-            ObjectIdentifier::build(ObjectIdentifierRoot::JointIsoItuT,
-                                    25,
-                                    vec![190754093376743485973207716749546715206,
-                                                  255822649272987943607843257596365752308,
-                                                  15843412533224453995377625663329542022,
-                                                  6457999595881951503805148772927347934,
-                                                  19545192863105095042881850060069531734,
-                                                  195548685662657784196186957311035194990,
-                                                  233020488258340943072303499291936117654,
-                                                  193307160423854019916786016773068715190,
-                                    ]).unwrap();
+        let expected = ObjectIdentifier::build(
+            ObjectIdentifierRoot::JointIsoItuT,
+            25,
+            vec![
+                190754093376743485973207716749546715206,
+                255822649272987943607843257596365752308,
+                15843412533224453995377625663329542022,
+                6457999595881951503805148772927347934,
+                19545192863105095042881850060069531734,
+                195548685662657784196186957311035194990,
+                233020488258340943072303499291936117654,
+                193307160423854019916786016773068715190,
+            ],
+        )
+        .unwrap();
         let actual = "2.25.190754093376743485973207716749546715206.\
                            255822649272987943607843257596365752308.\
                            15843412533224453995377625663329542022.\
@@ -871,31 +827,27 @@ pub(crate) mod tests {
                            19545192863105095042881850060069531734.\
                            195548685662657784196186957311035194990.\
                            233020488258340943072303499291936117654.\
-                           193307160423854019916786016773068715190".try_into().unwrap();
+                           193307160423854019916786016773068715190"
+            .try_into()
+            .unwrap();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn encode_to_string() {
         let expected = String::from("1.2.3.4");
-        let actual: String = ObjectIdentifier::build(
-            ObjectIdentifierRoot::Iso,
-            2,
-            vec![3, 4],
-        ).unwrap()
-        .into();
+        let actual: String = ObjectIdentifier::build(ObjectIdentifierRoot::Iso, 2, vec![3, 4])
+            .unwrap()
+            .into();
         assert_eq!(expected, actual);
     }
 
     #[test]
     fn encode_to_bytes() {
         let expected = vec![0x2A, 0x03, 0x04];
-        let actual: Vec<u8> = ObjectIdentifier::build(
-            ObjectIdentifierRoot::Iso,
-            2,
-            vec![3, 4],
-        ).unwrap()
-        .into();
+        let actual: Vec<u8> = ObjectIdentifier::build(ObjectIdentifierRoot::Iso, 2, vec![3, 4])
+            .unwrap()
+            .into();
         assert_eq!(expected, actual);
     }
 }

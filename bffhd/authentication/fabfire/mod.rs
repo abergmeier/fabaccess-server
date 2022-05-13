@@ -19,8 +19,8 @@ pub static FABFIRE: Mechanism = Mechanism {
     first: Side::Client,
 };
 
+use rsasl::property::{Property, PropertyDefinition, PropertyQ};
 use std::marker::PhantomData;
-use rsasl::property::{Property, PropertyQ, PropertyDefinition};
 // All Property types must implement Debug.
 #[derive(Debug)]
 // The `PhantomData` in the constructor is only used so external crates can't construct this type.

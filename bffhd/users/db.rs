@@ -1,15 +1,15 @@
 use lmdb::{DatabaseFlags, Environment, RwTransaction, Transaction, WriteFlags};
-use std::collections::{HashMap};
 use rkyv::Infallible;
+use std::collections::HashMap;
 
-use std::sync::Arc;
 use anyhow::Context;
+use std::sync::Arc;
 
-use rkyv::{Deserialize};
-use rkyv::ser::Serializer;
-use rkyv::ser::serializers::AllocSerializer;
 use crate::db;
-use crate::db::{AlignedAdapter, ArchivedValue, DB, RawDB};
+use crate::db::{AlignedAdapter, ArchivedValue, RawDB, DB};
+use rkyv::ser::serializers::AllocSerializer;
+use rkyv::ser::Serializer;
+use rkyv::Deserialize;
 
 #[derive(
     Clone,
@@ -30,8 +30,7 @@ pub struct User {
 impl User {
     pub fn check_password(&self, pwd: &[u8]) -> anyhow::Result<bool> {
         if let Some(ref encoded) = self.userdata.passwd {
-            argon2::verify_encoded(encoded, pwd)
-                .context("Stored password is an invalid string")
+            argon2::verify_encoded(encoded, pwd).context("Stored password is an invalid string")
         } else {
             Ok(false)
         }
@@ -48,23 +47,23 @@ impl User {
             id: username.to_string(),
             userdata: UserData {
                 passwd: Some(hash),
-                .. Default::default()
-            }
+                ..Default::default()
+            },
         }
     }
 }
 
 #[derive(
-Clone,
-PartialEq,
-Eq,
-Debug,
-Default,
-rkyv::Archive,
-rkyv::Serialize,
-rkyv::Deserialize,
-serde::Serialize,
-serde::Deserialize,
+    Clone,
+    PartialEq,
+    Eq,
+    Debug,
+    Default,
+    rkyv::Archive,
+    rkyv::Serialize,
+    rkyv::Deserialize,
+    serde::Serialize,
+    serde::Deserialize,
 )]
 /// Data on an user to base decisions on
 ///
@@ -85,12 +84,19 @@ pub struct UserData {
 
 impl UserData {
     pub fn new(roles: Vec<String>) -> Self {
-        Self { roles, kv: HashMap::new(), passwd: None }
+        Self {
+            roles,
+            kv: HashMap::new(),
+            passwd: None,
+        }
     }
     pub fn new_with_kv(roles: Vec<String>, kv: HashMap<String, String>) -> Self {
-        Self { roles, kv, passwd: None }
+        Self {
+            roles,
+            kv,
+            passwd: None,
+        }
     }
-
 }
 
 #[derive(Clone, Debug)]
@@ -140,7 +146,12 @@ impl UserDB {
         Ok(())
     }
 
-    pub fn put_txn(&self, txn: &mut RwTransaction, uid: &str, user: &User) -> Result<(), db::Error> {
+    pub fn put_txn(
+        &self,
+        txn: &mut RwTransaction,
+        uid: &str,
+        user: &User,
+    ) -> Result<(), db::Error> {
         let mut serializer = AllocSerializer::<1024>::default();
         serializer.serialize_value(user).expect("rkyv error");
         let v = serializer.into_serializer().into_inner();
@@ -169,7 +180,8 @@ impl UserDB {
         let mut out = Vec::new();
         for (uid, user) in iter {
             let uid = unsafe { std::str::from_utf8_unchecked(uid).to_string() };
-            let user: User = Deserialize::<User, _>::deserialize(user.as_ref(), &mut Infallible).unwrap();
+            let user: User =
+                Deserialize::<User, _>::deserialize(user.as_ref(), &mut Infallible).unwrap();
             out.push((uid, user));
         }
 

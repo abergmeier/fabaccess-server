@@ -1,10 +1,10 @@
 use proc_macro::TokenStream;
-use std::sync::Mutex;
 use quote::{format_ident, quote};
-use syn::{braced, parse_macro_input, Field, Ident, Token, Visibility, Type};
+use std::sync::Mutex;
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
 use syn::token::Brace;
+use syn::{braced, parse_macro_input, Field, Ident, Token, Type, Visibility};
 
 mod keywords {
     syn::custom_keyword!(initiator);
@@ -32,8 +32,10 @@ impl Parse for ModuleAttrs {
             } else if lookahead.peek(keywords::sensor) {
                 Ok(ModuleAttrs::Sensor)
             } else {
-                Err(input.error("Module type must be empty or one of \"initiator\", \"actor\", or \
-                \"sensor\""))
+                Err(input.error(
+                    "Module type must be empty or one of \"initiator\", \"actor\", or \
+                \"sensor\"",
+                ))
             }
         }
     }
