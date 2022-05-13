@@ -32,7 +32,7 @@ fn main() {
             String::from_utf8(out.stdout).expect("git rev-list output was not valid UTF8");
         let gitrev = owned_gitrev.trim();
         let abbrev = match gitrev.len() {
-            0 => "unknown",
+            0 => "badsource",
             _ => &gitrev[0..9],
         };
 

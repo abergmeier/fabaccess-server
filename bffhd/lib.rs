@@ -31,6 +31,8 @@ pub mod capnp;
 
 pub mod utils;
 
+pub mod env;
+
 mod audit;
 mod keylog;
 mod logging;
@@ -59,9 +61,6 @@ use crate::users::db::UserDB;
 use crate::users::Users;
 use executor::pool::Executor;
 use signal_hook::consts::signal::*;
-
-pub const VERSION_STRING: &'static str = env!("BFFHD_VERSION_STRING");
-pub const RELEASE_STRING: &'static str = env!("BFFHD_RELEASE_STRING");
 
 pub struct Diflouroborane {
     config: Config,
