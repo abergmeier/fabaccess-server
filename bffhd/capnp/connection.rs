@@ -51,7 +51,7 @@ impl bootstrap::Server for BootCap {
         let _guard = span.enter();
         let mut builder = result.get();
         builder.set_name("bffhd");
-        builder.set_release(crate::RELEASE_STRING);
+        builder.set_release(crate::env::VERSION);
         Promise::ok(())
     }
 

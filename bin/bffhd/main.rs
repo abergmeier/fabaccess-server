@@ -11,7 +11,11 @@ fn main() -> anyhow::Result<()> {
     // values for the name, description and version are pulled from `Cargo.toml`.
     let matches = Command::new(clap::crate_name!())
         .version(clap::crate_version!())
-        .long_version(diflouroborane::VERSION_STRING)
+        .long_version(&*format!("Diflouroborane {version}
+            \t Implementing API {apiver}",
+            version=diflouroborane::env::VERSION,
+            apiver="0.3")
+        )
         .about(clap::crate_description!())
         .arg(
             Arg::new("config")

@@ -76,7 +76,7 @@ pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 impl Diflouroborane {
     pub fn new(config: Config) -> anyhow::Result<Self> {
         logging::init(&config.logging);
-        tracing::info!(version = VERSION_STRING, "Starting BFFH");
+        tracing::info!(version = env::VERSION, "Starting BFFH");
 
         let span = tracing::info_span!("setup");
         let _guard = span.enter();
