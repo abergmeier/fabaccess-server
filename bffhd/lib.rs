@@ -31,7 +31,8 @@ pub mod capnp;
 
 pub mod utils;
 
-pub mod env;
+// Store build information in the `env` module.
+shadow_rs::shadow!(env);
 
 mod audit;
 mod keylog;
