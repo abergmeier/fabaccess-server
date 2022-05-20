@@ -31,6 +31,9 @@ pub mod capnp;
 
 pub mod utils;
 
+// Store build information in the `env` module.
+shadow_rs::shadow!(env);
+
 mod audit;
 mod keylog;
 mod logging;
@@ -60,9 +63,6 @@ use crate::users::Users;
 use executor::pool::Executor;
 use signal_hook::consts::signal::*;
 
-pub const VERSION_STRING: &'static str = env!("BFFHD_VERSION_STRING");
-pub const RELEASE_STRING: &'static str = env!("BFFHD_RELEASE_STRING");
-
 pub struct Diflouroborane {
     config: Config,
     executor: Executor<'static>,
@@ -77,7 +77,7 @@ pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 impl Diflouroborane {
     pub fn new(config: Config) -> anyhow::Result<Self> {
         logging::init(&config.logging);
-        tracing::info!(version = VERSION_STRING, "Starting BFFH");
+        tracing::info!(version = env::VERSION, "Starting BFFH");
 
         let span = tracing::info_span!("setup");
         let _guard = span.enter();

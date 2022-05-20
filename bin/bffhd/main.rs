@@ -11,28 +11,33 @@ fn main() -> anyhow::Result<()> {
     // values for the name, description and version are pulled from `Cargo.toml`.
     let matches = Command::new(clap::crate_name!())
         .version(clap::crate_version!())
-        .long_version(diflouroborane::VERSION_STRING)
+        .long_version(&*format!("{version}\n\
+            FabAccess {apiver}\n\
+            \t[{build_kind} build built on {build_time}]\n\
+            \t  {rustc_version}\n\t  {cargo_version}",
+            version=diflouroborane::env::PKG_VERSION,
+            apiver="0.3",
+            rustc_version=diflouroborane::env::RUST_VERSION,
+            cargo_version=diflouroborane::env::CARGO_VERSION,
+            build_time=diflouroborane::env::BUILD_TIME_3339,
+            build_kind=diflouroborane::env::BUILD_RUST_CHANNEL))
         .about(clap::crate_description!())
-        .arg(
-            Arg::new("config")
+        .arg(Arg::new("config")
                 .help("Path to the config file to use")
                 .long("config")
                 .short('c')
-                .takes_value(true),
-        )
+                .takes_value(true))
         .arg(Arg::new("verbosity")
             .help("Increase logging verbosity")
             .long("verbose")
             .short('v')
             .multiple_occurrences(true)
             .max_occurrences(3)
-            .conflicts_with("quiet")
-        )
+            .conflicts_with("quiet"))
         .arg(Arg::new("quiet")
             .help("Decrease logging verbosity")
             .long("quiet")
-            .conflicts_with("verbosity")
-        )
+            .conflicts_with("verbosity"))
         .arg(Arg::new("log format")
             .help("Use an alternative log formatter. Available: Full, Compact, Pretty")
             .long("log-format")
@@ -46,26 +51,22 @@ fn main() -> anyhow::Result<()> {
         .arg(
             Arg::new("print default")
                 .help("Print a default config to stdout instead of running")
-                .long("print-default"),
-        )
+                .long("print-default"))
         .arg(
             Arg::new("check config")
                 .help("Check config for validity")
-                .long("check"),
-        )
+                .long("check"))
         .arg(
             Arg::new("dump")
                 .help("Dump all internal databases")
                 .long("dump")
-                .conflicts_with("load"),
-        )
+                .conflicts_with("load"))
         .arg(
             Arg::new("load")
                 .help("Load values into the internal databases")
                 .long("load")
                 .takes_value(true)
-                .conflicts_with("dump"),
-        )
+                .conflicts_with("dump"))
         .arg(Arg::new("keylog")
             .help("log TLS keys into PATH. If no path is specified the value of the envvar SSLKEYLOGFILE is used.")
             .long("tls-key-log")
@@ -73,8 +74,7 @@ fn main() -> anyhow::Result<()> {
             .takes_value(true)
             .max_values(1)
             .min_values(0)
-            .default_missing_value("")
-        )
+            .default_missing_value(""))
         .get_matches();
 
     let configpath = matches

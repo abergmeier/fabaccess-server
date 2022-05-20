@@ -65,12 +65,16 @@ impl AuthenticationSystem for Authentication {
                 Ok(Step::Done(data)) => {
                     self.state = State::Finished;
 
-                    let uid = pry!(session.get_property::<AuthId>().ok_or(capnp::Error::failed(
-                        "Authentication didn't provide an authid as required".to_string()
-                    )));
-                    let session = pry!(manager.open(uid.as_ref()).ok_or(capnp::Error::failed(
-                        "Failed to lookup the given user".to_string()
-                    )));
+                    let uid = pry!(session.get_property::<AuthId>().ok_or_else(|| {
+                        tracing::warn!("Authentication didn't provide an authid as required.");
+                        capnp::Error::failed(
+                            "Authentication didn't provide an authid as required".to_string(),
+                        )
+                    }));
+                    let session = pry!(manager.open(uid.as_ref()).ok_or_else(|| {
+                        tracing::warn!(uid = uid.as_str(), "Failed to lookup the given user");
+                        capnp::Error::failed("Failed to lookup the given user".to_string())
+                    }));
 
                     let mut builder = builder.init_successful();
                     if data.is_some() {

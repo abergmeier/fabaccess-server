@@ -103,6 +103,8 @@ async-compat = "0.2.1"
 url = "2.2.2"
 rustls-native-certs = "0.6.1"
 
+shadow-rs = "0.11"
+
 [dependencies.rsasl]
 git = "https://github.com/dequbed/rsasl.git"
 rev = "0b5012d0"
@@ -112,6 +114,9 @@ features = ["unstable_custom_mechanism", "provider", "registry_static", "plain"]
 [dev-dependencies]
 futures-test = "0.3.16"
 tempfile = "3.2"
+
+[build-dependencies]
+shadow-rs = "0.11"
 
 [workspace]
 members = ["modules/*", "api"]
