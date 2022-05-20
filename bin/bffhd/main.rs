@@ -122,17 +122,14 @@ fn main() -> anyhow::Result<()> {
         unimplemented!()
     } else if matches.is_present("load") {
         let bffh = Diflouroborane::new(config)?;
-        if bffh
-            .users
-            .load_file(matches.value_of("load").unwrap())
-            .is_ok()
-        {
-            tracing::info!("loaded users from {}", matches.value_of("load").unwrap());
-        } else {
+        if let Err(error) = bffh.users.load_file(matches.value_of("load").unwrap()) {
             tracing::error!(
-                "failed to load users from {}",
-                matches.value_of("load").unwrap()
+                "failed to load users from {}: {}",
+                matches.value_of("load").unwrap(),
+                error,
             );
+        } else {
+            tracing::info!("loaded users from {}", matches.value_of("load").unwrap());
         }
         return Ok(());
     } else {
