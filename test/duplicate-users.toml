@@ -1,0 +1,8 @@
+[UniqueUser]
+roles = ["foorole", "barrole"]
+
+[DuplicateUser]
+roles = ["somerole"]
+
+[DuplicateUser]
+roles = ["different", "roles"]
