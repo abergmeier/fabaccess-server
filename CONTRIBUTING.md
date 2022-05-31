@@ -95,7 +95,7 @@ Debian Linux installation):
 ### Configuring cargo
 
 You need to tell Cargo to use your C-toolchain. For this you need to have
-a block in [your cargo config](https://doc.rust-lang.org/cargo/reference/config.html) setting at
+a block in [your user cargo config](https://doc.rust-lang.org/cargo/reference/config.html) setting at
 least the paths to the gcc as `linker` and ar as `ar`:
 
 ```toml
@@ -104,6 +104,10 @@ least the paths to the gcc as `linker` and ar as `ar`:
 linker = "aarch64-linux-gnu-gcc"
 ar = "aarch64-linux-gnu-ar"
 ```
+
+This block should be added to your **user** cargo config (usually
+`~/.cargo/config.toml`), since these values can differ between distros and
+users.
 
 To actually compile for the given triple you need to call `cargo build`
 with the `--target` flag:
