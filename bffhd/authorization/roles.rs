@@ -67,17 +67,20 @@ impl Roles {
         role_id: &String,
         perm: &Permission,
     ) -> bool {
+        let _guard = tracing::debug_span!("tally", %role_id, perm=perm.as_str());
         if let Some(role) = self.get(role_id) {
             // Only check and tally parents of a role at the role itself if it's the first time we
             // see it
             if !roles.contains(role_id) {
                 for perm_rule in role.permissions.iter() {
                     if perm_rule.match_perm(perm) {
+                        tracing::debug!("Permission granted by direct role");
                         return true;
                     }
                 }
                 for parent in role.parents.iter() {
                     if self.permitted_tally(roles, parent, perm) {
+                        tracing::debug!(%parent, "Permission granted by parent role");
                         return true;
                     }
                 }
@@ -86,10 +89,13 @@ impl Roles {
             }
         }
 
+        tracing::trace!(%role_id, "Permission not granted by role");
         false
     }
 
     pub fn is_permitted(&self, user: &UserData, perm: impl AsRef<Permission>) -> bool {
+        let perm = perm.as_ref();
+        tracing::debug!(perm=perm.as_str(), "Checking permission");
         let mut seen = HashSet::new();
         for role_id in user.roles.iter() {
             if self.permitted_tally(&mut seen, role_id, perm.as_ref()) {
