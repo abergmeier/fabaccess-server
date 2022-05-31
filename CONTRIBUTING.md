@@ -75,6 +75,43 @@ When you want feedback on your current progress or are ready to have it merged u
 request. Don't worry we don't bite! ^^
 
 
+# Development Setup
+
+## Cross-compilation
+
+If you want to cross-compile you need both a C-toolchain for your target
+and install the Rust stdlib for said target.
+
+As an example for the target `aarch64-unknown-linux-gnu` (64-bit ARMv8
+running Linux with the glibc, e.g. a Raspberry Pi 3 or later with a 64-bit
+Debian Linux installation):
+
+1. Install C-toolchain using your distro package manager:
+    - On Archlinux: `pacman -S aarch64-unknown-linux-gnu-gcc`
+2. Install the Rust stdlib:
+    - using rustup: `rustup target add aarch64-unknown-linux-gnu`
+3. Configure your cargo config:
+
+### Configuring cargo
+
+You need to tell Cargo to use your C-toolchain. For this you need to have
+a block in [your cargo config](https://doc.rust-lang.org/cargo/reference/config.html) setting at
+least the paths to the gcc as `linker` and ar as `ar`:
+
+```toml
+[target.aarch64-unknown-linux-gnu]
+# You must set the gcc as linker since a lot of magic must happen here.
+linker = "aarch64-linux-gnu-gcc"
+ar = "aarch64-linux-gnu-ar"
+```
+
+To actually compile for the given triple you need to call `cargo build`
+with the `--target` flag:
+
+```
+$ cargo build --release --target=aarch64-unknown-linux-gnu
+```
+
 ## Tests
 
 Sadly, still very much `// TODO:`. We're working on it! :/
