@@ -84,7 +84,8 @@ impl Diflouroborane {
 
         let executor = Executor::new();
 
-        let env = StateDB::open_env(&config.db_path)?;
+        let env = StateDB::open_env(&config.db_path)
+            .context("Failed to create state DB env. Does the parent directory for `db_path` exist?")?;
         let statedb =
             StateDB::create_with_env(env.clone()).context("Failed to open state DB file")?;
 
