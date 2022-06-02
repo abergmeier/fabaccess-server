@@ -142,11 +142,11 @@ impl<A: Adapter> DB<A> {
     }
 
     pub fn del(&self, txn: &mut RwTransaction, key: &impl AsRef<[u8]>) -> Result<(), db::Error> {
-        self.db.del::<_, &[u8]>(txn, key, None)
+        Ok(self.db.del::<_, &[u8]>(txn, key, None)?)
     }
 
     pub fn clear(&self, txn: &mut RwTransaction) -> Result<(), db::Error> {
-        self.db.clear(txn)
+        Ok(self.db.clear(txn)?)
     }
 
     pub fn get_all<'txn, T: Transaction>(

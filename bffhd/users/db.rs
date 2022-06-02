@@ -2,7 +2,7 @@ use lmdb::{DatabaseFlags, Environment, RwTransaction, Transaction, WriteFlags};
 use rkyv::Infallible;
 use std::collections::HashMap;
 
-use anyhow::Context;
+use miette::{Context, IntoDiagnostic};
 use std::sync::Arc;
 
 use crate::db;
@@ -28,9 +28,11 @@ pub struct User {
 }
 
 impl User {
-    pub fn check_password(&self, pwd: &[u8]) -> anyhow::Result<bool> {
+    pub fn check_password(&self, pwd: &[u8]) -> miette::Result<bool> {
         if let Some(ref encoded) = self.userdata.passwd {
-            argon2::verify_encoded(encoded, pwd).context("Stored password is an invalid string")
+            argon2::verify_encoded(encoded, pwd)
+                .into_diagnostic()
+                .wrap_err("Stored password is an invalid string")
         } else {
             Ok(false)
         }
@@ -109,7 +111,7 @@ impl UserDB {
     // TODO: Make an userdb-specific Transaction newtype to make this safe
     pub unsafe fn get_rw_txn(&self) -> Result<RwTransaction, db::Error> {
         // The returned transaction is only valid for *this* environment.
-        self.env.begin_rw_txn()
+        Ok(self.env.begin_rw_txn()?)
     }
 
     pub unsafe fn new(env: Arc<Environment>, db: RawDB) -> Self {

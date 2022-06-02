@@ -42,9 +42,8 @@ mod tls;
 
 use std::sync::Arc;
 
-use anyhow::Context;
-
 use futures_util::StreamExt;
+use miette::{Context, IntoDiagnostic, Report};
 use once_cell::sync::OnceCell;
 
 use crate::audit::AuditLog;
@@ -75,7 +74,7 @@ pub struct Diflouroborane {
 pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 
 impl Diflouroborane {
-    pub fn new(config: Config) -> anyhow::Result<Self> {
+    pub fn new(config: Config) -> miette::Result<Self> {
         logging::init(&config.logging);
         tracing::info!(version = env::VERSION, "Starting BFFH");
 
@@ -85,13 +84,15 @@ impl Diflouroborane {
         let executor = Executor::new();
 
         let env = StateDB::open_env(&config.db_path)?;
-        let statedb =
-            StateDB::create_with_env(env.clone()).context("Failed to open state DB file")?;
 
-        let users = Users::new(env.clone()).context("Failed to open users DB file")?;
+        let statedb = StateDB::create_with_env(env.clone())?;
+
+        let users = Users::new(env.clone())?;
         let roles = Roles::new(config.roles.clone());
 
-        let _audit_log = AuditLog::new(&config).context("Failed to initialize audit log")?;
+        let _audit_log = AuditLog::new(&config)
+            .into_diagnostic()
+            .wrap_err("Failed to initialize audit log")?;
 
         let resources = ResourcesHandle::new(config.machines.iter().map(|(id, desc)| {
             Resource::new(Arc::new(resources::Inner::new(
@@ -112,13 +113,15 @@ impl Diflouroborane {
         })
     }
 
-    pub fn run(&mut self) -> anyhow::Result<()> {
+    pub fn run(&mut self) -> miette::Result<()> {
         let mut signals = signal_hook_async_std::Signals::new(&[SIGINT, SIGQUIT, SIGTERM])
-            .context("Failed to construct signal handler")?;
+            .into_diagnostic()
+            .wrap_err("Failed to construct signal handler")?;
 
         actors::load(self.executor.clone(), &self.config, self.resources.clone())?;
 
-        let tlsconfig = TlsConfig::new(self.config.tlskeylog.as_ref(), !self.config.is_quiet())?;
+        let tlsconfig = TlsConfig::new(self.config.tlskeylog.as_ref(), !self.config.is_quiet())
+            .into_diagnostic()?;
         let acceptor = tlsconfig.make_tls_acceptor(&self.config.tlsconfig)?;
 
         let sessionmanager = SessionManager::new(self.users.clone(), self.roles.clone());
