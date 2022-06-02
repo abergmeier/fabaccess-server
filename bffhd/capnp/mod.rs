@@ -60,7 +60,7 @@ impl APIServer {
         acceptor: TlsAcceptor,
         sessionmanager: SessionManager,
         authentication: AuthenticationHandle,
-    ) -> anyhow::Result<Self> {
+    ) -> miette::Result<Self> {
         let span = tracing::info_span!("binding API listen sockets");
         let _guard = span.enter();
 

@@ -95,7 +95,7 @@ impl Roles {
 
     pub fn is_permitted(&self, user: &UserData, perm: impl AsRef<Permission>) -> bool {
         let perm = perm.as_ref();
-        tracing::debug!(perm=perm.as_str(), "Checking permission");
+        tracing::debug!(perm = perm.as_str(), "Checking permission");
         let mut seen = HashSet::new();
         for role_id in user.roles.iter() {
             if self.permitted_tally(&mut seen, role_id, perm.as_ref()) {

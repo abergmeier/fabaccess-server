@@ -1,10 +1,10 @@
-use anyhow::Context;
 use lmdb::{Environment, Transaction};
 use once_cell::sync::OnceCell;
 use rkyv::{Archive, Deserialize, Infallible, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Write};
 
+use miette::{Context, IntoDiagnostic};
 use std::path::Path;
 use std::sync::Arc;
 
@@ -65,7 +65,7 @@ pub struct Users {
 }
 
 impl Users {
-    pub fn new(env: Arc<Environment>) -> anyhow::Result<Self> {
+    pub fn new(env: Arc<Environment>) -> miette::Result<Self> {
         let span = tracing::debug_span!("users", ?env, "Creating Users handle");
         let _guard = span.enter();
 
@@ -74,7 +74,7 @@ impl Users {
                 tracing::debug!("Global resource not yet initialized, initializing…");
                 unsafe { UserDB::create(env) }
             })
-            .context("Failed to open userdb")?;
+            .wrap_err("Failed to open userdb")?;
 
         Ok(Self { userdb })
     }
@@ -90,19 +90,19 @@ impl Users {
         })
     }
 
-    pub fn put_user(&self, uid: &str, user: &db::User) -> Result<(), lmdb::Error> {
+    pub fn put_user(&self, uid: &str, user: &db::User) -> Result<(), crate::db::Error> {
         tracing::trace!(uid, ?user, "Updating user");
         self.userdb.put(uid, user)
     }
 
-    pub fn del_user(&self, uid: &str) -> Result<(), lmdb::Error> {
+    pub fn del_user(&self, uid: &str) -> Result<(), crate::db::Error> {
         tracing::trace!(uid, "Deleting user");
         self.userdb.delete(uid)
     }
 
-    pub fn load_file<P: AsRef<Path>>(&self, path: P) -> anyhow::Result<()> {
-        let f = std::fs::read(path)?;
-        let map: HashMap<String, UserData> = toml::from_slice(&f)?;
+    pub fn load_file<P: AsRef<Path>>(&self, path: P) -> miette::Result<()> {
+        let f = std::fs::read(path).into_diagnostic()?;
+        let map: HashMap<String, UserData> = toml::from_slice(&f).into_diagnostic()?;
 
         let mut txn = unsafe { self.userdb.get_rw_txn()? };
 
@@ -132,7 +132,7 @@ impl Users {
             }
         }
 
-        txn.commit()?;
+        txn.commit().map_err(crate::db::Error::from)?;
         Ok(())
     }
 }

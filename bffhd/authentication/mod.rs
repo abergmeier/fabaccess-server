@@ -1,4 +1,5 @@
 use crate::users::Users;
+use miette::{Context, IntoDiagnostic};
 use rsasl::error::SessionError;
 use rsasl::mechname::Mechname;
 use rsasl::property::{AuthId, Password};
@@ -127,8 +128,13 @@ impl AuthenticationHandle {
         }
     }
 
-    pub fn start(&self, mechanism: &Mechname) -> anyhow::Result<Session> {
-        Ok(self.inner.rsasl.server_start(mechanism)?)
+    pub fn start(&self, mechanism: &Mechname) -> miette::Result<Session> {
+        Ok(self
+            .inner
+            .rsasl
+            .server_start(mechanism)
+            .into_diagnostic()
+            .wrap_err("Failed to start a SASL authentication with the given mechanism")?)
     }
 
     pub fn list_available_mechs(&self) -> impl IntoIterator<Item = &Mechname> {

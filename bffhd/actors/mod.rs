@@ -12,6 +12,7 @@ use std::future::Future;
 
 use std::pin::Pin;
 
+use miette::IntoDiagnostic;
 use std::task::{Context, Poll};
 use std::time::Duration;
 
@@ -110,11 +111,11 @@ static ROOT_CERTS: Lazy<RootCertStore> = Lazy::new(|| {
     store
 });
 
-pub fn load(executor: Executor, config: &Config, resources: ResourcesHandle) -> anyhow::Result<()> {
+pub fn load(executor: Executor, config: &Config, resources: ResourcesHandle) -> miette::Result<()> {
     let span = tracing::info_span!("loading actors");
     let _guard = span;
 
-    let mqtt_url = Url::parse(config.mqtt_url.as_str())?;
+    let mqtt_url = Url::parse(config.mqtt_url.as_str()).into_diagnostic()?;
     let (transport, default_port) = match mqtt_url.scheme() {
         "mqtts" | "ssl" => (
             rumqttc::Transport::tls_with_config(
@@ -131,12 +132,12 @@ pub fn load(executor: Executor, config: &Config, resources: ResourcesHandle) -> 
 
         scheme => {
             tracing::error!(%scheme, "MQTT url uses invalid scheme");
-            anyhow::bail!("invalid config");
+            miette::bail!("invalid config");
         }
     };
     let host = mqtt_url.host_str().ok_or_else(|| {
         tracing::error!("MQTT url must contain a hostname");
-        anyhow::anyhow!("invalid config")
+        miette::miette!("invalid config")
     })?;
     let port = mqtt_url.port().unwrap_or(default_port);
 
@@ -167,7 +168,7 @@ pub fn load(executor: Executor, config: &Config, resources: ResourcesHandle) -> 
                 }
                 Err(error) => {
                     tracing::error!(?error, "MQTT connection failed");
-                    anyhow::bail!("mqtt connection failed")
+                    miette::bail!("mqtt connection failed")
                 }
             }
 

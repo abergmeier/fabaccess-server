@@ -1,6 +1,12 @@
+use thiserror::Error;
+
 use crate::db;
 use crate::db::{AlignedAdapter, ArchivedValue, RawDB, DB};
 use lmdb::{DatabaseFlags, Environment, EnvironmentFlags, Transaction, WriteFlags};
+use miette::{Diagnostic, LabeledSpan, Severity, SourceCode};
+use std::any::TypeId;
+use std::error::Error;
+use std::fmt::{Debug, Display, Formatter};
 use std::{path::Path, sync::Arc};
 
 use crate::resources::state::State;
@@ -11,8 +17,24 @@ pub struct StateDB {
     db: DB<AlignedAdapter<State>>,
 }
 
+#[derive(Debug, Error, Diagnostic)]
+pub enum StateDBError {
+    #[error("opening the state db environment failed")]
+    #[diagnostic(
+        code(bffh::db::state::open_env),
+        help("does the parent directory for state_db exist?")
+    )]
+    OpenEnv(#[source] db::Error),
+    #[error("opening the state db failed")]
+    #[diagnostic(code(bffh::db::state::open))]
+    Open(#[source] db::Error),
+    #[error("creating the state db failed")]
+    #[diagnostic(code(bffh::db::state::create))]
+    Create(#[source] db::Error),
+}
+
 impl StateDB {
-    pub fn open_env<P: AsRef<Path>>(path: P) -> lmdb::Result<Arc<Environment>> {
+    pub fn open_env<P: AsRef<Path>>(path: P) -> Result<Arc<Environment>, StateDBError> {
         Environment::new()
             .set_flags(
                 EnvironmentFlags::WRITE_MAP
@@ -23,6 +45,7 @@ impl StateDB {
             .set_max_dbs(8)
             .open(path.as_ref())
             .map(Arc::new)
+            .map_err(|e| StateDBError::OpenEnv(e.into()))
     }
 
     fn new(env: Arc<Environment>, db: RawDB) -> Self {
@@ -30,30 +53,32 @@ impl StateDB {
         Self { env, db }
     }
 
-    pub fn open_with_env(env: Arc<Environment>) -> lmdb::Result<Self> {
-        let db = unsafe { RawDB::open(&env, Some("state"))? };
+    pub fn open_with_env(env: Arc<Environment>) -> Result<Self, StateDBError> {
+        let db = unsafe { RawDB::open(&env, Some("state")) };
+        let db = db.map_err(|e| StateDBError::Open(e.into()))?;
         Ok(Self::new(env, db))
     }
 
-    pub fn open<P: AsRef<Path>>(path: P) -> lmdb::Result<Self> {
+    pub fn open<P: AsRef<Path>>(path: P) -> Result<Self, StateDBError> {
         let env = Self::open_env(path)?;
         Self::open_with_env(env)
     }
 
-    pub fn create_with_env(env: Arc<Environment>) -> lmdb::Result<Self> {
+    pub fn create_with_env(env: Arc<Environment>) -> Result<Self, StateDBError> {
         let flags = DatabaseFlags::empty();
-        let db = unsafe { RawDB::create(&env, Some("state"), flags)? };
+        let db = unsafe { RawDB::create(&env, Some("state"), flags) };
+        let db = db.map_err(|e| StateDBError::Create(e.into()))?;
 
         Ok(Self::new(env, db))
     }
 
-    pub fn create<P: AsRef<Path>>(path: P) -> lmdb::Result<Self> {
+    pub fn create<P: AsRef<Path>>(path: P) -> Result<Self, StateDBError> {
         let env = Self::open_env(path)?;
         Self::create_with_env(env)
     }
 
     pub fn begin_ro_txn(&self) -> Result<impl Transaction + '_, db::Error> {
-        self.env.begin_ro_txn()
+        self.env.begin_ro_txn().map_err(db::Error::from)
     }
 
     pub fn get(&self, key: impl AsRef<[u8]>) -> Result<Option<ArchivedValue<State>>, db::Error> {
@@ -72,7 +97,7 @@ impl StateDB {
         let mut txn = self.env.begin_rw_txn()?;
         let flags = WriteFlags::empty();
         self.db.put(&mut txn, key, val, flags)?;
-        txn.commit()
+        Ok(txn.commit()?)
     }
 }
 

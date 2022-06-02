@@ -6,7 +6,7 @@ use std::{env, io, io::Write, path::PathBuf};
 
 use nix::NixPath;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> miette::Result<()> {
     // Argument parsing
     // values for the name, description and version are pulled from `Cargo.toml`.
     let matches = Command::new(clap::crate_name!())
