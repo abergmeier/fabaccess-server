@@ -25,6 +25,7 @@ pub mod modules;
 
 pub struct PermissionDenied;
 
+#[derive(Debug)]
 pub(crate) struct Inner {
     id: String,
     db: StateDB,
@@ -94,7 +95,7 @@ impl Inner {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct Resource {
     inner: Arc<Inner>,
 }
