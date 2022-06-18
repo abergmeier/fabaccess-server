@@ -1,9 +1,9 @@
+use crate::config::deser_option;
 use crate::utils::oid::ObjectIdentifier;
 use once_cell::sync::Lazy;
 use rkyv::{Archive, Archived, Deserialize, Infallible};
 use std::fmt;
 use std::fmt::Write;
-
 use std::str::FromStr;
 
 //use crate::oidvalue;
@@ -54,6 +54,11 @@ pub enum Status {
 /// The status of the machine
 pub struct MachineState {
     pub state: Status,
+    #[serde(
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deser_option"
+    )]
     pub previous: Option<UserRef>,
 }
 

@@ -1,4 +1,5 @@
 use crate::initiators::dummy::Dummy;
+use crate::initiators::process::Process;
 use crate::resources::modules::fabaccess::Status;
 use crate::session::SessionHandle;
 use crate::{
@@ -19,6 +20,7 @@ use std::time::Duration;
 use url::Url;
 
 mod dummy;
+mod process;
 
 pub trait Initiator: Future<Output = ()> {
     fn new(params: &HashMap<String, String>, callbacks: InitiatorCallbacks) -> miette::Result<Self>
@@ -78,7 +80,7 @@ impl Future for InitiatorDriver {
 
         ready!(Pin::new(&mut self.initiator).poll(cx));
 
-        tracing::warn!(initiator=%self.name, "an initiator module ran to completion!");
+        tracing::warn!(initiator=%self.name, "initiator module ran to completion!");
 
         Poll::Ready(())
     }
@@ -134,6 +136,12 @@ fn load_single(
     tracing::info!(%name, %module_name, ?params, "Loading initiator");
     let o = match module_name.as_ref() {
         "Dummy" => Some(InitiatorDriver::new::<Dummy>(
+            name.clone(),
+            params,
+            resource,
+            sessions.clone(),
+        )),
+        "Process" => Some(InitiatorDriver::new::<Process>(
             name.clone(),
             params,
             resource,
