@@ -8,3 +8,5 @@ pub mod varint;
 pub mod l10nstring;
 
 pub mod uuid;
+
+pub mod linebuffer;

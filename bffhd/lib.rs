@@ -24,6 +24,7 @@ pub mod users;
 pub mod resources;
 
 pub mod actors;
+pub mod initiators;
 
 pub mod sensors;
 
@@ -118,14 +119,21 @@ impl Diflouroborane {
             .into_diagnostic()
             .wrap_err("Failed to construct signal handler")?;
 
+        let sessionmanager = SessionManager::new(self.users.clone(), self.roles.clone());
+        let authentication = AuthenticationHandle::new(self.users.clone());
+
+        initiators::load(
+            self.executor.clone(),
+            &self.config,
+            self.resources.clone(),
+            sessionmanager.clone(),
+            authentication.clone(),
+        );
         actors::load(self.executor.clone(), &self.config, self.resources.clone())?;
 
         let tlsconfig = TlsConfig::new(self.config.tlskeylog.as_ref(), !self.config.is_quiet())
             .into_diagnostic()?;
         let acceptor = tlsconfig.make_tls_acceptor(&self.config.tlsconfig)?;
-
-        let sessionmanager = SessionManager::new(self.users.clone(), self.roles.clone());
-        let authentication = AuthenticationHandle::new(self.users.clone());
 
         let apiserver = self.executor.run(APIServer::bind(
             self.executor.clone(),

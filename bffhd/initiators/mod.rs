@@ -1,161 +1,157 @@
+use crate::initiators::dummy::Dummy;
+use crate::initiators::process::Process;
+use crate::resources::modules::fabaccess::Status;
+use crate::session::SessionHandle;
+use crate::{
+    AuthenticationHandle, Config, MachineState, Resource, ResourcesHandle, SessionManager,
+};
+use async_compat::CompatExt;
+use executor::prelude::Executor;
+use futures_util::ready;
+use miette::IntoDiagnostic;
+use rumqttc::ConnectReturnCode::Success;
+use rumqttc::{AsyncClient, ConnectionError, Event, Incoming, MqttOptions};
+use std::collections::HashMap;
+use std::fmt::Display;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use async_channel as channel;
-use async_oneshot as oneshot;
-use futures_signals::signal::Signal;
-use futures_util::future::BoxFuture;
-use crate::resources::claim::{ResourceID, UserID};
-use crate::resources::state::State;
+use std::time::Duration;
+use url::Url;
 
-pub enum UpdateError {
-    /// We're not connected to anything anymore. You can't do anything about this error and the
-    /// only reason why you even get it is because your future was called a last time before
-    /// being shelved so best way to handle this error is to just return from your loop entirely,
-    /// cleaning up any state that doesn't survive a freeze.
-    Closed,
+mod dummy;
+mod process;
 
-    Denied,
-
-    Other(Box<dyn std::error::Error + Send>),
-}
-
-pub trait InitiatorError: std::error::Error + Send {
-}
-
-pub trait Initiator {
-    fn start_for(&mut self, machine: ResourceID)
-        -> BoxFuture<'static, Result<(), Box<dyn InitiatorError>>>;
-
-    fn run(&mut self, request: &mut UpdateSink)
-        -> BoxFuture<'static, Result<(), Box<dyn InitiatorError>>>;
+pub trait Initiator: Future<Output = ()> {
+    fn new(params: &HashMap<String, String>, callbacks: InitiatorCallbacks) -> miette::Result<Self>
+    where
+        Self: Sized;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context) -> Poll<()> {
+        <Self as Future>::poll(self, cx)
+    }
 }
 
 #[derive(Clone)]
-pub struct UpdateSink {
-    tx: channel::Sender<(Option<UserID>, State)>,
-    rx: channel::Receiver<Result<(), Error>>,
+pub struct InitiatorCallbacks {
+    resource: Resource,
+    sessions: SessionManager,
+}
+impl InitiatorCallbacks {
+    pub fn new(resource: Resource, sessions: SessionManager) -> Self {
+        Self { resource, sessions }
+    }
+
+    pub async fn try_update(&mut self, session: SessionHandle, status: Status) {
+        self.resource.try_update(session, status).await
+    }
+
+    pub fn open_session(&self, uid: &str) -> Option<SessionHandle> {
+        self.sessions.open(uid)
+    }
 }
 
-impl UpdateSink {
-    fn new(tx: channel::Sender<(Option<UserID>, State)>,
-           rx: channel::Receiver<Result<(), Error>>)
-        -> Self
+pub struct InitiatorDriver {
+    name: String,
+    initiator: Box<dyn Initiator + Unpin + Send>,
+}
+
+impl InitiatorDriver {
+    pub fn new<I>(
+        name: String,
+        params: &HashMap<String, String>,
+        resource: Resource,
+        sessions: SessionManager,
+    ) -> miette::Result<Self>
+    where
+        I: 'static + Initiator + Unpin + Send,
     {
-        Self { tx, rx }
-    }
-
-    async fn send(&mut self, userid: Option<UserID>, state: State)
-        -> Result<(), UpdateError>
-    {
-        if let Err(_e) = self.tx.send((userid, state)).await {
-            return Err(UpdateError::Closed);
-        }
-
-        match self.rx.recv().await {
-            Ok(Ok(())) => Ok(()),
-            Ok(Err(Error::Denied)) => Err(UpdateError::Denied),
-            Ok(Err(Error::Internal(e))) => Err(UpdateError::Other(e)),
-            // RecvError is send only when the channel is closed
-            Err(_) => Err(UpdateError::Closed),
-        }
+        let callbacks = InitiatorCallbacks::new(resource, sessions);
+        let initiator = Box::new(I::new(params, callbacks)?);
+        Ok(Self { name, initiator })
     }
 }
 
-struct Resource;
-pub struct InitiatorDriver<S, I: Initiator> {
-    // TODO: make this a static reference to the resources because it's much easier and we don't
-    //       need to replace resources at runtime at the moment.
-    resource_signal: S,
-    resource: Option<channel::Sender<Update>>,
-
-    // TODO: Initiators should instead
-    error_channel: Option<oneshot::Receiver<Error>>,
-
-    initiator: I,
-    initiator_future: Option<BoxFuture<'static, Result<(), Box<dyn InitiatorError>>>>,
-    update_sink: UpdateSink,
-    initiator_req_rx: channel::Receiver<(Option<UserID>, State)>,
-    initiator_reply_tx: channel::Sender<Result<(), Error>>,
-}
-
-pub struct ResourceSink {
-    pub id: ResourceID,
-    pub state_sink: channel::Sender<Update>,
-}
-
-impl<S: Signal<Item=ResourceSink>, I: Initiator> InitiatorDriver<S, I> {
-    pub fn new(resource_signal: S, initiator: I) -> Self {
-        let (initiator_reply_tx, initiator_reply_rx) = channel::bounded(1);
-        let (initiator_req_tx, initiator_req_rx) = async_channel::bounded(1);
-        let update_sink = UpdateSink::new(initiator_req_tx, initiator_reply_rx);
-        Self {
-            resource: None,
-            resource_signal,
-            error_channel: None,
-
-            initiator,
-            initiator_future: None,
-            update_sink,
-            initiator_req_rx,
-            initiator_reply_tx,
-        }
-    }
-}
-
-impl<S: Signal<Item=ResourceSink> + Unpin, I: Initiator + Unpin> Future for InitiatorDriver<S, I> {
+impl Future for InitiatorDriver {
     type Output = ();
 
     fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        match Pin::new(&mut self.resource_signal).poll_change(cx) {
-            Poll::Ready(Some(resource)) => {
-                self.resource = Some(resource.state_sink);
-                self.error_channel = None;
-                let f = Box::pin(self.initiator.start_for(resource.id));
-                self.initiator_future.replace(f);
-            },
-            Poll::Ready(None) => self.resource = None,
-            Poll::Pending => {}
-        }
+        let _guard = tracing::info_span!("initiator poll", initiator=%self.name);
+        tracing::trace!(initiator=%self.name, "polling initiator");
 
-        // do while there is work to do
-        while {
-            // First things first:
-            // If we've send an update to the resources in question we have error channel set, so
-            // we poll that first to determine if the resources has acted on it yet.
-            if let Some(ref mut errchan) = self.error_channel {
-                match Pin::new(errchan).poll(cx) {
-                    // In case there's an ongoing
-                    Poll::Pending => return Poll::Pending,
-                    Poll::Ready(Ok(error)) => {
-                        self.error_channel = None;
-                        self.initiator_reply_tx.send(Err(error));
-                    }
-                    Poll::Ready(Err(_closed)) => {
-                        // Error channel was dropped which means there was no error
-                        self.error_channel = None;
-                        self.initiator_reply_tx.send(Ok(()));
-                    }
-                }
-            }
+        ready!(Pin::new(&mut self.initiator).poll(cx));
 
-            if let Some(ref mut init_fut) = self.initiator_future {
-                match init_fut.as_mut().poll(cx) {
-                    Poll::Pending => return Poll::Pending,
-                    Poll::Ready(Ok(())) => {},
-                    Poll::Ready(Err(_e)) => {
-                        // TODO: Log initiator error here
-                    }
-                }
-            } else if let Some(ref mut _resource) = self.resource {
-                let mut s = self.update_sink.clone();
-                let f = self.initiator.run(&mut s);
-                self.initiator_future.replace(f);
-            }
-
-            self.error_channel.is_some()
-        } {}
+        tracing::warn!(initiator=%self.name, "initiator module ran to completion!");
 
         Poll::Ready(())
     }
+}
+
+pub fn load(
+    executor: Executor,
+    config: &Config,
+    resources: ResourcesHandle,
+    sessions: SessionManager,
+    authentication: AuthenticationHandle,
+) -> miette::Result<()> {
+    let span = tracing::info_span!("loading initiators");
+    let _guard = span.enter();
+
+    let mut initiator_map: HashMap<String, Resource> = config
+        .init_connections
+        .iter()
+        .filter_map(|(k, v)| {
+            if let Some(resource) = resources.get_by_id(v) {
+                Some((k.clone(), resource.clone()))
+            } else {
+                tracing::error!(initiator=%k, machine=%v,
+                    "Machine configured for initiator not found!");
+                None
+            }
+        })
+        .collect();
+
+    for (name, cfg) in config.initiators.iter() {
+        if let Some(resource) = initiator_map.remove(name) {
+            if let Some(driver) = load_single(name, &cfg.module, &cfg.params, resource, &sessions) {
+                tracing::debug!(module_name=%cfg.module, %name, "starting initiator task");
+                executor.spawn(driver);
+            } else {
+                tracing::error!(module_name=%cfg.module, %name, "Initiator module could not be configured");
+            }
+        } else {
+            tracing::warn!(actor=%name, ?config, "Initiator has no machine configured. Skipping!");
+        }
+    }
+
+    Ok(())
+}
+
+fn load_single(
+    name: &String,
+    module_name: &String,
+    params: &HashMap<String, String>,
+    resource: Resource,
+    sessions: &SessionManager,
+) -> Option<InitiatorDriver> {
+    tracing::info!(%name, %module_name, ?params, "Loading initiator");
+    let o = match module_name.as_ref() {
+        "Dummy" => Some(InitiatorDriver::new::<Dummy>(
+            name.clone(),
+            params,
+            resource,
+            sessions.clone(),
+        )),
+        "Process" => Some(InitiatorDriver::new::<Process>(
+            name.clone(),
+            params,
+            resource,
+            sessions.clone(),
+        )),
+        _ => None,
+    };
+
+    o.transpose().unwrap_or_else(|error| {
+        tracing::error!(%error, "failed to configure initiator");
+        None
+    })
 }
