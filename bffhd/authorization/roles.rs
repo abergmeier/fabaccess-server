@@ -27,6 +27,10 @@ impl Roles {
         self.roles.get(roleid)
     }
 
+    pub fn list(&self) -> impl Iterator<Item = &String> {
+        self.roles.keys()
+    }
+
     /// Tally a role dependency tree into a set
     ///
     /// A Default implementation exists which adapter may overwrite with more efficient
