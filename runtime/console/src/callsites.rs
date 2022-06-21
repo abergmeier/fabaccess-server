@@ -30,13 +30,13 @@ impl<const MAX_CALLSITES: usize> Callsites<MAX_CALLSITES> {
         }
     }
 
-    pub(crate) fn contains(&self, callsite: &'static Metadata<'static>) -> bool {
+    pub(crate) fn contains(&self, callsite: &Metadata<'static>) -> bool {
         let mut idx = 0;
         let mut end = self.len.load(Ordering::Acquire);
         while {
             for cs in &self.array[idx..end] {
                 let ptr = cs.load(Ordering::Acquire);
-                let meta = unsafe { ptr as *const _ as &'static Metadata<'static> };
+                let meta = unsafe { ptr as *const _ as &Metadata<'static> };
                 if meta.callsite() == callsite.callsite() {
                     return true;
                 }
@@ -55,7 +55,7 @@ impl<const MAX_CALLSITES: usize> Callsites<MAX_CALLSITES> {
 
 impl<const MAX_CALLSITES: usize> Default for Callsites<MAX_CALLSITES> {
     fn default() -> Self {
-        const NULLPTR: AtomicPtr<_> = AtomicPtr::new(ptr::null_mut());
+        const NULLPTR: AtomicPtr<Metadata<'static>> = AtomicPtr::new(ptr::null_mut());
         Self {
             array: [NULLPTR; MAX_CALLSITES],
             len: AtomicUsize::new(0),

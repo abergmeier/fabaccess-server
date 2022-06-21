@@ -7,4 +7,10 @@ edition = "2021"
 
 [dependencies]
 console-api = "0.3"
+tonic = { version = "0.7.2", default_features = false, features = [] }
+hyper = { version = "0.14", default_features = false, features = ["http2", "server", "stream"] }
+thread_local = "1.1"
 tracing = "0.1"
+tracing-core = "0.1"
+tracing-subscriber = { version = "0.3", default_features = false, features = ["registry"] }
+crossbeam-channel = "0.5"
