@@ -20,6 +20,9 @@ use std::marker::PhantomData;
 use std::mem::MaybeUninit;
 use std::sync::Arc;
 use std::time::Duration;
+use tracing::field::FieldSet;
+use tracing::metadata::Kind;
+use tracing::{Level, Span};
 
 #[derive(Debug)]
 struct Spooler<'a> {
@@ -45,12 +48,21 @@ impl Spooler<'_> {
 /// Global executor
 pub struct Executor<'a> {
     spooler: Arc<Spooler<'a>>,
+    span: Span,
 }
 
 impl<'a, 'executor: 'a> Executor<'executor> {
     pub fn new() -> Self {
         Executor {
             spooler: Arc::new(Spooler::new()),
+            span: tracing::span!(Level::INFO, "executor"),
+        }
+    }
+
+    pub fn new_with_parent_span(parent: &Span) -> Self {
+        Executor {
+            spooler: Arc::new(Spooler::new()),
+            span: tracing::span!(parent: parent, Level::INFO, "executor"),
         }
     }
 
@@ -99,7 +111,15 @@ impl<'a, 'executor: 'a> Executor<'executor> {
         F: Future<Output = R> + Send + 'a,
         R: Send + 'a,
     {
+        let span = tracing::info_span!(
+            parent: &self.span,
+            //target: "executor::spawn",
+            "runtime.spawn"
+        );
+        let _guard = span.enter();
+
         let (task, handle) = LightProc::recoverable(future, self.schedule());
+        tracing::trace!("spawning sendable task");
         task.schedule();
         handle
     }
@@ -109,7 +129,14 @@ impl<'a, 'executor: 'a> Executor<'executor> {
         F: Future<Output = R> + 'a,
         R: Send + 'a,
     {
+        let span = tracing::info_span!(
+            parent: &self.span,
+            //target: "executor::spawn",
+            "runtime.spawn_local"
+        );
+        let _guard = span.enter();
         let (task, handle) = LightProc::recoverable(future, schedule_local());
+        tracing::trace!("spawning sendable task");
         task.schedule();
         handle
     }

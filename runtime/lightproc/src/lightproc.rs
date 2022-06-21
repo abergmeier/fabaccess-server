@@ -33,7 +33,7 @@ use crate::raw_proc::RawProc;
 use crate::recoverable_handle::RecoverableHandle;
 use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
-use std::mem;
+use std::mem::ManuallyDrop;
 use std::panic::AssertUnwindSafe;
 use std::ptr::NonNull;
 
@@ -130,9 +130,9 @@ impl LightProc {
     ///
     /// Schedule the lightweight process with passed `schedule` function at the build time.
     pub fn schedule(self) {
-        let ptr = self.raw_proc.as_ptr();
+        let this = ManuallyDrop::new(self);
+        let ptr = this.raw_proc.as_ptr();
         let pdata = ptr as *const ProcData;
-        mem::forget(self);
 
         unsafe {
             ((*pdata).vtable.schedule)(ptr);
@@ -144,9 +144,9 @@ impl LightProc {
     /// "Running" a lightproc means ticking it once and if it doesn't complete
     /// immediately re-scheduling it as soon as it's Waker wakes it back up.
     pub fn run(self) {
-        let ptr = self.raw_proc.as_ptr();
+        let this = ManuallyDrop::new(self);
+        let ptr = this.raw_proc.as_ptr();
         let pdata = ptr as *const ProcData;
-        mem::forget(self);
 
         unsafe {
             ((*pdata).vtable.tick)(ptr);
