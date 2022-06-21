@@ -1,19 +1,21 @@
-use crate::aggregate::Id;
 use crate::Aggregator;
 use async_channel::{Receiver, Sender};
+use async_compat::CompatExt;
 use console_api::instrument;
 use console_api::instrument::instrument_server::{Instrument, InstrumentServer};
 use console_api::tasks;
 use futures_util::TryStreamExt;
 use std::error::Error;
+use std::future::Future;
 use std::io::IoSlice;
-use std::net::{IpAddr, Ipv6Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr, SocketAddr};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use tokio::io::AsyncRead as TokioAsyncRead;
 use tokio::io::{AsyncWrite as TokioAsyncWrite, ReadBuf};
 use tonic::transport::server::Connected;
 use tonic::Status;
+use tracing_core::span::Id;
 
 struct StreamWrapper<T>(T);
 impl<T> Connected for StreamWrapper<T> {
@@ -68,14 +70,16 @@ impl<T: TokioAsyncRead + Unpin> TokioAsyncRead for StreamWrapper<T> {
     }
 }
 
+#[derive(Debug)]
 pub struct Server {
-    aggregator: Aggregator,
+    pub aggregator: Option<Aggregator>,
     client_buffer_size: usize,
     subscribe: Sender<Command>,
 }
 
 impl Server {
-    pub(crate) const DEFAULT_ADDR: IpAddr = IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1));
+    //pub(crate) const DEFAULT_ADDR: IpAddr = IpAddr::V6(Ipv6Addr::new(0, 0, 0, 0, 0, 0, 0, 1));
+    pub(crate) const DEFAULT_ADDR: IpAddr = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
     pub(crate) const DEFAULT_PORT: u16 = 49289;
 
     pub(crate) fn new(
@@ -83,15 +87,14 @@ impl Server {
         client_buffer_size: usize,
         subscribe: Sender<Command>,
     ) -> Self {
-        let subscribe = todo!();
         Self {
-            aggregator,
+            aggregator: Some(aggregator),
             client_buffer_size,
             subscribe,
         }
     }
 
-    pub(crate) async fn serve(
+    pub async fn serve(
         mut self, /*, incoming: I */
     ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
         // TODO: Spawn two tasks; the aggregator that's collecting stats, aggregating and
@@ -99,16 +102,10 @@ impl Server {
 
         let svc = InstrumentServer::new(self);
 
-        // The gRPC server task; requires a `Stream` of `tokio::AsyncRead + tokio::AsyncWrite`.
-        let listener =
-            async_net::TcpListener::bind(SocketAddr::new(Self::DEFAULT_ADDR, Self::DEFAULT_PORT))
-                .await?;
-        let incoming = listener
-            .incoming()
-            .map_ok(|stream| StreamWrapper(async_compat::Compat::new(stream)));
         tonic::transport::Server::builder()
             .add_service(svc)
-            .serve_with_incoming(incoming)
+            .serve(SocketAddr::new(Self::DEFAULT_ADDR, Self::DEFAULT_PORT))
+            .compat()
             .await?;
 
         // TODO: Kill the aggregator task if the serve task has ended.
@@ -117,6 +114,7 @@ impl Server {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct Watch<T>(pub(crate) Sender<Result<T, tonic::Status>>);
 impl<T: Clone> Watch<T> {
     pub fn update(&self, update: &T) -> bool {
@@ -124,12 +122,14 @@ impl<T: Clone> Watch<T> {
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct WatchRequest<T> {
     pub id: Id,
     pub stream_sender: async_oneshot::Sender<Receiver<Result<T, tonic::Status>>>,
     pub buffer: usize,
 }
 
+#[derive(Debug)]
 pub(crate) enum Command {
     Instrument(Watch<instrument::Update>),
     WatchTaskDetail(WatchRequest<tasks::TaskDetails>),

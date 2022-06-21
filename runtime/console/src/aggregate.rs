@@ -1,35 +1,24 @@
+use crate::id_map::{IdMap, ToProto};
 use crate::server::{Watch, WatchRequest};
-use crate::stats::TimeAnchor;
-use crate::Event;
+use crate::stats::{TimeAnchor, Unsent};
 use crate::{server, stats};
+use crate::{Event, Shared};
 use console_api::{async_ops, instrument, resources, tasks};
 use crossbeam_channel::{Receiver, TryRecvError};
 use futures_util::{FutureExt, StreamExt};
+use std::collections::HashMap;
 use std::num::NonZeroU64;
-use std::sync::atomic::AtomicBool;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
+use tracing::span;
 use tracing_core::Metadata;
 
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Hash)]
-pub(crate) struct Id(NonZeroU64);
-
-impl Id {
-    pub fn from_non_zero_u64(u: NonZeroU64) -> Self {
-        Self(u)
-    }
-}
-
-impl Into<console_api::Id> for Id {
-    fn into(self) -> console_api::Id {
-        console_api::Id { id: self.0.into() }
-    }
-}
-
+#[derive(Debug)]
 struct Resource {
-    id: Id,
+    id: span::Id,
     is_dirty: AtomicBool,
-    parent_id: Option<Id>,
+    parent_id: Option<span::Id>,
     metadata: &'static Metadata<'static>,
     concrete_type: String,
     kind: resources::resource::Kind,
@@ -38,21 +27,99 @@ struct Resource {
 }
 
 /// Represents static data for tasks
+#[derive(Debug)]
 struct Task {
-    id: Id,
+    id: span::Id,
     is_dirty: AtomicBool,
     metadata: &'static Metadata<'static>,
     fields: Vec<console_api::Field>,
     location: Option<console_api::Location>,
 }
 
+#[derive(Debug)]
 struct AsyncOp {
-    id: Id,
+    id: span::Id,
     is_dirty: AtomicBool,
-    parent_id: Option<Id>,
-    resource_id: Id,
+    parent_id: Option<span::Id>,
+    resource_id: span::Id,
     metadata: &'static Metadata<'static>,
     source: String,
+}
+
+impl ToProto for Task {
+    type Output = tasks::Task;
+
+    fn to_proto(&self, _: &stats::TimeAnchor) -> Self::Output {
+        tasks::Task {
+            id: Some(self.id.clone().into()),
+            // TODO: more kinds of tasks...
+            kind: tasks::task::Kind::Spawn as i32,
+            metadata: Some(self.metadata.into()),
+            parents: Vec::new(), // TODO: implement parents nicely
+            fields: self.fields.clone(),
+            location: self.location.clone(),
+        }
+    }
+}
+
+impl Unsent for Task {
+    fn take_unsent(&self) -> bool {
+        self.is_dirty.swap(false, Ordering::AcqRel)
+    }
+
+    fn is_unsent(&self) -> bool {
+        self.is_dirty.load(Ordering::Acquire)
+    }
+}
+
+impl ToProto for Resource {
+    type Output = resources::Resource;
+
+    fn to_proto(&self, _: &stats::TimeAnchor) -> Self::Output {
+        resources::Resource {
+            id: Some(self.id.clone().into()),
+            parent_resource_id: self.parent_id.clone().map(Into::into),
+            kind: Some(self.kind.clone()),
+            metadata: Some(self.metadata.into()),
+            concrete_type: self.concrete_type.clone(),
+            location: self.location.clone(),
+            is_internal: self.is_internal,
+        }
+    }
+}
+
+impl Unsent for Resource {
+    fn take_unsent(&self) -> bool {
+        self.is_dirty.swap(false, Ordering::AcqRel)
+    }
+
+    fn is_unsent(&self) -> bool {
+        self.is_dirty.load(Ordering::Acquire)
+    }
+}
+
+impl ToProto for AsyncOp {
+    type Output = async_ops::AsyncOp;
+
+    fn to_proto(&self, _: &stats::TimeAnchor) -> Self::Output {
+        async_ops::AsyncOp {
+            id: Some(self.id.clone().into()),
+            metadata: Some(self.metadata.into()),
+            resource_id: Some(self.resource_id.clone().into()),
+            source: self.source.clone(),
+            parent_async_op_id: self.parent_id.clone().map(Into::into),
+        }
+    }
+}
+
+impl Unsent for AsyncOp {
+    fn take_unsent(&self) -> bool {
+        self.is_dirty.swap(false, Ordering::AcqRel)
+    }
+
+    fn is_unsent(&self) -> bool {
+        self.is_dirty.load(Ordering::Acquire)
+    }
 }
 
 #[derive(Copy, Clone, Eq, PartialEq)]
@@ -61,13 +128,13 @@ pub(crate) enum Include {
     UpdatedOnly,
 }
 
-type IdMap<T> = std::collections::HashMap<Id, T>;
-
-pub(crate) struct Aggregator {
+#[derive(Debug)]
+pub struct Aggregator {
+    shared: Arc<Shared>,
     events: Receiver<Event>,
     rpcs: async_channel::Receiver<server::Command>,
     watchers: Vec<Watch<instrument::Update>>,
-    details_watchers: IdMap<Vec<Watch<tasks::TaskDetails>>>,
+    details_watchers: HashMap<span::Id, Vec<Watch<tasks::TaskDetails>>>,
     all_metadata: Vec<console_api::register_metadata::NewMetadata>,
     new_metadata: Vec<console_api::register_metadata::NewMetadata>,
     running: bool,
@@ -83,23 +150,28 @@ pub(crate) struct Aggregator {
 }
 
 impl Aggregator {
-    pub fn new(events: Receiver<Event>, rpcs: async_channel::Receiver<server::Command>) -> Self {
+    pub(crate) fn new(
+        shared: Arc<Shared>,
+        events: Receiver<Event>,
+        rpcs: async_channel::Receiver<server::Command>,
+    ) -> Self {
         Self {
+            shared,
             events,
             rpcs,
             watchers: Vec::new(),
-            details_watchers: IdMap::new(),
+            details_watchers: HashMap::default(),
             running: true,
             publish_interval: Duration::from_secs(1),
             all_metadata: Vec::new(),
             new_metadata: Vec::new(),
             base_time: TimeAnchor::new(),
-            tasks: IdMap::new(),
-            task_stats: IdMap::new(),
-            resources: IdMap::new(),
-            resource_stats: IdMap::new(),
-            async_ops: IdMap::new(),
-            async_op_stats: IdMap::new(),
+            tasks: IdMap::default(),
+            task_stats: IdMap::default(),
+            resources: IdMap::default(),
+            resource_stats: IdMap::default(),
+            async_ops: IdMap::default(),
+            async_op_stats: IdMap::default(),
             poll_ops: Vec::new(),
         }
     }
@@ -163,15 +235,32 @@ impl Aggregator {
     }
 
     fn task_update(&mut self, include: Include) -> tasks::TaskUpdate {
-        todo!()
+        tasks::TaskUpdate {
+            new_tasks: self.tasks.as_proto_list(include, &self.base_time),
+            stats_update: self.task_stats.as_proto(include, &self.base_time),
+            dropped_events: self.shared.dropped_tasks.swap(0, Ordering::AcqRel) as u64,
+        }
     }
 
     fn resource_update(&mut self, include: Include) -> resources::ResourceUpdate {
-        todo!()
+        let new_poll_ops = match include {
+            Include::All => self.poll_ops.clone(),
+            Include::UpdatedOnly => std::mem::take(&mut self.poll_ops),
+        };
+        resources::ResourceUpdate {
+            new_resources: self.resources.as_proto_list(include, &self.base_time),
+            stats_update: self.resource_stats.as_proto(include, &self.base_time),
+            new_poll_ops,
+            dropped_events: self.shared.dropped_resources.swap(0, Ordering::AcqRel) as u64,
+        }
     }
 
     fn async_op_update(&mut self, include: Include) -> async_ops::AsyncOpUpdate {
-        todo!()
+        async_ops::AsyncOpUpdate {
+            new_async_ops: self.async_ops.as_proto_list(include, &self.base_time),
+            stats_update: self.async_op_stats.as_proto(include, &self.base_time),
+            dropped_events: self.shared.dropped_async_ops.swap(0, Ordering::AcqRel) as u64,
+        }
     }
 
     pub async fn run(mut self) {
@@ -210,7 +299,6 @@ impl Aggregator {
             // exited. that would result in a busy-loop. instead, we only want
             // to be woken when the flush interval has elapsed, or when the
             // channel is almost full.
-            let mut drained = false;
             while let Ok(event) = self.events.try_recv() {
                 self.update_state(event);
             }

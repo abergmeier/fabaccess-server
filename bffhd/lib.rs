@@ -76,13 +76,18 @@ pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 
 impl Diflouroborane {
     pub fn new(config: Config) -> miette::Result<Self> {
-        logging::init(&config.logging);
+        let mut server = logging::init(&config.logging);
         tracing::info!(version = env::VERSION, "Starting BFFH");
 
         let span = tracing::info_span!("setup");
         let _guard = span.enter();
 
         let executor = Executor::new();
+
+        if let Some(aggregator) = server.aggregator.take() {
+            executor.spawn(aggregator.run());
+        }
+        executor.spawn(server.serve());
 
         let env = StateDB::open_env(&config.db_path)?;
 
