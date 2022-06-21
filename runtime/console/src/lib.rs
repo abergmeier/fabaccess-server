@@ -13,10 +13,12 @@ use tracing_subscriber::registry::LookupSpan;
 use tracing_subscriber::Layer;
 
 mod aggregate;
+mod attribute;
 mod callsites;
 mod event;
 mod server;
 mod stack;
+mod stats;
 
 use crate::aggregate::Aggregator;
 use crate::callsites::Callsites;
@@ -46,6 +48,8 @@ pub struct Builder {
     /// A smaller number will reduce the memory footprint but may lead to more events being dropped
     /// during activity bursts.
     event_buffer_capacity: usize,
+
+    client_buffer_capacity: usize,
 }
 impl Builder {
     pub fn build(self) -> (ConsoleLayer, Server) {
@@ -59,6 +63,7 @@ impl Default for Builder {
             server_addr: Server::DEFAULT_ADDR,
             server_port: Server::DEFAULT_PORT,
             event_buffer_capacity: ConsoleLayer::DEFAULT_EVENT_BUFFER_CAPACITY,
+            client_buffer_capacity: 1024,
         }
     }
 }
@@ -85,8 +90,9 @@ impl ConsoleLayer {
 
         let (tx, events) = crossbeam_channel::bounded(config.event_buffer_capacity);
         let shared = Arc::new(Shared::default());
-        let aggregator = Aggregator::new(events);
-        let server = Server::new(aggregator);
+        let (subscribe, rpcs) = async_channel::bounded(config.client_buffer_capacity);
+        let aggregator = Aggregator::new(events, rpcs);
+        let server = Server::new(aggregator, config.client_buffer_capacity, subscribe);
         let layer = Self {
             current_spans: ThreadLocal::new(),
             tx,

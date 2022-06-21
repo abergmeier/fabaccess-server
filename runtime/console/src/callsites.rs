@@ -36,7 +36,7 @@ impl<const MAX_CALLSITES: usize> Callsites<MAX_CALLSITES> {
         while {
             for cs in &self.array[idx..end] {
                 let ptr = cs.load(Ordering::Acquire);
-                let meta = unsafe { ptr as *const _ as &Metadata<'static> };
+                let meta = unsafe { &*ptr };
                 if meta.callsite() == callsite.callsite() {
                     return true;
                 }
