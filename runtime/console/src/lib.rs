@@ -252,7 +252,7 @@ where
 {
     fn register_callsite(&self, metadata: &'static Metadata<'static>) -> Interest {
         let dropped = match (metadata.name(), metadata.target()) {
-            (_, "executor::spawn") => {
+            (_, "executor::task") | ("runtime.spawn", _) => {
                 self.spawn_callsites.insert(metadata);
                 &self.shared.dropped_tasks
             }

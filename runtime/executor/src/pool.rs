@@ -22,7 +22,7 @@ use std::sync::Arc;
 use std::time::Duration;
 use tracing::field::FieldSet;
 use tracing::metadata::Kind;
-use tracing::{Level, Span};
+use tracing::{Instrument, Level, Span};
 
 #[derive(Debug)]
 struct Spooler<'a> {
@@ -111,14 +111,13 @@ impl<'a, 'executor: 'a> Executor<'executor> {
         F: Future<Output = R> + Send + 'a,
         R: Send + 'a,
     {
-        let span = tracing::info_span!(
-            parent: &self.span,
-            //target: "executor::spawn",
-            "runtime.spawn"
+        let span = tracing::trace_span!(
+            target: "executor::task",
+            "runtime.spawn",
         );
-        let _guard = span.enter();
+        let fut = future.instrument(span);
 
-        let (task, handle) = LightProc::recoverable(future, self.schedule());
+        let (task, handle) = LightProc::recoverable(fut, self.schedule());
         tracing::trace!("spawning sendable task");
         task.schedule();
         handle
@@ -129,13 +128,13 @@ impl<'a, 'executor: 'a> Executor<'executor> {
         F: Future<Output = R> + 'a,
         R: Send + 'a,
     {
-        let span = tracing::info_span!(
-            parent: &self.span,
-            //target: "executor::spawn",
-            "runtime.spawn_local"
+        let span = tracing::trace_span!(
+            target: "executor::task",
+            "runtime.spawn",
         );
-        let _guard = span.enter();
-        let (task, handle) = LightProc::recoverable(future, schedule_local());
+        let fut = future.instrument(span);
+
+        let (task, handle) = LightProc::recoverable(fut, schedule_local());
         tracing::trace!("spawning sendable task");
         task.schedule();
         handle
