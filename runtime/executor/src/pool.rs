@@ -113,11 +113,11 @@ impl<'a, 'executor: 'a> Executor<'executor> {
     {
         let span = tracing::trace_span!(
             target: "executor::task",
+            parent: &self.span,
             "runtime.spawn",
         );
-        let fut = future.instrument(span);
 
-        let (task, handle) = LightProc::recoverable(fut, self.schedule());
+        let (task, handle) = LightProc::recoverable(future, self.schedule(), span);
         tracing::trace!("spawning sendable task");
         task.schedule();
         handle
@@ -130,11 +130,11 @@ impl<'a, 'executor: 'a> Executor<'executor> {
     {
         let span = tracing::trace_span!(
             target: "executor::task",
+            parent: &self.span,
             "runtime.spawn",
         );
-        let fut = future.instrument(span);
 
-        let (task, handle) = LightProc::recoverable(fut, schedule_local());
+        let (task, handle) = LightProc::recoverable(future, schedule_local(), span);
         tracing::trace!("spawning sendable task");
         task.schedule();
         handle

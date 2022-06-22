@@ -2,6 +2,7 @@ use crossbeam_deque::{Injector, Steal, Stealer, Worker};
 use crossbeam_queue::SegQueue;
 use crossbeam_utils::sync::{Parker, Unparker};
 use lightproc::prelude::LightProc;
+use lightproc::raw_proc::ProcData;
 use std::marker::PhantomData;
 use std::sync::Arc;
 use std::time::Duration;

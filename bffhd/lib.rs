@@ -62,6 +62,7 @@ use crate::users::db::UserDB;
 use crate::users::Users;
 use executor::pool::Executor;
 use signal_hook::consts::signal::*;
+use tracing::Span;
 
 pub struct Diflouroborane {
     config: Config,
@@ -70,6 +71,7 @@ pub struct Diflouroborane {
     pub users: Users,
     pub roles: Roles,
     pub resources: ResourcesHandle,
+    span: Span,
 }
 
 pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
@@ -77,10 +79,13 @@ pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 impl Diflouroborane {
     pub fn new(config: Config) -> miette::Result<Self> {
         let mut server = logging::init(&config.logging);
+        let span = tracing::info_span!(
+            target: "bffh",
+            "bffh"
+        );
+        let span2 = span.clone();
+        let _guard = span2.enter();
         tracing::info!(version = env::VERSION, "Starting BFFH");
-
-        let span = tracing::info_span!("setup");
-        let _guard = span.enter();
 
         let executor = Executor::new();
 
@@ -116,10 +121,12 @@ impl Diflouroborane {
             users,
             roles,
             resources,
+            span,
         })
     }
 
     pub fn run(&mut self) -> miette::Result<()> {
+        let _guard = self.span.enter();
         let mut signals = signal_hook_async_std::Signals::new(&[SIGINT, SIGQUIT, SIGTERM])
             .into_diagnostic()
             .wrap_err("Failed to construct signal handler")?;

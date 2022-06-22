@@ -36,6 +36,7 @@ use std::future::Future;
 use std::mem::ManuallyDrop;
 use std::panic::AssertUnwindSafe;
 use std::ptr::NonNull;
+use tracing::Span;
 
 /// Shared functionality for both Send and !Send LightProc
 pub struct LightProc {
@@ -76,14 +77,18 @@ impl LightProc {
     ///     println!("future panicked!: {}", &reason);
     /// });
     /// ```
-    pub fn recoverable<'a, F, R, S>(future: F, schedule: S) -> (Self, RecoverableHandle<R>)
+    pub fn recoverable<'a, F, R, S>(
+        future: F,
+        schedule: S,
+        span: Span,
+    ) -> (Self, RecoverableHandle<R>)
     where
         F: Future<Output = R> + 'a,
         R: 'a,
         S: Fn(LightProc) + 'a,
     {
         let recovery_future = AssertUnwindSafe(future).catch_unwind();
-        let (proc, handle) = Self::build(recovery_future, schedule);
+        let (proc, handle) = Self::build(recovery_future, schedule, span);
         (proc, RecoverableHandle::new(handle))
     }
 
@@ -92,6 +97,7 @@ impl LightProc {
     ///
     /// # Example
     /// ```rust
+    /// # use tracing::Span;
     /// # use lightproc::prelude::*;
     /// #
     /// # // ... future that does work
@@ -113,15 +119,16 @@ impl LightProc {
     /// let standard = LightProc::build(
     ///     future,
     ///     schedule_function,
+    ///     Span::current(),
     /// );
     /// ```
-    pub fn build<'a, F, R, S>(future: F, schedule: S) -> (Self, ProcHandle<R>)
+    pub fn build<'a, F, R, S>(future: F, schedule: S, span: Span) -> (Self, ProcHandle<R>)
     where
         F: Future<Output = R> + 'a,
         R: 'a,
         S: Fn(LightProc) + 'a,
     {
-        let raw_proc = RawProc::allocate(future, schedule);
+        let raw_proc = RawProc::allocate(future, schedule, span);
         let proc = LightProc { raw_proc };
         let handle = ProcHandle::new(raw_proc);
         (proc, handle)

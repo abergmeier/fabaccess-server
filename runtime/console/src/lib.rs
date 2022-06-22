@@ -252,11 +252,11 @@ where
 {
     fn register_callsite(&self, metadata: &'static Metadata<'static>) -> Interest {
         let dropped = match (metadata.name(), metadata.target()) {
-            (_, "executor::task") | ("runtime.spawn", _) => {
+            (_, TaskVisitor::SPAWN_TARGET) | (TaskVisitor::SPAWN_NAME, _) => {
                 self.spawn_callsites.insert(metadata);
                 &self.shared.dropped_tasks
             }
-            (_, "executor::waker") => {
+            (WakerVisitor::WAKE_TARGET, _) => {
                 self.waker_callsites.insert(metadata);
                 &self.shared.dropped_tasks
             }
@@ -268,7 +268,7 @@ where
                 self.async_op_callsites.insert(metadata);
                 &self.shared.dropped_async_ops
             }
-            ("runtime.resource.async_op.poll", _) => {
+            (AsyncOpVisitor::ASYNC_OP_POLL_NAME, _) => {
                 self.async_op_poll_callsites.insert(metadata);
                 &self.shared.dropped_async_ops
             }

@@ -97,9 +97,6 @@ impl Server {
     pub async fn serve(
         mut self, /*, incoming: I */
     ) -> Result<(), Box<dyn Error + Send + Sync + 'static>> {
-        // TODO: Spawn two tasks; the aggregator that's collecting stats, aggregating and
-        //       collating them and the server task doing the tonic gRPC stuff
-
         let svc = InstrumentServer::new(self);
 
         tonic::transport::Server::builder()

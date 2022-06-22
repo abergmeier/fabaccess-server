@@ -16,8 +16,10 @@ use std::ptr::NonNull;
 use std::sync::atomic::Ordering;
 
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use tracing::Span;
 
 /// Raw pointers to the fields of a proc.
+// TODO: Make generic over the Allocator used!
 pub(crate) struct RawProc<'a, F, R, S> {
     pub(crate) pdata: *const ProcData,
     pub(crate) schedule: *const S,
@@ -26,6 +28,10 @@ pub(crate) struct RawProc<'a, F, R, S> {
 
     // Make the lifetime 'a of the future invariant
     _marker: PhantomData<&'a ()>,
+    // TODO: We should link a proc to a process bucket for scheduling and tracing
+    //      => nope, do that via scheduling func
+    // TODO: A proc should be able to be assigned a name for tracing and reporting
+    //       This could also be implemented via storing a Span similar to `Instrumented`
 }
 
 impl<'a, F, R, S> RawProc<'a, F, R, S>
@@ -37,7 +43,7 @@ where
     /// Allocates a proc with the given `future` and `schedule` function.
     ///
     /// It is assumed there are initially only the `LightProc` reference and the `ProcHandle`.
-    pub(crate) fn allocate(future: F, schedule: S) -> NonNull<()> {
+    pub(crate) fn allocate(future: F, schedule: S, span: Span) -> NonNull<()> {
         // Compute the layout of the proc for allocation. Abort if the computation fails.
         let proc_layout = Self::proc_layout();
 
@@ -70,6 +76,7 @@ where
                     destroy: Self::destroy,
                     tick: Self::tick,
                 },
+                span,
             });
 
             // Write the schedule function as the third field of the proc.
@@ -128,6 +135,16 @@ where
     /// Wakes a waker.
     unsafe fn wake(ptr: *const ()) {
         let raw = Self::from_ptr(ptr);
+        let _guard = (&(*raw.pdata).span).enter();
+        let id = (&(*raw.pdata).span)
+            .id()
+            .map(|id| id.into_u64())
+            .unwrap_or(0);
+        tracing::trace!(
+            target: "executor::waker",
+            op = "waker.wake",
+            task.id = id,
+        );
 
         let mut state = (*raw.pdata).state.load(Ordering::Acquire);
 
@@ -191,6 +208,16 @@ where
     /// Wakes a waker by reference.
     unsafe fn wake_by_ref(ptr: *const ()) {
         let raw = Self::from_ptr(ptr);
+        let _guard = (&(*raw.pdata).span).enter();
+        let id = (&(*raw.pdata).span)
+            .id()
+            .map(|id| id.into_u64())
+            .unwrap_or(0);
+        tracing::trace!(
+            target: "executor::waker",
+            op = "waker.wake_by_ref",
+            task.id = id,
+        );
 
         let mut state = (*raw.pdata).state.load(Ordering::Acquire);
 
@@ -250,6 +277,17 @@ where
     /// Clones a waker.
     unsafe fn clone_waker(ptr: *const ()) -> RawWaker {
         let raw = Self::from_ptr(ptr);
+        let _guard = (&(*raw.pdata).span).enter();
+        let id = (&(*raw.pdata).span)
+            .id()
+            .map(|id| id.into_u64())
+            .unwrap_or(0);
+        tracing::trace!(
+            target: "executor::waker",
+            op = "waker.clone",
+            task.id = id,
+        );
+
         let raw_waker = &(*raw.pdata).vtable.raw_waker;
 
         // Increment the reference count. With any kind of reference-counted data structure,
@@ -271,6 +309,16 @@ where
     #[inline]
     unsafe fn decrement(ptr: *const ()) {
         let raw = Self::from_ptr(ptr);
+        let _guard = (&(*raw.pdata).span).enter();
+        let id = (&(*raw.pdata).span)
+            .id()
+            .map(|id| id.into_u64())
+            .unwrap_or(0);
+        tracing::trace!(
+            target: "executor::waker",
+            op = "waker.drop",
+            task.id = id,
+        );
 
         // Decrement the reference count.
         let new = (*raw.pdata).state.fetch_sub(1, Ordering::AcqRel);
@@ -322,6 +370,9 @@ where
         // We need a safeguard against panics because destructors can panic.
         // Drop the schedule function.
         (raw.schedule as *mut S).drop_in_place();
+
+        // Drop the proc data containing the associated Span
+        (raw.pdata as *mut ProcData).drop_in_place();
 
         // Finally, deallocate the memory reserved by the proc.
         alloc::dealloc(ptr as *mut u8, proc_layout.layout);

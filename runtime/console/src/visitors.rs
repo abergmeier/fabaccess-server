@@ -240,6 +240,9 @@ impl FieldVisitor {
 }
 
 impl TaskVisitor {
+    pub(crate) const SPAWN_TARGET: &'static str = "executor::task";
+    pub(crate) const SPAWN_NAME: &'static str = "runtime.spawn";
+
     pub(crate) fn new(meta_id: console_api::MetaId) -> Self {
         TaskVisitor {
             field_visitor: FieldVisitor::new(meta_id),
@@ -340,6 +343,7 @@ impl Visit for FieldVisitor {
 
 impl AsyncOpVisitor {
     pub(crate) const ASYNC_OP_SPAN_NAME: &'static str = "runtime.resource.async_op";
+    pub(crate) const ASYNC_OP_POLL_NAME: &'static str = "runtime.resource.async_op.poll";
     const ASYNC_OP_SRC_FIELD_NAME: &'static str = "source";
 
     pub(crate) fn result(self) -> Option<(String, bool)> {
@@ -365,6 +369,8 @@ impl Visit for AsyncOpVisitor {
 }
 
 impl WakerVisitor {
+    pub(crate) const WAKE_TARGET: &'static str = "executor::waker";
+
     const WAKE: &'static str = "waker.wake";
     const WAKE_BY_REF: &'static str = "waker.wake_by_ref";
     const CLONE: &'static str = "waker.clone";

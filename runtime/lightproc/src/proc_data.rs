@@ -5,6 +5,7 @@ use std::cell::Cell;
 use std::fmt::{self, Debug, Formatter};
 use std::sync::atomic::Ordering;
 use std::task::Waker;
+use tracing::Span;
 
 /// The pdata of a proc.
 ///
@@ -25,6 +26,12 @@ pub(crate) struct ProcData {
     /// In addition to the actual waker virtual table, it also contains pointers to several other
     /// methods necessary for bookkeeping the heap-allocated proc.
     pub(crate) vtable: &'static ProcVTable,
+
+    /// The span assigned to this process.
+    ///
+    /// A lightproc has a tracing span associated that allow recording occurances of vtable calls
+    /// for this process.
+    pub(crate) span: Span,
 }
 
 impl ProcData {
