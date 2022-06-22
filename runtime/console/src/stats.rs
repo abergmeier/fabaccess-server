@@ -209,7 +209,7 @@ impl TaskStats {
                 polls: AtomicUsize::new(0),
             },
             wakes: AtomicUsize::new(0),
-            waker_clones: AtomicUsize::new(0),
+            waker_clones: AtomicUsize::new(1),
             waker_drops: AtomicUsize::new(0),
             self_wakes: AtomicUsize::new(0),
         }
@@ -232,7 +232,6 @@ impl TaskStats {
         use event::WakeOp;
         match op {
             WakeOp::Wake { self_wake } => {
-                self.waker_drops.fetch_add(1, Ordering::Release);
                 self.wake(at, self_wake);
             }
             WakeOp::WakeByRef { self_wake } => {

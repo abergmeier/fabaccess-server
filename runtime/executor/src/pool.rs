@@ -106,15 +106,21 @@ impl<'a, 'executor: 'a> Executor<'executor> {
     /// );
     /// # }
     /// ```
+    #[track_caller]
     pub fn spawn<F, R>(&self, future: F) -> RecoverableHandle<R>
     where
         F: Future<Output = R> + Send + 'a,
         R: Send + 'a,
     {
+        let location = std::panic::Location::caller();
         let span = tracing::trace_span!(
             target: "executor::task",
-            parent: &self.span,
+            parent: Span::current(),
             "runtime.spawn",
+            kind = "global",
+            loc.file = location.file(),
+            loc.line = location.line(),
+            loc.col = location.column(),
         );
 
         let (task, handle) = LightProc::recoverable(future, self.schedule(), span);
@@ -123,15 +129,21 @@ impl<'a, 'executor: 'a> Executor<'executor> {
         handle
     }
 
+    #[track_caller]
     pub fn spawn_local<F, R>(&self, future: F) -> RecoverableHandle<R>
     where
         F: Future<Output = R> + 'a,
         R: Send + 'a,
     {
+        let location = std::panic::Location::caller();
         let span = tracing::trace_span!(
             target: "executor::task",
-            parent: &self.span,
+            parent: Span::current(),
             "runtime.spawn",
+            kind = "local",
+            loc.file = location.file(),
+            loc.line = location.line(),
+            loc.col = location.column(),
         );
 
         let (task, handle) = LightProc::recoverable(future, schedule_local(), span);

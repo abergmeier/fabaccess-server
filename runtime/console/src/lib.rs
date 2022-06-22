@@ -256,7 +256,7 @@ where
                 self.spawn_callsites.insert(metadata);
                 &self.shared.dropped_tasks
             }
-            (WakerVisitor::WAKE_TARGET, _) => {
+            (_, WakerVisitor::WAKE_TARGET) => {
                 self.waker_callsites.insert(metadata);
                 &self.shared.dropped_tasks
             }
@@ -311,7 +311,9 @@ where
                 (event, stats)
             }) {
                 ctx.span(id)
-                    .expect("`on_new_span` called with nonexistent span. This is a tracing bug.");
+                    .expect("`on_new_span` called with nonexistent span. This is a tracing bug.")
+                    .extensions_mut()
+                    .insert(stats);
             }
         } else if self.is_resource(metadata) {
             let at = Instant::now();
@@ -346,7 +348,10 @@ where
                     };
                     (event, stats)
                 }) {
-                    ctx.span(id).expect("if `on_new_span` was called, the span must exist; this is a `tracing` bug!").extensions_mut().insert(stats);
+                    ctx.span(id)
+                        .expect("if `on_new_span` was called, the span must exist; this is a `tracing` bug!")
+                        .extensions_mut()
+                        .insert(stats);
                 }
             }
         } else if self.is_async_op(metadata) {
@@ -381,7 +386,10 @@ where
                             (event, stats)
                         })
                     {
-                        ctx.span(id).expect("if `on_new_span` was called, the span must exist; this is a `tracing` bug!").extensions_mut().insert(stats);
+                        ctx.span(id)
+                            .expect("if `on_new_span` was called, the span must exist; this is a `tracing` bug!")
+                            .extensions_mut()
+                            .insert(stats);
                     }
                 }
             }

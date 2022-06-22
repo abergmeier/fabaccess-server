@@ -335,13 +335,13 @@ impl Aggregator {
             async_op_update,
         };
 
-        //self.watchers.retain_and_shrink(|watch: &Watch<instrument::Update>| watch.update
-        // (&update));
+        self.watchers
+            .retain(|watch: &Watch<instrument::Update>| watch.update(&update));
 
         let stats = &self.task_stats;
         // Assuming there are much fewer task details subscribers than there are
         // stats updates, iterate over `details_watchers` and compact the map.
-        /*self.details_watchers.retain_and_shrink(|id, watchers| {
+        self.details_watchers.retain(|id, watchers| {
             if let Some(task_stats) = stats.get(id) {
                 let details = tasks::TaskDetails {
                     task_id: Some(id.clone().into()),
@@ -354,8 +354,6 @@ impl Aggregator {
                 false
             }
         });
-
-         */
     }
 
     /// Update the current state with data from a single event.

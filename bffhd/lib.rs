@@ -92,7 +92,22 @@ impl Diflouroborane {
         if let Some(aggregator) = server.aggregator.take() {
             executor.spawn(aggregator.run());
         }
-        executor.spawn(server.serve());
+        tracing::info!("Server is being spawned");
+        let handle = executor.spawn(server.serve());
+        std::thread::spawn(move || {
+            let result = async_io::block_on(handle);
+            match result {
+                Some(Ok(())) => {
+                    tracing::info!("console server finished without error");
+                }
+                Some(Err(error)) => {
+                    tracing::info!(%error, "console server finished with error");
+                }
+                None => {
+                    tracing::info!("console server finished with panic");
+                }
+            }
+        });
 
         let env = StateDB::open_env(&config.db_path)?;
 
