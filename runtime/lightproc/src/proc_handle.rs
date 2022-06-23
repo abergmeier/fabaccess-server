@@ -191,6 +191,14 @@ impl<R> Drop for ProcHandle<R> {
         let mut output = None;
 
         unsafe {
+            // Record dropping the handle for this task
+            let id = (&(*pdata).span).id().map(|id| id.into_u64()).unwrap_or(0);
+            tracing::trace!(
+                target: "executor::handle",
+                op = "handle.drop",
+                task.id = id,
+            );
+
             // Optimistically assume the `ProcHandle` is being dropped just after creating the
             // proc. This is a common case so if the handle is not used, the overhead of it is only
             // one compare-exchange operation.

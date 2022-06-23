@@ -48,21 +48,12 @@ impl Spooler<'_> {
 /// Global executor
 pub struct Executor<'a> {
     spooler: Arc<Spooler<'a>>,
-    span: Span,
 }
 
 impl<'a, 'executor: 'a> Executor<'executor> {
     pub fn new() -> Self {
         Executor {
             spooler: Arc::new(Spooler::new()),
-            span: tracing::span!(Level::INFO, "executor"),
-        }
-    }
-
-    pub fn new_with_parent_span(parent: &Span) -> Self {
-        Executor {
-            spooler: Arc::new(Spooler::new()),
-            span: tracing::span!(parent: parent, Level::INFO, "executor"),
         }
     }
 
@@ -115,7 +106,6 @@ impl<'a, 'executor: 'a> Executor<'executor> {
         let location = std::panic::Location::caller();
         let span = tracing::trace_span!(
             target: "executor::task",
-            parent: Span::current(),
             "runtime.spawn",
             loc.file = location.file(),
             loc.line = location.line(),
@@ -138,7 +128,6 @@ impl<'a, 'executor: 'a> Executor<'executor> {
         let location = std::panic::Location::caller();
         let span = tracing::trace_span!(
             target: "executor::task",
-            parent: Span::current(),
             "runtime.spawn",
             loc.file = location.file(),
             loc.line = location.line(),
