@@ -256,7 +256,7 @@ where
                 self.spawn_callsites.insert(metadata);
                 &self.shared.dropped_tasks
             }
-            (_, WakerVisitor::WAKE_TARGET) => {
+            (_, WakerVisitor::WAKER_EVENT_TARGET) => {
                 self.waker_callsites.insert(metadata);
                 &self.shared.dropped_tasks
             }
@@ -419,6 +419,7 @@ where
                     }
                 }
             }
+        } else if self.poll_op_callsites.contains(metadata) {
         }
     }
 

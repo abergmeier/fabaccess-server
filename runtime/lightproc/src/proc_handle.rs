@@ -22,6 +22,8 @@ pub struct ProcHandle<R> {
     pub(crate) raw_proc: NonNull<()>,
 
     /// A marker capturing the generic type `R`.
+    // TODO: Instead of writing the future output to the RawProc on heap, put it in the handle
+    //       (if still available).
     pub(crate) result: PhantomData<R>,
 }
 

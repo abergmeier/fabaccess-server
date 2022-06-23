@@ -117,10 +117,10 @@ impl<'a, 'executor: 'a> Executor<'executor> {
             target: "executor::task",
             parent: Span::current(),
             "runtime.spawn",
-            kind = "global",
             loc.file = location.file(),
             loc.line = location.line(),
             loc.col = location.column(),
+            kind = "global",
         );
 
         let (task, handle) = LightProc::recoverable(future, self.schedule(), span);
@@ -140,10 +140,10 @@ impl<'a, 'executor: 'a> Executor<'executor> {
             target: "executor::task",
             parent: Span::current(),
             "runtime.spawn",
-            kind = "local",
             loc.file = location.file(),
             loc.line = location.line(),
             loc.col = location.column(),
+            kind = "local",
         );
 
         let (task, handle) = LightProc::recoverable(future, schedule_local(), span);

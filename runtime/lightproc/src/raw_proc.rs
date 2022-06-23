@@ -24,7 +24,8 @@ pub(crate) struct RawProc<'a, F, R, S> {
     pub(crate) pdata: *const ProcData,
     pub(crate) schedule: *const S,
     pub(crate) future: *mut F,
-    // TODO: Replace with `MaybeUninit`
+    // TODO: Replace with `*mut MaybeUninit`? And also, store the result in the handle if that's
+    //       still available, instead of copying it to the heap.
     pub(crate) output: *mut R,
 
     // Make the lifetime 'a of the future invariant

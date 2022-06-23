@@ -369,7 +369,7 @@ impl Visit for AsyncOpVisitor {
 }
 
 impl WakerVisitor {
-    pub(crate) const WAKE_TARGET: &'static str = "executor::waker";
+    pub(crate) const WAKER_EVENT_TARGET: &'static str = "executor::waker";
 
     const WAKE: &'static str = "waker.wake";
     const WAKE_BY_REF: &'static str = "waker.wake_by_ref";
