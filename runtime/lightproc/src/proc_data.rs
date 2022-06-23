@@ -3,9 +3,15 @@ use crate::state::*;
 use crossbeam_utils::Backoff;
 use std::cell::Cell;
 use std::fmt::{self, Debug, Formatter};
+use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
 use std::task::Waker;
 use tracing::Span;
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(transparent)]
+/// Opaque id of the group this proc belongs to
+pub struct GroupId(NonZeroU64);
 
 /// The pdata of a proc.
 ///
@@ -32,6 +38,11 @@ pub(crate) struct ProcData {
     /// A lightproc has a tracing span associated that allow recording occurances of vtable calls
     /// for this process.
     pub(crate) span: Span,
+
+    /// Control group assigned to this process.
+    ///
+    /// The control group links this process to its supervision tree
+    pub(crate) cgroup: Option<GroupId>,
 }
 
 impl ProcData {

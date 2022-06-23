@@ -13,6 +13,7 @@ use crate::worker::{Sleeper, WorkerThread};
 use crossbeam_deque::{Injector, Stealer};
 use lightproc::lightproc::LightProc;
 use lightproc::recoverable_handle::RecoverableHandle;
+use lightproc::GroupId;
 use std::cell::Cell;
 use std::future::Future;
 use std::iter::Iterator;
@@ -112,8 +113,9 @@ impl<'a, 'executor: 'a> Executor<'executor> {
             loc.col = location.column(),
             kind = "global",
         );
+        let cgroup = None;
 
-        let (task, handle) = LightProc::recoverable(future, self.schedule(), span);
+        let (task, handle) = LightProc::recoverable(future, self.schedule(), span, cgroup);
         tracing::trace!("spawning sendable task");
         task.schedule();
         handle
@@ -134,8 +136,9 @@ impl<'a, 'executor: 'a> Executor<'executor> {
             loc.col = location.column(),
             kind = "local",
         );
+        let cgroup = None;
 
-        let (task, handle) = LightProc::recoverable(future, schedule_local(), span);
+        let (task, handle) = LightProc::recoverable(future, schedule_local(), span, cgroup);
         tracing::trace!("spawning sendable task");
         task.schedule();
         handle

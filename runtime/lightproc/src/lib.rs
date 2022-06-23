@@ -33,6 +33,8 @@ pub mod lightproc;
 pub mod proc_handle;
 pub mod recoverable_handle;
 
+pub use proc_data::GroupId;
+
 /// The lightproc prelude.
 ///
 /// The prelude re-exports lightproc structs and handles from this crate.

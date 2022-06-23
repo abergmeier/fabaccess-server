@@ -15,6 +15,7 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::atomic::Ordering;
 
+use crate::GroupId;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
 use tracing::Span;
 
@@ -49,7 +50,12 @@ where
     /// Allocates a proc with the given `future` and `schedule` function.
     ///
     /// It is assumed there are initially only the `LightProc` reference and the `ProcHandle`.
-    pub(crate) fn allocate(future: F, schedule: S, span: Span) -> NonNull<()> {
+    pub(crate) fn allocate(
+        future: F,
+        schedule: S,
+        span: Span,
+        cgroup: Option<GroupId>,
+    ) -> NonNull<()> {
         // Compute the layout of the proc for allocation. Abort if the computation fails.
         let proc_layout = Self::proc_layout();
 
@@ -83,6 +89,7 @@ where
                     tick: Self::tick,
                 },
                 span,
+                cgroup,
             });
 
             // Write the schedule function as the third field of the proc.
@@ -360,10 +367,11 @@ where
         raw.output as *const ()
     }
 
-    /// Cleans up proc's resources and deallocates it.
+    /// Cleans up the procs resources and deallocates the associated memory.
     ///
-    /// If the proc has not been closed, then its future or the output will be dropped. The
-    /// schedule function gets dropped too.
+    /// The future or output stored will *not* be dropped, but its memory will be freed. Callers
+    /// must ensure that they are correctly dropped beforehand if either of those is still alive to
+    /// prevent use-after-free.
     #[inline]
     unsafe fn destroy(ptr: *const ()) {
         let raw = Self::from_ptr(ptr);

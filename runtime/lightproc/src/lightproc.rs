@@ -31,6 +31,7 @@ use crate::proc_ext::ProcFutureExt;
 use crate::proc_handle::ProcHandle;
 use crate::raw_proc::RawProc;
 use crate::recoverable_handle::RecoverableHandle;
+use crate::GroupId;
 use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
 use std::mem::ManuallyDrop;
@@ -81,6 +82,7 @@ impl LightProc {
         future: F,
         schedule: S,
         span: Span,
+        cgroup: Option<GroupId>,
     ) -> (Self, RecoverableHandle<R>)
     where
         F: Future<Output = R> + 'a,
@@ -88,7 +90,7 @@ impl LightProc {
         S: Fn(LightProc) + 'a,
     {
         let recovery_future = AssertUnwindSafe(future).catch_unwind();
-        let (proc, handle) = Self::build(recovery_future, schedule, span);
+        let (proc, handle) = Self::build(recovery_future, schedule, span, cgroup);
         (proc, RecoverableHandle::new(handle))
     }
 
@@ -122,13 +124,18 @@ impl LightProc {
     ///     Span::current(),
     /// );
     /// ```
-    pub fn build<'a, F, R, S>(future: F, schedule: S, span: Span) -> (Self, ProcHandle<R>)
+    pub fn build<'a, F, R, S>(
+        future: F,
+        schedule: S,
+        span: Span,
+        cgroup: Option<GroupId>,
+    ) -> (Self, ProcHandle<R>)
     where
         F: Future<Output = R> + 'a,
         R: 'a,
         S: Fn(LightProc) + 'a,
     {
-        let raw_proc = RawProc::allocate(future, schedule, span);
+        let raw_proc = RawProc::allocate(future, schedule, span, cgroup);
         let proc = LightProc { raw_proc };
         let handle = ProcHandle::new(raw_proc);
         (proc, handle)
