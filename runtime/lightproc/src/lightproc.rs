@@ -46,8 +46,8 @@ pub struct LightProc {
 
 // LightProc is both Sync and Send because it explicitly handles synchronization internally:
 // The state of a `LightProc` is only modified atomically guaranteeing a consistent view from all
-// threads. Existing handles are atomically reference counted so the proc itself will not be dropped
-// until all pointers to it are themselves dropped.
+// threads. Existing wakers (and the proc_handle) are atomically reference counted so the proc
+// itself will not be dropped until all pointers to it are themselves dropped.
 // However, if the future or result inside the LightProc is !Send the executor must ensure that
 // the `schedule` function does not move the LightProc to a different thread.
 unsafe impl Send for LightProc {}

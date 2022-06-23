@@ -20,6 +20,7 @@ use tracing::Span;
 
 /// Raw pointers to the fields of a proc.
 // TODO: Make generic over the Allocator used!
+// TODO: The actual layout stored could be expressed as a struct w/ union. Maybe do that?
 pub(crate) struct RawProc<'a, F, R, S> {
     pub(crate) pdata: *const ProcData,
     pub(crate) schedule: *const S,
@@ -30,10 +31,13 @@ pub(crate) struct RawProc<'a, F, R, S> {
 
     // Make the lifetime 'a of the future invariant
     _marker: PhantomData<&'a ()>,
-    // TODO: We should link a proc to a process bucket for scheduling and tracing
-    //      => nope, do that via scheduling func
-    // TODO: A proc should be able to be assigned a name for tracing and reporting
-    //       This could also be implemented via storing a Span similar to `Instrumented`
+    // TODO: We should link a proc to a process group for scheduling and tracing
+    //    - sub-tasks should start in the same group by default
+    //    - that data needs to be available when calling `spawn` and to decide which task to run.
+    //      So there must be a thread-local reference to it that's managed by the executor, and
+    //      updated when a new task is being polled.
+    //      Additionally `schedule` must have a reference to it to be able to push to the right
+    //      queue? The `schedule` fn could just come from the group instead.
 }
 
 impl<'a, F, R, S> RawProc<'a, F, R, S>

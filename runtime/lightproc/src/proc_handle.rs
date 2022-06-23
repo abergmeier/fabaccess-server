@@ -6,6 +6,7 @@ use crate::state::*;
 use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
 use std::marker::{PhantomData, Unpin};
+use std::mem::MaybeUninit;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::atomic::Ordering;
@@ -24,7 +25,7 @@ pub struct ProcHandle<R> {
     /// A marker capturing the generic type `R`.
     // TODO: Instead of writing the future output to the RawProc on heap, put it in the handle
     //       (if still available).
-    pub(crate) result: PhantomData<R>,
+    pub(crate) result: MaybeUninit<R>,
 }
 
 unsafe impl<R: Send> Send for ProcHandle<R> {}
@@ -36,7 +37,7 @@ impl<R> ProcHandle<R> {
     pub(crate) fn new(raw_proc: NonNull<()>) -> Self {
         Self {
             raw_proc,
-            result: PhantomData,
+            result: MaybeUninit::uninit(),
         }
     }
 
@@ -50,6 +51,13 @@ impl<R> ProcHandle<R> {
         let pdata = ptr as *const ProcData;
 
         unsafe {
+            let id = (&(*pdata).span).id().map(|id| id.into_u64()).unwrap_or(0);
+            tracing::trace!(
+                target: "executor::handle",
+                op = "handle.cancel",
+                task.id = id,
+            );
+
             let mut state = (*pdata).state.load(Ordering::Acquire);
 
             loop {
