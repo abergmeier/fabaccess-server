@@ -51,6 +51,10 @@ hdrhistogram = "7.5"
 # Stats & Tracing
 tracing = "0.1"
 
+# Supervision trees
+sharded-slab = "0.1"
+thread_local = "1.1"
+
 [dev-dependencies]
 async-std = "1.10.0"
 tracing = { version = "0.1.19", features = ["max_level_trace"]}

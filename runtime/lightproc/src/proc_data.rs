@@ -13,6 +13,40 @@ use tracing::Span;
 /// Opaque id of the group this proc belongs to
 pub struct GroupId(NonZeroU64);
 
+impl GroupId {
+    /// Construct an ID from an u64
+    ///
+    /// # Panics
+    /// - if the provided `u64` is `0`.
+    pub fn from_u64(i: u64) -> Self {
+        Self(NonZeroU64::new(i).expect("group id must be > 0"))
+    }
+
+    #[inline]
+    /// Construct an ID from a NonZeroU64
+    ///
+    /// This method can't fail
+    pub const fn from_non_zero_u64(i: NonZeroU64) -> Self {
+        Self(i)
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    //noinspection RsSelfConvention
+    #[inline]
+    /// Convert a GroupId into a u64
+    pub const fn into_u64(&self) -> u64 {
+        self.0.get()
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    //noinspection RsSelfConvention
+    #[inline]
+    /// Convert a GroupId into a NonZeroU64
+    pub const fn into_non_zero_u64(&self) -> NonZeroU64 {
+        self.0
+    }
+}
+
 /// The pdata of a proc.
 ///
 /// This pdata is stored right at the beginning of every heap-allocated proc.

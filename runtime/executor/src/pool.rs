@@ -8,6 +8,7 @@
 //! [`Worker`]: crate::run_queue::Worker
 
 use crate::run::block;
+use crate::supervision::SupervisionRegistry;
 use crate::thread_manager::{DynamicRunner, ThreadManager};
 use crate::worker::{Sleeper, WorkerThread};
 use crossbeam_deque::{Injector, Stealer};
@@ -49,12 +50,19 @@ impl Spooler<'_> {
 /// Global executor
 pub struct Executor<'a> {
     spooler: Arc<Spooler<'a>>,
+    root_cgroup: GroupId,
 }
 
 impl<'a, 'executor: 'a> Executor<'executor> {
     pub fn new() -> Self {
+        let root_cgroup = SupervisionRegistry::with(|registry| {
+            let cgroup = registry.new_root_group();
+            registry.set_current(&cgroup);
+            cgroup
+        });
         Executor {
             spooler: Arc::new(Spooler::new()),
+            root_cgroup,
         }
     }
 
@@ -105,6 +113,8 @@ impl<'a, 'executor: 'a> Executor<'executor> {
         R: Send + 'a,
     {
         let location = std::panic::Location::caller();
+        let cgroup = SupervisionRegistry::current();
+        let id = cgroup.as_ref().map(|id| id.into_u64()).unwrap_or(0);
         let span = tracing::trace_span!(
             target: "executor::task",
             "runtime.spawn",
@@ -112,8 +122,8 @@ impl<'a, 'executor: 'a> Executor<'executor> {
             loc.line = location.line(),
             loc.col = location.column(),
             kind = "global",
+            cgroup = id,
         );
-        let cgroup = None;
 
         let (task, handle) = LightProc::recoverable(future, self.schedule(), span, cgroup);
         tracing::trace!("spawning sendable task");
@@ -128,6 +138,8 @@ impl<'a, 'executor: 'a> Executor<'executor> {
         R: Send + 'a,
     {
         let location = std::panic::Location::caller();
+        let cgroup = SupervisionRegistry::current();
+        let id = cgroup.as_ref().map(|id| id.into_u64()).unwrap_or(0);
         let span = tracing::trace_span!(
             target: "executor::task",
             "runtime.spawn",
@@ -135,10 +147,33 @@ impl<'a, 'executor: 'a> Executor<'executor> {
             loc.line = location.line(),
             loc.col = location.column(),
             kind = "local",
+            cgroup = id,
         );
-        let cgroup = None;
 
         let (task, handle) = LightProc::recoverable(future, schedule_local(), span, cgroup);
+        tracing::trace!("spawning sendable task");
+        task.schedule();
+        handle
+    }
+
+    #[track_caller]
+    pub fn spawn_local_cgroup<F, R>(&self, future: F, cgroup: GroupId) -> RecoverableHandle<R>
+    where
+        F: Future<Output = R> + 'a,
+        R: Send + 'a,
+    {
+        let location = std::panic::Location::caller();
+        let span = tracing::trace_span!(
+            target: "executor::task",
+            "runtime.spawn",
+            loc.file = location.file(),
+            loc.line = location.line(),
+            loc.col = location.column(),
+            kind = "local",
+            cgroup = cgroup.into_u64(),
+        );
+
+        let (task, handle) = LightProc::recoverable(future, schedule_local(), span, Some(cgroup));
         tracing::trace!("spawning sendable task");
         task.schedule();
         handle

@@ -122,6 +122,7 @@ impl LightProc {
     ///     future,
     ///     schedule_function,
     ///     Span::current(),
+    ///     None,
     /// );
     /// ```
     pub fn build<'a, F, R, S>(

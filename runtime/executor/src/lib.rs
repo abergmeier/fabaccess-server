@@ -40,4 +40,6 @@ mod worker;
 /// Prelude of Bastion Executor
 pub mod prelude {
     pub use crate::pool::*;
+    pub use crate::supervision::SupervisionRegistry;
+    pub use lightproc::GroupId;
 }

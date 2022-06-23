@@ -1128,6 +1128,8 @@ dependencies = [
  "parking_lot",
  "pin-utils",
  "rand",
+ "sharded-slab",
+ "thread_local",
  "tracing",
  "tracing-subscriber",
 ]
