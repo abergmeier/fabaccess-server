@@ -32,6 +32,7 @@ pub mod manage;
 pub mod placement;
 pub mod pool;
 pub mod run;
+mod supervision;
 mod thread_manager;
 mod worker;
 

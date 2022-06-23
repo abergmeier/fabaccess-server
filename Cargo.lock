@@ -1128,7 +1128,6 @@ dependencies = [
  "parking_lot",
  "pin-utils",
  "rand",
- "slab",
  "tracing",
  "tracing-subscriber",
 ]
