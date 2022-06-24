@@ -75,7 +75,12 @@ fn main() -> miette::Result<()> {
             .max_values(1)
             .min_values(0)
             .default_missing_value(""))
-        .get_matches();
+        .try_get_matches();
+
+    let matches = match matches {
+        Ok(m) => m,
+        Err(error) => error.exit(),
+    };
 
     let configpath = matches
         .value_of("config")
