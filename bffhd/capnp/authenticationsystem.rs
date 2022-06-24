@@ -1,6 +1,7 @@
 use capnp::capability::Promise;
 use capnp::Error;
 use capnp_rpc::pry;
+use rsasl::mechname::Mechname;
 use rsasl::property::AuthId;
 use rsasl::session::{Session, Step};
 use std::fmt;
@@ -23,8 +24,18 @@ pub struct Authentication {
 }
 
 impl Authentication {
-    pub fn new(session: Session, sessionmanager: SessionManager) -> Self {
-        let span = tracing::info_span!(target: TARGET, "Authentication",);
+    pub fn new(
+        parent: &Span,
+        mechanism: &Mechname, /* TODO: this is stored in session as well, get it out of there. */
+        session: Session,
+        sessionmanager: SessionManager,
+    ) -> Self {
+        let span = tracing::info_span!(
+            target: TARGET,
+            parent: parent,
+            "Authentication",
+            mechanism = mechanism.as_str()
+        );
         tracing::trace!(
             target: TARGET,
             parent: &span,
@@ -121,7 +132,7 @@ impl AuthenticationSystem for Authentication {
                             "Authentication didn't provide an authid as required".to_string(),
                         )
                     }));
-                    let session = pry!(manager.open(uid.as_ref()).ok_or_else(|| {
+                    let session = pry!(manager.open(&self.span, uid.as_ref()).ok_or_else(|| {
                         tracing::warn!(uid = uid.as_str(), "Failed to lookup the given user");
                         capnp::Error::failed("Failed to lookup the given user".to_string())
                     }));

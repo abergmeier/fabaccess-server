@@ -17,6 +17,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::Duration;
+use tracing::Span;
 use url::Url;
 
 mod dummy;
@@ -33,12 +34,17 @@ pub trait Initiator: Future<Output = ()> {
 
 #[derive(Clone)]
 pub struct InitiatorCallbacks {
+    span: Span,
     resource: Resource,
     sessions: SessionManager,
 }
 impl InitiatorCallbacks {
-    pub fn new(resource: Resource, sessions: SessionManager) -> Self {
-        Self { resource, sessions }
+    pub fn new(span: Span, resource: Resource, sessions: SessionManager) -> Self {
+        Self {
+            span,
+            resource,
+            sessions,
+        }
     }
 
     pub async fn try_update(&mut self, session: SessionHandle, status: Status) {
@@ -46,17 +52,19 @@ impl InitiatorCallbacks {
     }
 
     pub fn open_session(&self, uid: &str) -> Option<SessionHandle> {
-        self.sessions.open(uid)
+        self.sessions.open(&self.span, uid)
     }
 }
 
 pub struct InitiatorDriver {
+    span: Span,
     name: String,
     initiator: Box<dyn Initiator + Unpin + Send>,
 }
 
 impl InitiatorDriver {
     pub fn new<I>(
+        span: Span,
         name: String,
         params: &HashMap<String, String>,
         resource: Resource,
@@ -65,9 +73,13 @@ impl InitiatorDriver {
     where
         I: 'static + Initiator + Unpin + Send,
     {
-        let callbacks = InitiatorCallbacks::new(resource, sessions);
+        let callbacks = InitiatorCallbacks::new(span.clone(), resource, sessions);
         let initiator = Box::new(I::new(params, callbacks)?);
-        Ok(Self { name, initiator })
+        Ok(Self {
+            span,
+            name,
+            initiator,
+        })
     }
 }
 
@@ -133,15 +145,22 @@ fn load_single(
     resource: Resource,
     sessions: &SessionManager,
 ) -> Option<InitiatorDriver> {
+    let span = tracing::info_span!(
+        "initiator",
+        name = %name,
+        module = %module_name,
+    );
     tracing::info!(%name, %module_name, ?params, "Loading initiator");
     let o = match module_name.as_ref() {
         "Dummy" => Some(InitiatorDriver::new::<Dummy>(
+            span,
             name.clone(),
             params,
             resource,
             sessions.clone(),
         )),
         "Process" => Some(InitiatorDriver::new::<Process>(
+            span,
             name.clone(),
             params,
             resource,

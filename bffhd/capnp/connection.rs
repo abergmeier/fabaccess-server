@@ -90,7 +90,7 @@ impl bootstrap::Server for BootCap {
             "mechanisms",
         )
         .entered();
-        tracing::trace!("method call");
+        tracing::trace!(target: "bffh::api", "method call");
 
         let builder = result.get();
         let mechs: Vec<_> = self
@@ -149,7 +149,7 @@ impl bootstrap::Server for BootCap {
         let mechname = Mechname::new(mechanism.as_bytes());
         let auth = if let Ok(mechname) = mechname {
             if let Ok(session) = self.authentication.start(mechname) {
-                Authentication::new(session, self.sessionmanager.clone())
+                Authentication::new(&self.span, mechname, session, self.sessionmanager.clone())
             } else {
                 Authentication::invalid_mechanism()
             }

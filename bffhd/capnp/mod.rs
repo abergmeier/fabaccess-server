@@ -165,7 +165,7 @@ impl APIServer {
 
         let connection_span = tracing::info_span!(
             target: "bffh::api",
-            "Bootstrap",
+            "connection",
             %peer.ip,
             peer.port,
         );

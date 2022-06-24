@@ -17,11 +17,12 @@ impl SessionManager {
     }
 
     // TODO: make infallible
-    pub fn open(&self, uid: impl AsRef<str>) -> Option<SessionHandle> {
+    pub fn open(&self, parent: &Span, uid: impl AsRef<str>) -> Option<SessionHandle> {
         let uid = uid.as_ref();
         if let Some(user) = self.users.get_user(uid) {
             let span = tracing::info_span!(
                 target: "bffh::api",
+                parent: parent,
                 "session",
                 uid = uid,
             );
