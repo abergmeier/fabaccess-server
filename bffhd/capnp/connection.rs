@@ -8,12 +8,14 @@ use crate::session::SessionManager;
 use capnp::capability::Promise;
 use capnp_rpc::pry;
 use rsasl::mechname::Mechname;
+use tracing::Span;
 
 /// Cap'n Proto API Handler
 pub struct BootCap {
     peer_addr: SocketAddr,
     authentication: AuthenticationHandle,
     sessionmanager: SessionManager,
+    span: Span,
 }
 
 impl BootCap {
@@ -21,12 +23,14 @@ impl BootCap {
         peer_addr: SocketAddr,
         authentication: AuthenticationHandle,
         sessionmanager: SessionManager,
+        span: Span,
     ) -> Self {
-        tracing::trace!(%peer_addr, "bootstrapping RPC");
+        tracing::trace!(parent: &span, %peer_addr, "bootstrapping RPC");
         Self {
             peer_addr,
             authentication,
             sessionmanager,
+            span,
         }
     }
 }

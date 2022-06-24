@@ -12,7 +12,7 @@ use futures_util::{stream, AsyncRead, AsyncWrite, FutureExt, StreamExt};
 use std::future::Future;
 use std::io;
 
-use std::net::SocketAddr;
+use std::net::{IpAddr, SocketAddr};
 
 use crate::authentication::AuthenticationHandle;
 use crate::session::SessionManager;
@@ -145,12 +145,35 @@ impl APIServer {
         peer_addr: SocketAddr,
         stream: impl Future<Output = io::Result<TlsStream<IO>>>,
     ) {
-        tracing::debug!("handling new API connection");
+        let span = tracing::trace_span!("api.handle");
+        let _guard = span.enter();
+
+        struct Peer {
+            ip: IpAddr,
+            port: u16,
+        }
+
+        let peer = Peer {
+            ip: peer_addr.ip(),
+            port: peer_addr.port(),
+        };
+        tracing::debug!(
+            %peer.ip,
+            peer.port,
+            "spawning api handler"
+        );
+
+        let connection_span = tracing::info_span!(
+            "rpcsystem",
+            %peer.ip,
+            peer.port,
+        );
         let f = async move {
+            tracing::trace!(parent: &connection_span, "starting tls exchange");
             let stream = match stream.await {
                 Ok(stream) => stream,
-                Err(e) => {
-                    tracing::error!("TLS handshake failed: {}", e);
+                Err(error) => {
+                    tracing::error!(parent: &connection_span, %error, "TLS handshake failed");
                     return;
                 }
             };
@@ -161,10 +184,15 @@ impl APIServer {
                 peer_addr,
                 self.authentication.clone(),
                 self.sessionmanager.clone(),
+                connection_span.clone(),
             ));
 
-            if let Err(e) = RpcSystem::new(Box::new(vat), Some(bootstrap.client)).await {
-                tracing::error!("Error during RPC handling: {}", e);
+            if let Err(error) = RpcSystem::new(Box::new(vat), Some(bootstrap.client)).await {
+                tracing::error!(
+                    parent: &connection_span,
+                    %error,
+                    "error occured during rpc handling",
+                );
             }
         };
         let cgroup = SupervisionRegistry::with(SupervisionRegistry::new_group);
