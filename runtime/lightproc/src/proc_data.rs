@@ -113,7 +113,7 @@ impl ProcData {
         }
     }
 
-    /// Notifies the proc blocked on the proc.
+    /// Notifies the proc blocked on this proc, if any.
     ///
     /// If there is a registered waker, it will be removed from the pdata and woken.
     #[inline]

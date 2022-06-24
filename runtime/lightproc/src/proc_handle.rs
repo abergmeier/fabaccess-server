@@ -25,7 +25,7 @@ pub struct ProcHandle<R> {
     /// A marker capturing the generic type `R`.
     // TODO: Instead of writing the future output to the RawProc on heap, put it in the handle
     //       (if still available).
-    pub(crate) result: MaybeUninit<R>,
+    pub(crate) marker: PhantomData<R>,
 }
 
 unsafe impl<R: Send> Send for ProcHandle<R> {}
@@ -37,7 +37,7 @@ impl<R> ProcHandle<R> {
     pub(crate) fn new(raw_proc: NonNull<()>) -> Self {
         Self {
             raw_proc,
-            result: MaybeUninit::uninit(),
+            marker: PhantomData,
         }
     }
 
