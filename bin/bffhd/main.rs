@@ -122,15 +122,11 @@ fn main() -> miette::Result<()> {
         unimplemented!()
     } else if matches.is_present("load") {
         let bffh = Diflouroborane::new(config)?;
-        if let Err(error) = bffh.users.load_file(matches.value_of("load").unwrap()) {
-            tracing::error!(
-                "failed to load users from {}: {}",
-                matches.value_of("load").unwrap(),
-                error,
-            );
-        } else {
-            tracing::info!("loaded users from {}", matches.value_of("load").unwrap());
-        }
+
+        bffh.users.load_file(matches.value_of("load").unwrap())?;
+
+        tracing::info!("loaded users from {}", matches.value_of("load").unwrap());
+
         return Ok(());
     } else {
         let keylog = matches.value_of("keylog");

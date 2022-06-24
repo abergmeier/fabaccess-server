@@ -4,9 +4,11 @@ use rkyv::{Archive, Deserialize, Infallible, Serialize};
 use std::collections::HashMap;
 use std::fmt::{Display, Formatter, Write};
 
-use miette::{Context, IntoDiagnostic};
+use clap::ArgMatches;
+use miette::{Context, Diagnostic, IntoDiagnostic, SourceOffset, SourceSpan};
 use std::path::Path;
 use std::sync::Arc;
+use thiserror::Error;
 
 pub mod db;
 
@@ -100,7 +102,36 @@ impl Users {
         self.userdb.delete(uid)
     }
 
-    pub fn load_file<P: AsRef<Path>>(&self, path: P) -> miette::Result<()> {
+    pub fn load_file(&self, path_str: &str) -> miette::Result<()> {
+        let path: &Path = Path::new(path_str);
+        if path.is_dir() {
+            #[derive(Debug, Error, Diagnostic)]
+            #[error("load takes a file, not a directory")]
+            #[diagnostic(
+                code(load::file),
+                url("https://gitlab.com/fabinfra/fabaccess/bffh/-/issues/55")
+            )]
+            struct LoadIsDirError {
+                #[source_code]
+                src: String,
+
+                #[label("path provided")]
+                dir_path: SourceSpan,
+
+                #[help]
+                help: String,
+            }
+
+            Err(LoadIsDirError {
+                src: format!("--load {}", path_str),
+                dir_path: (7, path_str.as_bytes().len()).into(),
+                help: format!(
+                    "Provide a path to a file instead, e.g. {}/users.toml",
+                    path_str
+                ),
+            })?;
+            return Ok(());
+        }
         let f = std::fs::read(path).into_diagnostic()?;
         let map: HashMap<String, UserData> = toml::from_slice(&f).into_diagnostic()?;
 
