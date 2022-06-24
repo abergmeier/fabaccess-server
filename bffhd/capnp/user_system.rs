@@ -1,20 +1,25 @@
 use api::usersystem_capnp::user_system::{info, manage, search};
 use capnp::capability::Promise;
 use capnp_rpc::pry;
+use tracing::Span;
 
 use crate::capnp::user::User;
 
 use crate::session::SessionHandle;
 use crate::users::{db, UserRef};
 
+const TARGET: &str = "bffh::api::usersystem";
+
 #[derive(Clone)]
 pub struct Users {
+    span: Span,
     session: SessionHandle,
 }
 
 impl Users {
     pub fn new(session: SessionHandle) -> Self {
-        Self { session }
+        let span = tracing::info_span!(target: TARGET, "UserSystem",);
+        Self { span, session }
     }
 }
 
@@ -24,8 +29,14 @@ impl info::Server for Users {
         _: info::GetUserSelfParams,
         mut result: info::GetUserSelfResults,
     ) -> Promise<(), ::capnp::Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "getUserSelf").entered();
+        tracing::trace!("method call");
+
         let builder = result.get();
         User::build(self.session.clone(), builder);
+
+        tracing::trace!("method return");
         Promise::ok(())
     }
 }
@@ -36,6 +47,10 @@ impl manage::Server for Users {
         _: manage::GetUserListParams,
         mut result: manage::GetUserListResults,
     ) -> Promise<(), ::capnp::Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "getUserList",).entered();
+        tracing::trace!("method call");
+
         let userdb = self.session.users.into_inner();
         let users = pry!(userdb
             .get_all()
@@ -44,17 +59,29 @@ impl manage::Server for Users {
         for (i, (_, user)) in users.into_iter().enumerate() {
             User::fill(&self.session, user, builder.reborrow().get(i as u32));
         }
+
+        tracing::trace!("method return");
         Promise::ok(())
     }
+
     fn add_user_fallible(
         &mut self,
         params: manage::AddUserFallibleParams,
         mut result: manage::AddUserFallibleResults,
     ) -> Promise<(), ::capnp::Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "addUserFallible").entered();
+
         let params = pry!(params.get());
         let username = pry!(params.get_username());
         let password = pry!(params.get_password());
         // FIXME: saslprep passwords & usernames before storing them
+
+        tracing::trace!(
+            params.username = username,
+            params.password = "<redacted>",
+            "method call"
+        );
 
         let mut builder = result.get();
 
@@ -81,14 +108,21 @@ impl manage::Server for Users {
             }
         }
 
+        tracing::trace!("method return");
         Promise::ok(())
     }
+
     fn remove_user(
         &mut self,
         params: manage::RemoveUserParams,
         _: manage::RemoveUserResults,
     ) -> Promise<(), ::capnp::Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "removeUser",).entered();
+
         let who: &str = pry!(pry!(pry!(params.get()).get_user()).get_username());
+
+        tracing::trace!(params.user = who, "method call");
 
         if let Err(e) = self.session.users.del_user(who) {
             tracing::warn!("Failed to delete user: {:?}", e);
@@ -96,6 +130,7 @@ impl manage::Server for Users {
             tracing::info!("Deleted user {}", who);
         }
 
+        tracing::trace!("method return");
         Promise::ok(())
     }
 }
@@ -106,9 +141,17 @@ impl search::Server for Users {
         params: search::GetUserByNameParams,
         mut result: search::GetUserByNameResults,
     ) -> Promise<(), ::capnp::Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "getUserByName",).entered();
+
         let username: &str = pry!(pry!(params.get()).get_username());
+
+        tracing::trace!(params.username = username, "method call");
+
         let userref = UserRef::new(username.to_string());
         User::build_optional(&self.session, Some(userref), result.get());
+
+        tracing::trace!("method return");
         Promise::ok(())
     }
 }
