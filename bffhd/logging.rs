@@ -1,6 +1,7 @@
 use tracing_subscriber::EnvFilter;
 
 use serde::{Deserialize, Serialize};
+use tracing_subscriber::prelude::*;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogConfig {
@@ -24,21 +25,25 @@ impl Default for LogConfig {
     }
 }
 
-pub fn init(config: &LogConfig) {
+pub fn init(config: &LogConfig) -> console::Server {
+    let (console, server) = console::ConsoleLayer::new();
+
     let filter = if let Some(ref filter) = config.filter {
         EnvFilter::new(filter.as_str())
     } else {
         EnvFilter::from_env("BFFH_LOG")
     };
 
-    let builder = tracing_subscriber::fmt().with_env_filter(filter);
+    let format = &config.format;
+    // TODO: Restore output format settings being settable
+    let fmt_layer = tracing_subscriber::fmt::layer().with_filter(filter);
 
-    let format = config.format.to_lowercase();
-    match format.as_str() {
-        "compact" => builder.compact().init(),
-        "pretty" => builder.pretty().init(),
-        "full" => builder.init(),
-        _ => builder.init(),
-    }
-    tracing::info!(format = format.as_str(), "Logging initialized")
+    tracing_subscriber::registry()
+        .with(fmt_layer)
+        .with(console)
+        .init();
+
+    tracing::info!(format = format.as_str(), "Logging initialized");
+
+    server
 }

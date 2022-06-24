@@ -49,6 +49,7 @@ dirs = "4.0.0"
 
 # Runtime
 executor = { path = "runtime/executor" }
+console = { path = "runtime/console" }
 
 # Catch&Handle POSIX process signals
 signal-hook = "0.3.13"
@@ -72,9 +73,9 @@ rust-argon2 = "0.8.3"
 rand = "0.8.4"
 
 # Async aware logging and tracing
-tracing = "0.1.28"
-tracing-subscriber = { version = "0.2.25", features = ["env-filter"] }
-tracing-futures = { version = "0.2.5", features = ["futures-03"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry", "std"] }
+tracing-futures = { version = "0.2", features = ["futures-03"] }
 
 # API
 api = { path = "api" }
@@ -123,4 +124,4 @@ tempfile = "3.2"
 shadow-rs = "0.11"
 
 [workspace]
-members = ["modules/*", "api"]
+members = ["runtime/*", "modules/*", "api"]

@@ -51,7 +51,7 @@ impl AuditLog {
         let mut ser = Serializer::new(&mut writer);
         line.serialize(&mut ser)
             .expect("failed to serialize audit log line");
-        writer.write("\n".as_bytes())?;
+        writer.write_all("\n".as_bytes())?;
         Ok(())
     }
 }

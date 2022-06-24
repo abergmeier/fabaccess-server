@@ -3,7 +3,7 @@ use async_net::TcpListener;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::RpcSystem;
-use executor::prelude::Executor;
+use executor::prelude::{Executor, GroupId, SupervisionRegistry};
 use futures_rustls::server::TlsStream;
 use futures_rustls::TlsAcceptor;
 use futures_util::stream::FuturesUnordered;
@@ -167,6 +167,7 @@ impl APIServer {
                 tracing::error!("Error during RPC handling: {}", e);
             }
         };
-        self.executor.spawn_local(f);
+        let cgroup = SupervisionRegistry::with(SupervisionRegistry::new_group);
+        self.executor.spawn_local_cgroup(f, cgroup);
     }
 }

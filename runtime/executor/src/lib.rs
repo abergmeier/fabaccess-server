@@ -32,6 +32,7 @@ pub mod manage;
 pub mod placement;
 pub mod pool;
 pub mod run;
+mod supervision;
 mod thread_manager;
 mod worker;
 
@@ -39,4 +40,6 @@ mod worker;
 /// Prelude of Bastion Executor
 pub mod prelude {
     pub use crate::pool::*;
+    pub use crate::supervision::SupervisionRegistry;
+    pub use lightproc::GroupId;
 }
