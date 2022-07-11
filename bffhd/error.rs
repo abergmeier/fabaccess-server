@@ -1,116 +1,97 @@
+use miette::{Diagnostic, LabeledSpan, Severity, SourceCode};
+use std::error;
+use std::fmt::{Display, Formatter};
+use std::io;
 use thiserror::Error;
 
-use crate::db;
-use rsasl::error::SessionError;
-use std::any::TypeId;
-use std::error::Error as StdError;
-use std::fmt;
-use std::fmt::Display;
-use std::io;
-
-use crate::resources::state::db::StateDBError;
-use backtrace::{Backtrace, BacktraceFmt, PrintFmt};
-use miette::{Diagnostic, LabeledSpan, Severity, SourceCode};
-
-#[derive(Debug)]
-pub struct TracedError<E: Diagnostic> {
-    pub inner: E,
-    pub backtrace: Backtrace,
+pub trait Description {
+    const DESCRIPTION: Option<&'static str> = None;
+    const CODE: &'static str;
+    const HELP: Option<&'static str> = None;
+    const URL: Option<&'static str> = None;
 }
 
-impl<E: Diagnostic> fmt::Display for TracedError<E> {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        writeln!(f, "Error: {}", self.inner)?;
-
-        let cwd = std::env::current_dir();
-        let mut print_path =
-            move |fmt: &mut fmt::Formatter<'_>, path: backtrace::BytesOrWideString<'_>| {
-                let path = path.into_path_buf();
-                if let Ok(cwd) = &cwd {
-                    if let Ok(suffix) = path.strip_prefix(cwd) {
-                        return fmt::Display::fmt(&suffix.display(), fmt);
-                    }
-                }
-                fmt::Display::fmt(&path.display(), fmt)
-            };
-        let mut bf = BacktraceFmt::new(f, PrintFmt::Short, &mut print_path);
-        bf.add_context()?;
-
-        Ok(())
-    }
-}
-
-impl<E: 'static + Diagnostic> StdError for TracedError<E> {
-    fn source(&self) -> Option<&(dyn StdError + 'static)> {
-        self.inner.source()
-    }
-}
-
-impl<E: 'static + Diagnostic> Diagnostic for TracedError<E> {
-    #[inline(always)]
-    fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
-        self.inner.code()
-    }
-
-    #[inline(always)]
-    fn severity(&self) -> Option<Severity> {
-        self.inner.severity()
-    }
-
-    #[inline(always)]
-    fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
-        self.inner.help()
-    }
-
-    #[inline(always)]
-    fn url<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
-        self.inner.url()
-    }
-
-    #[inline(always)]
-    fn source_code(&self) -> Option<&dyn SourceCode> {
-        self.inner.source_code()
-    }
-
-    #[inline(always)]
-    fn labels(&self) -> Option<Box<dyn Iterator<Item = LabeledSpan> + '_>> {
-        self.inner.labels()
-    }
-
-    #[inline(always)]
-    fn related<'a>(&'a self) -> Option<Box<dyn Iterator<Item = &'a dyn Diagnostic> + 'a>> {
-        self.inner.related()
-    }
-
-    #[inline(always)]
-    fn diagnostic_source(&self) -> Option<&dyn Diagnostic> {
-        self.inner.diagnostic_source()
-    }
+pub fn wrap<D: Description>(error: Source) -> Error {
+    Error::new::<D>(error)
 }
 
 #[derive(Debug, Error, Diagnostic)]
-/// Shared error type
-pub enum BffhError {
-    #[error("SASL error: {0:?}")]
-    SASL(SessionError),
-    #[error("IO error: {0}")]
-    IO(#[from] io::Error),
-    #[error("IO error: {0}")]
-    Boxed(#[from] Box<dyn std::error::Error>),
-    #[error("IO error: {0}")]
-    Capnp(#[from] capnp::Error),
-    #[error("IO error: {0}")]
-    DB(#[from] db::Error),
-    #[error("You do not have the permission required to do that.")]
-    Denied,
-    #[error("State DB operation failed")]
-    StateDB(#[from] StateDBError),
+pub enum Source {
+    #[error("io error occured")]
+    Io(
+        #[source]
+        #[from]
+        io::Error,
+    ),
 }
 
-impl From<SessionError> for BffhError {
-    fn from(e: SessionError) -> Self {
-        Self::SASL(e)
+#[derive(Debug)]
+pub struct Error {
+    description: Option<&'static str>,
+    code: &'static str,
+    severity: Option<Severity>,
+    help: Option<&'static str>,
+    url: Option<&'static str>,
+    source: Source,
+}
+
+impl Display for Error {
+    fn fmt(&self, f: &mut Formatter<'_>) -> std::fmt::Result {
+        Display::fmt(&self.source, f)
     }
 }
 
-pub type Result<T> = std::result::Result<T, BffhError>;
+impl error::Error for Error {
+    fn source(&self) -> Option<&(dyn error::Error + 'static)> {
+        Some(&self.source)
+    }
+
+    fn description(&self) -> &str {
+        if let Some(desc) = self.description {
+            desc
+        } else {
+            self.source.description()
+        }
+    }
+}
+
+impl Error {
+    pub fn new<D: Description>(source: Source) -> Self {
+        Self {
+            description: D::DESCRIPTION,
+            code: D::CODE,
+            severity: source.severity(),
+            help: D::HELP,
+            url: D::URL,
+            source,
+        }
+    }
+}
+
+impl miette::Diagnostic for Error {
+    fn code<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        Some(Box::new(self.code))
+    }
+
+    fn severity(&self) -> Option<Severity> {
+        self.severity
+    }
+
+    fn help<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        self.help.map(|r| {
+            let b: Box<dyn Display + 'a> = Box::new(r);
+            b
+        })
+    }
+
+    fn url<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
+        self.url.map(|r| {
+            let b: Box<dyn Display + 'a> = Box::new(r);
+            b
+        })
+    }
+
+    fn diagnostic_source(&self) -> Option<&dyn Diagnostic> {
+        Some(&self.source)
+    }
+}
