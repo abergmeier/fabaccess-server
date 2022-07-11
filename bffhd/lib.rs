@@ -76,6 +76,11 @@ pub struct Diflouroborane {
 
 pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 
+struct SignalHandlerErr;
+impl error::Description for SignalHandlerErr {
+    const CODE: &'static str = "signals::new";
+}
+
 impl Diflouroborane {
     pub fn new(config: Config) -> miette::Result<Self> {
         let mut server = logging::init(&config.logging);
@@ -140,8 +145,7 @@ impl Diflouroborane {
     pub fn run(&mut self) -> miette::Result<()> {
         let _guard = self.span.enter();
         let mut signals = signal_hook_async_std::Signals::new(&[SIGINT, SIGQUIT, SIGTERM])
-            .into_diagnostic()
-            .wrap_err("Failed to construct signal handler")?;
+            .map_err(|ioerr| error::wrap::<SignalHandlerErr>(ioerr.into()))?;
 
         let sessionmanager = SessionManager::new(self.users.clone(), self.roles.clone());
         let authentication = AuthenticationHandle::new(self.users.clone());
