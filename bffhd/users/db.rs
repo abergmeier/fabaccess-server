@@ -27,6 +27,12 @@ pub struct User {
     pub userdata: UserData,
 }
 
+fn hash_pw(pw: &[u8]) -> argon2::Result<String> {
+    let config = argon2::Config::default();
+    let salt: [u8; 16] = rand::random();
+    argon2::hash_encoded(pw, &salt, &config)
+}
+
 impl User {
     pub fn check_password(&self, pwd: &[u8]) -> miette::Result<bool> {
         if let Some(ref encoded) = self.userdata.passwd {
@@ -39,9 +45,7 @@ impl User {
     }
 
     pub fn new_with_plain_pw(username: &str, password: impl AsRef<[u8]>) -> Self {
-        let config = argon2::Config::default();
-        let salt: [u8; 16] = rand::random();
-        let hash = argon2::hash_encoded(password.as_ref(), &salt, &config)
+        let hash = hash_pw(password.as_ref())
             .expect(&format!("Failed to hash password for {}: ", username));
         tracing::debug!("Hashed pw for {} to {}", username, hash);
 
@@ -52,6 +56,13 @@ impl User {
                 ..Default::default()
             },
         }
+    }
+
+    pub fn set_pw(&mut self, password: impl AsRef<[u8]>) {
+        self.userdata.passwd = Some(hash_pw(password.as_ref()).expect(&format!(
+            "failed to update hashed password for {}",
+            &self.id
+        )));
     }
 }
 

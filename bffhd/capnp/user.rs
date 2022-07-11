@@ -79,12 +79,21 @@ impl info::Server for User {
 impl manage::Server for User {
     fn pwd(
         &mut self,
-        _params: manage::PwdParams,
+        params: manage::PwdParams,
         _results: manage::PwdResults,
     ) -> Promise<(), ::capnp::Error> {
-        Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+        let params = pry!(params.get());
+        let old_pw = pry!(params.get_old_pwd());
+        let new_pw = pry!(params.get_new_pwd());
+
+        let uid = self.user.get_username();
+        if let Some(mut user) = self.session.users.get_user(uid) {
+            if let Ok(true) = user.check_password(old_pw.as_bytes()) {
+                user.set_pw(new_pw.as_bytes());
+                self.session.users.put_user(uid, &user);
+            }
+        }
+        Promise::ok(())
     }
 }
 
@@ -148,9 +157,17 @@ impl admin::Server for User {
 
         Promise::ok(())
     }
-    fn pwd(&mut self, _: admin::PwdParams, _: admin::PwdResults) -> Promise<(), ::capnp::Error> {
-        Promise::err(::capnp::Error::unimplemented(
-            "method not implemented".to_string(),
-        ))
+    fn pwd(
+        &mut self,
+        param: admin::PwdParams,
+        _: admin::PwdResults,
+    ) -> Promise<(), ::capnp::Error> {
+        let new_pw = pry!(pry!(param.get()).get_new_pwd());
+        let uid = self.user.get_username();
+        if let Some(mut user) = self.session.users.get_user(uid) {
+            user.set_pw(new_pw.as_bytes());
+            self.session.users.put_user(uid, &user);
+        }
+        Promise::ok(())
     }
 }
