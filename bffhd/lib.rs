@@ -65,7 +65,6 @@ use lightproc::recoverable_handle::RecoverableHandle;
 use signal_hook::consts::signal::*;
 use tracing::Span;
 
-
 pub struct Diflouroborane {
     config: Config,
     executor: Executor<'static>,
@@ -84,8 +83,7 @@ impl error::Description for SignalHandlerErr {
 }
 
 impl Diflouroborane {
-    pub fn setup() {
-    }
+    pub fn setup() {}
 
     pub fn new(config: Config) -> miette::Result<Self> {
         let mut server = logging::init(&config.logging);

@@ -1,4 +1,4 @@
-use clap::{Arg, Command};
+use clap::{Arg, Command, ValueHint};
 use diflouroborane::{config, Diflouroborane};
 
 use std::str::FromStr;
@@ -62,6 +62,20 @@ fn main() -> miette::Result<()> {
                 .long("dump")
                 .conflicts_with("load"))
         .arg(
+            Arg::new("dump-users")
+                .help("Dump the users db to the given file as TOML")
+                .long("dump-users")
+                .takes_value(true)
+                .value_name("FILE")
+                .value_hint(ValueHint::AnyPath)
+                .default_missing_value("users.toml")
+                .conflicts_with("load"))
+        .arg(
+            Arg::new("force")
+                .help("force ops that may clobber")
+                .long("force")
+        )
+        .arg(
             Arg::new("load")
                 .help("Load values into the internal databases")
                 .long("load")
@@ -124,7 +138,18 @@ fn main() -> miette::Result<()> {
     let mut config = config::read(&PathBuf::from_str(configpath).unwrap()).unwrap();
 
     if matches.is_present("dump") {
-        unimplemented!()
+        return Err(miette::miette!("DB Dumping is currently not implemented, except for the users db, using `--dump-users`"));
+    } else if matches.is_present("dump-users") {
+        let bffh = Diflouroborane::new(config)?;
+
+        let number = bffh.users.dump_file(
+            matches.value_of("dump-users").unwrap(),
+            matches.is_present("force"),
+        )?;
+
+        tracing::info!("successfully dumped {} users", number);
+
+        return Ok(());
     } else if matches.is_present("load") {
         let bffh = Diflouroborane::new(config)?;
 

@@ -1,9 +1,9 @@
-use std::path::Path;
-use tracing_subscriber::{EnvFilter, reload};
 use serde::{Deserialize, Serialize};
+use std::path::Path;
 use tracing_subscriber::fmt::format::Format;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::reload::Handle;
+use tracing_subscriber::{reload, EnvFilter};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogConfig {
@@ -35,7 +35,7 @@ pub enum LogOutput<'a> {
 pub struct LogConfig2<'a, F> {
     output: LogOutput<'a>,
     filter_str: Option<&'a str>,
-    format: Format<F>
+    format: Format<F>,
 }
 
 pub fn init(config: &LogConfig) -> console::Server {
@@ -56,20 +56,15 @@ pub fn init(config: &LogConfig) -> console::Server {
 
     match format.as_ref() {
         "pretty" => {
-            let fmt_layer = fmt_layer
-                .pretty()
-                .with_filter(filter);
+            let fmt_layer = fmt_layer.pretty().with_filter(filter);
             subscriber.with(fmt_layer).init();
         }
         "compact" => {
-            let fmt_layer = fmt_layer
-                .compact()
-                .with_filter(filter);
+            let fmt_layer = fmt_layer.compact().with_filter(filter);
             subscriber.with(fmt_layer).init();
         }
         _ => {
-            let fmt_layer = fmt_layer
-                .with_filter(filter);
+            let fmt_layer = fmt_layer.with_filter(filter);
             subscriber.with(fmt_layer).init();
         }
     }

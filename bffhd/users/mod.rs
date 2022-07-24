@@ -1,8 +1,11 @@
+use std::fs;
+
 use lmdb::{Environment, Transaction};
 use once_cell::sync::OnceCell;
 use rkyv::{Archive, Deserialize, Infallible, Serialize};
 use std::collections::HashMap;
-use std::fmt::{Display, Formatter, Write};
+use std::fmt::{Display, Formatter};
+use std::io::Write;
 
 use clap::ArgMatches;
 use miette::{Context, Diagnostic, IntoDiagnostic, SourceOffset, SourceSpan};
@@ -165,5 +168,42 @@ impl Users {
 
         txn.commit().map_err(crate::db::Error::from)?;
         Ok(())
+    }
+
+    pub fn dump_file(&self, path_str: &str, force: bool) -> miette::Result<usize> {
+        let path = Path::new(path_str);
+        let exists = path.exists();
+        if exists {
+            if !force {
+                #[derive(Debug, Error, Diagnostic)]
+                #[error("given file already exists, refusing to clobber")]
+                #[diagnostic(code(dump::clobber))]
+                struct DumpFileExists {
+                    #[source_code]
+                    src: String,
+
+                    #[label("file provided")]
+                    dir_path: SourceSpan,
+
+                    #[help]
+                    help: &'static str,
+                }
+
+                Err(DumpFileExists {
+                    src: format!("--load {}", path_str),
+                    dir_path: (7, path_str.as_bytes().len()).into(),
+                    help: "to force overwriting the file add `--force` as argument",
+                })?;
+            } else {
+                tracing::info!("output file already exists, overwriting due to `--force`");
+            }
+        }
+        let mut file = fs::File::create(path).into_diagnostic()?;
+
+        let users = self.userdb.get_all()?;
+        let encoded = toml::ser::to_vec(&users).into_diagnostic()?;
+        file.write_all(&encoded[..]).into_diagnostic()?;
+
+        Ok(0)
     }
 }

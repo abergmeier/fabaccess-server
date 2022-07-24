@@ -187,15 +187,15 @@ impl UserDB {
         Ok(())
     }
 
-    pub fn get_all(&self) -> Result<Vec<(String, User)>, db::Error> {
+    pub fn get_all(&self) -> Result<HashMap<String, UserData>, db::Error> {
         let txn = self.env.begin_ro_txn()?;
         let iter = self.db.get_all(&txn)?;
-        let mut out = Vec::new();
+        let mut out = HashMap::new();
         for (uid, user) in iter {
             let uid = unsafe { std::str::from_utf8_unchecked(uid).to_string() };
             let user: User =
                 Deserialize::<User, _>::deserialize(user.as_ref(), &mut Infallible).unwrap();
-            out.push((uid, user));
+            out.insert(uid, user.userdata);
         }
 
         Ok(out)

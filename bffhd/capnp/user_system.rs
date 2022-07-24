@@ -56,7 +56,8 @@ impl manage::Server for Users {
             .get_all()
             .map_err(|e| capnp::Error::failed(format!("UserDB error: {:?}", e))));
         let mut builder = result.get().init_user_list(users.len() as u32);
-        for (i, (_, user)) in users.into_iter().enumerate() {
+        for (i, (id, userdata)) in users.into_iter().enumerate() {
+            let user = db::User { id, userdata };
             User::fill(&self.session, user, builder.reborrow().get(i as u32));
         }
 
