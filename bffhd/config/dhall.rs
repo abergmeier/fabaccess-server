@@ -12,8 +12,8 @@ use crate::authorization::roles::Role;
 use crate::capnp::{Listen, TlsListen};
 use crate::logging::LogConfig;
 
-use std::path::Path;
 use miette::IntoDiagnostic;
+use std::path::Path;
 
 #[derive(Debug)]
 struct DhallConfig<'a> {
@@ -36,23 +36,23 @@ pub struct MachineDescription {
 
     /// An optional description of the Machine.
     #[serde(
-    default,
-    skip_serializing_if = "Option::is_none",
-    deserialize_with = "deser_option"
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deser_option"
     )]
     pub description: Option<String>,
 
     #[serde(
-    default,
-    skip_serializing_if = "Option::is_none",
-    deserialize_with = "deser_option"
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deser_option"
     )]
     pub wiki: Option<String>,
 
     #[serde(
-    default,
-    skip_serializing_if = "Option::is_none",
-    deserialize_with = "deser_option"
+        default,
+        skip_serializing_if = "Option::is_none",
+        deserialize_with = "deser_option"
     )]
     pub category: Option<String>,
 
@@ -111,9 +111,9 @@ pub struct ModuleConfig {
 }
 
 pub(crate) fn deser_option<'de, D, T>(d: D) -> std::result::Result<Option<T>, D::Error>
-    where
-        D: serde::Deserializer<'de>,
-        T: serde::Deserialize<'de>,
+where
+    D: serde::Deserializer<'de>,
+    T: serde::Deserialize<'de>,
 {
     Ok(T::deserialize(d).ok())
 }
