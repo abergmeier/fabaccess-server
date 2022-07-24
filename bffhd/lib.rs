@@ -61,8 +61,10 @@ use crate::tls::TlsConfig;
 use crate::users::db::UserDB;
 use crate::users::Users;
 use executor::pool::Executor;
+use lightproc::recoverable_handle::RecoverableHandle;
 use signal_hook::consts::signal::*;
 use tracing::Span;
+
 
 pub struct Diflouroborane {
     config: Config,
@@ -82,6 +84,9 @@ impl error::Description for SignalHandlerErr {
 }
 
 impl Diflouroborane {
+    pub fn setup() {
+    }
+
     pub fn new(config: Config) -> miette::Result<Self> {
         let mut server = logging::init(&config.logging);
         let span = tracing::info_span!(
@@ -187,5 +192,20 @@ impl Diflouroborane {
 
         self.executor.run(f);
         Ok(())
+    }
+}
+
+struct ShutdownHandler {
+    tasks: Vec<RecoverableHandle<()>>,
+}
+impl ShutdownHandler {
+    pub fn new(tasks: Vec<RecoverableHandle<()>>) -> Self {
+        Self { tasks }
+    }
+
+    pub fn shutdown(&mut self) {
+        for handle in self.tasks.drain(..) {
+            handle.cancel()
+        }
     }
 }

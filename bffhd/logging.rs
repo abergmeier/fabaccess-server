@@ -1,7 +1,9 @@
-use tracing_subscriber::EnvFilter;
-
+use std::path::Path;
+use tracing_subscriber::{EnvFilter, reload};
 use serde::{Deserialize, Serialize};
+use tracing_subscriber::fmt::format::Format;
 use tracing_subscriber::prelude::*;
+use tracing_subscriber::reload::Handle;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogConfig {
@@ -25,8 +27,22 @@ impl Default for LogConfig {
     }
 }
 
+pub enum LogOutput<'a> {
+    Journald,
+    Stdout,
+    File(&'a Path),
+}
+pub struct LogConfig2<'a, F> {
+    output: LogOutput<'a>,
+    filter_str: Option<&'a str>,
+    format: Format<F>
+}
+
 pub fn init(config: &LogConfig) -> console::Server {
-    let (console, server) = console::ConsoleLayer::new();
+    let subscriber = tracing_subscriber::registry();
+
+    let (console_layer, server) = console::ConsoleLayer::new();
+    let subscriber = subscriber.with(console_layer);
 
     let filter = if let Some(ref filter) = config.filter {
         EnvFilter::new(filter.as_str())
@@ -34,14 +50,29 @@ pub fn init(config: &LogConfig) -> console::Server {
         EnvFilter::from_env("BFFH_LOG")
     };
 
-    let format = &config.format;
-    // TODO: Restore output format settings being settable
-    let fmt_layer = tracing_subscriber::fmt::layer().with_filter(filter);
+    let format = config.format.to_lowercase();
 
-    tracing_subscriber::registry()
-        .with(fmt_layer)
-        .with(console)
-        .init();
+    let fmt_layer = tracing_subscriber::fmt::layer();
+
+    match format.as_ref() {
+        "pretty" => {
+            let fmt_layer = fmt_layer
+                .pretty()
+                .with_filter(filter);
+            subscriber.with(fmt_layer).init();
+        }
+        "compact" => {
+            let fmt_layer = fmt_layer
+                .compact()
+                .with_filter(filter);
+            subscriber.with(fmt_layer).init();
+        }
+        _ => {
+            let fmt_layer = fmt_layer
+                .with_filter(filter);
+            subscriber.with(fmt_layer).init();
+        }
+    }
 
     tracing::info!(format = format.as_str(), "Logging initialized");
 

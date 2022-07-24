@@ -49,6 +49,7 @@ dirs = "4.0.0"
 
 # Runtime
 executor = { path = "runtime/executor" }
+lightproc = { path = "runtime/lightproc" }
 console = { path = "runtime/console" }
 
 # Catch&Handle POSIX process signals

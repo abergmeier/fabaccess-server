@@ -992,6 +992,7 @@ dependencies = [
  "inventory",
  "lazy_static",
  "libc",
+ "lightproc",
  "linkme",
  "lmdb-rkv",
  "miette",

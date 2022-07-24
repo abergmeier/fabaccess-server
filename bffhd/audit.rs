@@ -10,6 +10,7 @@ use serde_json::Serializer;
 
 pub static AUDIT: OnceCell<AuditLog> = OnceCell::new();
 
+// TODO: Make the audit log a tracing layer
 #[derive(Debug)]
 pub struct AuditLog {
     writer: Mutex<LineWriter<File>>,
