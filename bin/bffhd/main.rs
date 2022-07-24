@@ -135,7 +135,7 @@ fn main() -> miette::Result<()> {
         }
     }
 
-    let mut config = config::read(&PathBuf::from_str(configpath).unwrap()).unwrap();
+    let mut config = config::read(&PathBuf::from_str(configpath).unwrap())?;
 
     if matches.is_present("dump") {
         return Err(miette::miette!("DB Dumping is currently not implemented, except for the users db, using `--dump-users`"));
