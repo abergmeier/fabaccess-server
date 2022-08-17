@@ -2,7 +2,8 @@
 FROM rust:bullseye as builder
 # install build deps
 RUN apt-get update && apt-get upgrade -y
-RUN apt-get install -yqq --no-install-recommends capnproto
+RUN apt-get install -yqq --no-install-recommends capnproto python3 python3-pip
+RUN pip3 install paho-mqtt
 
 WORKDIR /usr/src/bffh
 COPY . .
