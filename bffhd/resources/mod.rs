@@ -166,7 +166,7 @@ impl Resource {
         self.inner.set_state(archived)
     }
 
-    fn set_status(&self, state: Status) {
+    pub fn set_status(&self, state: Status) {
         let old = self.inner.get_state();
         let oldref: &Archived<State> = old.as_ref();
         let previous: &Archived<Option<UserRef>> = &oldref.inner.previous;

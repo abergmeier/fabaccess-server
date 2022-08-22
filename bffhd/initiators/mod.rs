@@ -51,6 +51,10 @@ impl InitiatorCallbacks {
         self.resource.try_update(session, status).await
     }
 
+    pub fn set_status(&mut self, status: Status) {
+        self.resource.set_status(status)
+    }
+
     pub fn open_session(&self, uid: &str) -> Option<SessionHandle> {
         self.sessions.open(&self.span, uid)
     }
