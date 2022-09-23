@@ -311,7 +311,7 @@ impl Authentication for FabFire {
                 // request the contents of the file containing the URN
                 const TOKEN_FILE_ID: u8 = 0x03;
 
-                let buf = match self.desfire.read_data_chunk_cmd(
+                return match self.desfire.read_data_chunk_cmd(
                     TOKEN_FILE_ID,
                     0,
                     MAX_BYTES_PER_TRANSACTION,
