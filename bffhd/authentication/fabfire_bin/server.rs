@@ -161,7 +161,7 @@ impl Authentication for FabFire {
                                     writer
                                         .write_all(&data)
                                         .map_err(|e| SessionError::Io { source: e })?;
-                                    Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                                    Ok(rsasl::session::Step::NeedsMore(Some(data.len())))
                                 },
                                 Err(e) => {
                                     tracing::error!(
@@ -205,7 +205,7 @@ impl Authentication for FabFire {
                             writer
                                 .write_all(&data)
                                 .map_err(|e| SessionError::Io { source: e })?;
-                            Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                            Ok(rsasl::session::Step::NeedsMore(Some(data.len())))
                         },
                         Err(e) => {
                             tracing::error!("Failed to convert APDUCommand to Vec<u8>: {:?}", e);
@@ -262,7 +262,7 @@ impl Authentication for FabFire {
                             writer
                                 .write_all(&data)
                                 .map_err(|e| SessionError::Io { source: e })?;
-                            Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                            Ok(rsasl::session::Step::NeedsMore(Some(data.len())))
                         },
                         Err(e) => {
                             tracing::error!("Failed to convert APDUCommand to Vec<u8>: {:?}", e);
@@ -323,7 +323,7 @@ impl Authentication for FabFire {
                             writer
                                 .write_all(&data)
                                 .map_err(|e| SessionError::Io { source: e })?;
-                            Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                            Ok(rsasl::session::Step::NeedsMore(Some(data.len())))
                         },
                         Err(e) => {
                             tracing::error!("Failed to convert APDUCommand to Vec<u8>: {:?}", e);
@@ -391,7 +391,7 @@ impl Authentication for FabFire {
                             writer
                                 .write_all(&data)
                                 .map_err(|e| SessionError::Io { source: e })?;
-                            Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                            Ok(rsasl::session::Step::NeedsMore(Some(data.len())))
                         },
                         Err(e) => {
                             tracing::error!("Failed to convert to Vec<u8>: {:?}", e);
@@ -440,7 +440,7 @@ impl Authentication for FabFire {
                                         writer
                                             .write_all(&data)
                                             .map_err(|e| SessionError::Io { source: e })?;
-                                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                                        Ok(rsasl::session::Step::NeedsMore(Some(data.len())))
                                     },
                                     Err(e) => {
                                         tracing::error!("Failed to convert to Vec<u8>: {:?}", e);
@@ -486,9 +486,7 @@ impl Authentication for FabFire {
                                         )
                                         .is_ok()
                                     {
-                                        return Ok(rsasl::session::Step::Done(Some(
-                                                    send_buf.len(),
-                                                )));
+                                        return Ok(rsasl::session::Step::Done(None));
                                             }
                                         },
                             },
