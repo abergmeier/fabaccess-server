@@ -2,11 +2,10 @@ use desfire::desfire::desfire::MAX_BYTES_PER_TRANSACTION;
 use desfire::desfire::Desfire;
 use desfire::error::Error as DesfireError;
 use desfire::iso7816_4::apduresponse::APDUResponse;
-use rsasl::error::{MechanismError, MechanismErrorKind, SASLError, SessionError};
-use rsasl::mechanism::Authentication;
+use rsasl::callback::SessionData;
+use rsasl::mechanism::{Authentication, MechanismError, MechanismErrorKind, State, ThisProvider};
+use rsasl::prelude::{MessageSent, SASLConfig, SASLError, SessionError};
 use rsasl::property::AuthId;
-use rsasl::session::{SessionData, StepResult};
-use rsasl::SASL;
 use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt::{Debug, Display, Formatter};
@@ -61,6 +60,10 @@ impl Display for FabFireError {
             FabFireError::Session(err) => write!(f, "Session: {}", err),
         }
     }
+}
+
+impl std::error::Error for FabFireError {
+
 }
 
 impl MechanismError for FabFireError {
@@ -154,7 +157,7 @@ pub struct FabFire {
 const MAGIC: &'static str = "FABACCESS\0DESFIRE\01.0\0";
 
 impl FabFire {
-    pub fn new_server(_sasl: &SASL) -> Result<Box<dyn Authentication>, SASLError> {
+    pub fn new_server(_sasl: &SASLConfig) -> Result<Box<dyn Authentication>, SASLError> {
         Ok(Box::new(Self {
             step: Step::New,
             card_info: None,
@@ -177,7 +180,7 @@ impl Authentication for FabFire {
         session: &mut SessionData,
         input: Option<&[u8]>,
         writer: &mut dyn Write,
-    ) -> StepResult {
+    ) -> Result<State, SessionError> {
         match self.step {
             Step::New => {
                 tracing::trace!("Step: New");
@@ -216,7 +219,7 @@ impl Authentication for FabFire {
                                 writer
                                     .write_all(&send_buf)
                                     .map_err(|e| SessionError::Io { source: e })?;
-                                Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                                Ok(State::Running)
                             }
                             Err(e) => {
                                 tracing::error!("Failed to serialize APDUCommand: {:?}", e);
@@ -282,7 +285,7 @@ impl Authentication for FabFire {
                         writer
                             .write_all(&send_buf)
                             .map_err(|e| SessionError::Io { source: e })?;
-                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                        Ok(State::Running)
                     }
                     Err(e) => {
                         tracing::error!("Failed to serialize APDUCommand: {:?}", e);
@@ -365,7 +368,7 @@ impl Authentication for FabFire {
                         writer
                             .write_all(&send_buf)
                             .map_err(|e| SessionError::Io { source: e })?;
-                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                        Ok(State::Running)
                     }
                     Err(e) => {
                         tracing::error!("Failed to serialize APDUCommand: {:?}", e);
@@ -452,7 +455,7 @@ impl Authentication for FabFire {
                         writer
                             .write_all(&send_buf)
                             .map_err(|e| SessionError::Io { source: e })?;
-                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                        Ok(State::Running)
                     }
                     Err(e) => {
                         tracing::error!("Failed to serialize APDUCommand: {:?}", e);
@@ -491,24 +494,9 @@ impl Authentication for FabFire {
                         match apdu_response.body {
                             Some(data) => {
                                 let token = String::from_utf8(data).unwrap();
-                                session.set_property::<AuthId>(Arc::new(
-                                    token.trim_matches(char::from(0)).to_string(),
-                                ));
-                                let key = match session.get_property_or_callback::<FabFireCardKey>()
-                                {
-                                    Ok(Some(key)) => Box::from(key.as_slice()),
-                                    Ok(None) => {
-                                        tracing::error!("No keys on file for token");
-                                        return Err(FabFireError::InvalidCredentials(
-                                            "No keys on file for token".to_string(),
-                                        )
-                                        .into());
-                                    }
-                                    Err(e) => {
-                                        tracing::error!("Failed to get key: {:?}", e);
-                                        return Err(FabFireError::Session(e).into());
-                                    }
-                                };
+                                let prov =
+                                    ThisProvider::<AuthId>::with(token.trim_matches(char::from(0)));
+                                let key = session.need_with::<FabFireCardKey, _, _>(&prov, |key| Ok(Box::from(key.as_slice())))?;
                                 self.key_info = Some(KeyInfo { key_id: 0x01, key });
                             }
                             None => {
@@ -546,7 +534,7 @@ impl Authentication for FabFire {
                         writer
                             .write_all(&send_buf)
                             .map_err(|e| SessionError::Io { source: e })?;
-                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                        Ok(State::Running)
                     }
                     Err(e) => {
                         tracing::error!("Failed to serialize command: {:?}", e);
@@ -616,7 +604,7 @@ impl Authentication for FabFire {
                                         writer
                                             .write_all(&send_buf)
                                             .map_err(|e| SessionError::Io { source: e })?;
-                                        Ok(rsasl::session::Step::NeedsMore(Some(send_buf.len())))
+                                        Ok(State::Running)
                                     }
                                     Err(e) => {
                                         tracing::error!("Failed to serialize command: {:?}", e);
@@ -691,9 +679,7 @@ impl Authentication for FabFire {
                                                 writer
                                                     .write_all(&send_buf)
                                                     .map_err(|e| SessionError::Io { source: e })?;
-                                                return Ok(rsasl::session::Step::Done(Some(
-                                                    send_buf.len(),
-                                                )));
+                                                return Ok(State::Finished(MessageSent::Yes));
                                             }
                                             Err(e) => {
                                                 tracing::error!(
@@ -722,6 +708,6 @@ impl Authentication for FabFire {
             }
         }
 
-        return Ok(rsasl::session::Step::Done(None));
+        return Ok(State::Finished(MessageSent::No));
     }
 }

@@ -3,10 +3,11 @@ use capnp::Error;
 use capnp_rpc::pry;
 use rsasl::mechname::Mechname;
 use rsasl::property::AuthId;
-use rsasl::session::{Session, Step};
 use std::fmt;
 use std::fmt::{Formatter, Write};
 use std::io::Cursor;
+use rsasl::prelude::{MessageSent, Session};
+use rsasl::prelude::State as SaslState;
 use tracing::Span;
 
 use crate::capnp::session::APISession;
@@ -123,7 +124,7 @@ impl AuthenticationSystem for Authentication {
 
             let mut out = Cursor::new(Vec::new());
             match session.step(Some(data), &mut out) {
-                Ok(Step::Done(data)) => {
+                Ok(SaslState::Finished(sent)) => {
                     self.state = State::Finished;
 
                     let uid = pry!(session.get_property::<AuthId>().ok_or_else(|| {
@@ -142,13 +143,13 @@ impl AuthenticationSystem for Authentication {
                     };
 
                     let mut builder = builder.init_successful();
-                    if data.is_some() {
+                    if sent == MessageSent::Yes {
                         builder.set_additional_data(out.into_inner().as_slice());
                     }
 
                     APISession::build(session, builder)
                 }
-                Ok(Step::NeedsMore(_)) => {
+                Ok(SaslState::Running) => {
                     self.state = State::Running(session, manager);
                     builder.set_challenge(out.into_inner().as_slice());
 

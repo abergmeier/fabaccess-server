@@ -1,12 +1,10 @@
 use crate::users::Users;
 use miette::{Context, IntoDiagnostic};
-use rsasl::error::SessionError;
-use rsasl::mechname::Mechname;
-use rsasl::property::{AuthId, Password};
-use rsasl::session::{Session, SessionData};
-use rsasl::validate::{validations, Validation};
-use rsasl::{Property, SASL};
 use std::sync::Arc;
+use rsasl::callback::{CallbackError, Request, SessionCallback, SessionData};
+use rsasl::mechanism::SessionError;
+use rsasl::prelude::{Mechname, SASLConfig, SASLServer, Session};
+use rsasl::property::AuthId;
 
 use crate::authentication::fabfire::FabFireCardKey;
 
@@ -22,36 +20,22 @@ impl Callback {
         Self { users, span }
     }
 }
-impl rsasl::callback::Callback for Callback {
-    fn provide_prop(
-        &self,
-        session: &mut rsasl::session::SessionData,
-        property: Property,
-    ) -> Result<(), SessionError> {
-        match property {
-            fabfire::FABFIRECARDKEY => {
-                let authcid = session.get_property_or_callback::<AuthId>()?;
-                let user = self
-                    .users
-                    .get_user(authcid.unwrap().as_ref())
-                    .ok_or(SessionError::AuthenticationFailure)?;
-                let kv = user
-                    .userdata
-                    .kv
-                    .get("cardkey")
-                    .ok_or(SessionError::AuthenticationFailure)?;
+impl SessionCallback for Callback {
+    fn callback(&self, session_data: &SessionData, context: &rsasl::callback::Context, request: &mut Request) -> Result<(), SessionError> {
+        if let Some(authid) = context.get_ref::<AuthId>() {
+            request.satisfy_with::<FabFireCardKey, _>(|| {
+                let user = self.users.get_user(authid).ok_or(CallbackError::NoValue)?;
+                let kv = user.userdata.kv.get("cardkey").ok_or(CallbackError::NoValue)?;
                 let card_key = <[u8; 16]>::try_from(
-                    hex::decode(kv).map_err(|_| SessionError::AuthenticationFailure)?,
-                )
-                .map_err(|_| SessionError::AuthenticationFailure)?;
-                session.set_property::<FabFireCardKey>(Arc::new(card_key));
-                Ok(())
-            }
-            _ => Err(SessionError::NoProperty { property }),
+                    hex::decode(kv).map_err(|_| CallbackError::NoValue)?,
+                ).map_err(|_| CallbackError::NoValue)?;
+                Ok(card_key)
+            })?;
         }
+        Ok(())
     }
 
-    fn validate(
+    /*fn validate(
         &self,
         session: &mut SessionData,
         validation: Validation,
@@ -90,21 +74,21 @@ impl rsasl::callback::Callback for Callback {
                 Err(SessionError::no_validate(validation))
             }
         }
-    }
+    }*/
 }
 
 struct Inner {
-    rsasl: SASL,
+    rsasl: Arc<SASLConfig>,
 }
 impl Inner {
-    pub fn new(rsasl: SASL) -> Self {
+    pub fn new(rsasl: Arc<SASLConfig>) -> Self {
         Self { rsasl }
     }
 }
 
 #[derive(Clone)]
 pub struct AuthenticationHandle {
-    inner: Arc<Inner>,
+    inner: Inner,
 }
 
 impl AuthenticationHandle {
@@ -112,11 +96,13 @@ impl AuthenticationHandle {
         let span = tracing::debug_span!("authentication");
         let _guard = span.enter();
 
-        let mut rsasl = SASL::new();
-        rsasl.install_callback(Arc::new(Callback::new(userdb)));
+        let config = SASLConfig::builder()
+            .with_defaults()
+            .with_callback(Callback::new(userdb))
+            .unwrap();
 
-        let mechs: Vec<&'static str> = rsasl
-            .server_mech_list()
+        let mechs: Vec<&'static str> = SASLServer::new(config.clone())
+            .get_available()
             .into_iter()
             .map(|m| m.mechanism.as_str())
             .collect();
@@ -124,23 +110,20 @@ impl AuthenticationHandle {
         tracing::debug!(?mechs, "available mechs");
 
         Self {
-            inner: Arc::new(Inner::new(rsasl)),
+            inner: Inner::new(config),
         }
     }
 
     pub fn start(&self, mechanism: &Mechname) -> miette::Result<Session> {
-        Ok(self
-            .inner
-            .rsasl
-            .server_start(mechanism)
+        Ok(SASLServer::new(self.inner.rsasl.clone())
+            .start_suggested(mechanism)
             .into_diagnostic()
             .wrap_err("Failed to start a SASL authentication with the given mechanism")?)
     }
 
     pub fn list_available_mechs(&self) -> impl IntoIterator<Item = &Mechname> {
-        self.inner
-            .rsasl
-            .server_mech_list()
+        SASLServer::new(self.inner.rsasl.clone())
+            .get_available()
             .into_iter()
             .map(|m| m.mechanism)
     }
