@@ -1,4 +1,4 @@
-use clap::{Arg, Command};
+use clap::{Arg, Command, ValueHint};
 use diflouroborane::{config, Diflouroborane};
 
 use std::str::FromStr;
@@ -6,33 +6,38 @@ use std::{env, io, io::Write, path::PathBuf};
 
 use nix::NixPath;
 
-fn main() -> anyhow::Result<()> {
+fn main() -> miette::Result<()> {
     // Argument parsing
     // values for the name, description and version are pulled from `Cargo.toml`.
     let matches = Command::new(clap::crate_name!())
         .version(clap::crate_version!())
-        .long_version(diflouroborane::VERSION_STRING)
+        .long_version(&*format!("{version}\n\
+            FabAccess {apiver}\n\
+            \t[{build_kind} build built on {build_time}]\n\
+            \t  {rustc_version}\n\t  {cargo_version}",
+            version=diflouroborane::env::PKG_VERSION,
+            apiver="0.3",
+            rustc_version=diflouroborane::env::RUST_VERSION,
+            cargo_version=diflouroborane::env::CARGO_VERSION,
+            build_time=diflouroborane::env::BUILD_TIME_3339,
+            build_kind=diflouroborane::env::BUILD_RUST_CHANNEL))
         .about(clap::crate_description!())
-        .arg(
-            Arg::new("config")
+        .arg(Arg::new("config")
                 .help("Path to the config file to use")
                 .long("config")
                 .short('c')
-                .takes_value(true),
-        )
+                .takes_value(true))
         .arg(Arg::new("verbosity")
             .help("Increase logging verbosity")
             .long("verbose")
             .short('v')
             .multiple_occurrences(true)
             .max_occurrences(3)
-            .conflicts_with("quiet")
-        )
+            .conflicts_with("quiet"))
         .arg(Arg::new("quiet")
             .help("Decrease logging verbosity")
             .long("quiet")
-            .conflicts_with("verbosity")
-        )
+            .conflicts_with("verbosity"))
         .arg(Arg::new("log format")
             .help("Use an alternative log formatter. Available: Full, Compact, Pretty")
             .long("log-format")
@@ -46,26 +51,36 @@ fn main() -> anyhow::Result<()> {
         .arg(
             Arg::new("print default")
                 .help("Print a default config to stdout instead of running")
-                .long("print-default"),
-        )
+                .long("print-default"))
         .arg(
             Arg::new("check config")
                 .help("Check config for validity")
-                .long("check"),
-        )
+                .long("check"))
         .arg(
             Arg::new("dump")
                 .help("Dump all internal databases")
                 .long("dump")
-                .conflicts_with("load"),
+                .conflicts_with("load"))
+        .arg(
+            Arg::new("dump-users")
+                .help("Dump the users db to the given file as TOML")
+                .long("dump-users")
+                .takes_value(true)
+                .value_name("FILE")
+                .value_hint(ValueHint::AnyPath)
+                .default_missing_value("users.toml")
+                .conflicts_with("load"))
+        .arg(
+            Arg::new("force")
+                .help("force ops that may clobber")
+                .long("force")
         )
         .arg(
             Arg::new("load")
                 .help("Load values into the internal databases")
                 .long("load")
                 .takes_value(true)
-                .conflicts_with("dump"),
-        )
+                .conflicts_with("dump"))
         .arg(Arg::new("keylog")
             .help("log TLS keys into PATH. If no path is specified the value of the envvar SSLKEYLOGFILE is used.")
             .long("tls-key-log")
@@ -73,9 +88,13 @@ fn main() -> anyhow::Result<()> {
             .takes_value(true)
             .max_values(1)
             .min_values(0)
-            .default_missing_value("")
-        )
-        .get_matches();
+            .default_missing_value(""))
+        .try_get_matches();
+
+    let matches = match matches {
+        Ok(m) => m,
+        Err(error) => error.exit(),
+    };
 
     let configpath = matches
         .value_of("config")
@@ -116,24 +135,28 @@ fn main() -> anyhow::Result<()> {
         }
     }
 
-    let mut config = config::read(&PathBuf::from_str(configpath).unwrap()).unwrap();
+    let mut config = config::read(&PathBuf::from_str(configpath).unwrap())?;
 
     if matches.is_present("dump") {
-        unimplemented!()
+        return Err(miette::miette!("DB Dumping is currently not implemented, except for the users db, using `--dump-users`"));
+    } else if matches.is_present("dump-users") {
+        let bffh = Diflouroborane::new(config)?;
+
+        let number = bffh.users.dump_file(
+            matches.value_of("dump-users").unwrap(),
+            matches.is_present("force"),
+        )?;
+
+        tracing::info!("successfully dumped {} users", number);
+
+        return Ok(());
     } else if matches.is_present("load") {
         let bffh = Diflouroborane::new(config)?;
-        if bffh
-            .users
-            .load_file(matches.value_of("load").unwrap())
-            .is_ok()
-        {
-            tracing::info!("loaded users from {}", matches.value_of("load").unwrap());
-        } else {
-            tracing::error!(
-                "failed to load users from {}",
-                matches.value_of("load").unwrap()
-            );
-        }
+
+        bffh.users.load_file(matches.value_of("load").unwrap())?;
+
+        tracing::info!("loaded users from {}", matches.value_of("load").unwrap());
+
         return Ok(());
     } else {
         let keylog = matches.value_of("keylog");

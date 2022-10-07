@@ -37,7 +37,11 @@ pin-utils = "0.1.0"
 futures-util = "0.3"
 futures-lite = "1.12.0"
 async-net = "1.6.1"
-anyhow = "1.0.56"
+async-io = "1.7.0"
+async-process = "1.4.0"
+backtrace = "0.3.65"
+miette = { version = "4.7.1", features = ["fancy"] }
+thiserror = "1.0.31"
 toml = "0.5.8"
 
 # Well-known paths/dirs for e.g. cache
@@ -45,6 +49,8 @@ dirs = "4.0.0"
 
 # Runtime
 executor = { path = "runtime/executor" }
+lightproc = { path = "runtime/lightproc" }
+console = { path = "runtime/console" }
 
 # Catch&Handle POSIX process signals
 signal-hook = "0.3.13"
@@ -68,9 +74,9 @@ rust-argon2 = "0.8.3"
 rand = "0.8.4"
 
 # Async aware logging and tracing
-tracing = "0.1.28"
-tracing-subscriber = { version = "0.2.25", features = ["env-filter"] }
-tracing-futures = { version = "0.2.5", features = ["futures-03"] }
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter", "registry", "std"] }
+tracing-futures = { version = "0.2", features = ["futures-03"] }
 
 # API
 api = { path = "api" }
@@ -103,6 +109,8 @@ async-compat = "0.2.1"
 url = "2.2.2"
 rustls-native-certs = "0.6.1"
 
+shadow-rs = "0.11"
+
 [dependencies.rsasl]
 git = "https://github.com/dequbed/rsasl.git"
 rev = "0b5012d0"
@@ -113,5 +121,8 @@ features = ["unstable_custom_mechanism", "provider", "registry_static", "plain"]
 futures-test = "0.3.16"
 tempfile = "3.2"
 
+[build-dependencies]
+shadow-rs = "0.11"
+
 [workspace]
-members = ["modules/*", "api"]
+members = ["runtime/*", "modules/*", "api"]

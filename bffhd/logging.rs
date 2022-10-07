@@ -1,6 +1,9 @@
-use tracing_subscriber::EnvFilter;
-
 use serde::{Deserialize, Serialize};
+use std::path::Path;
+use tracing_subscriber::fmt::format::Format;
+use tracing_subscriber::prelude::*;
+use tracing_subscriber::reload::Handle;
+use tracing_subscriber::{reload, EnvFilter};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogConfig {
@@ -24,21 +27,49 @@ impl Default for LogConfig {
     }
 }
 
-pub fn init(config: &LogConfig) {
+pub enum LogOutput<'a> {
+    Journald,
+    Stdout,
+    File(&'a Path),
+}
+pub struct LogConfig2<'a, F> {
+    output: LogOutput<'a>,
+    filter_str: Option<&'a str>,
+    format: Format<F>,
+}
+
+pub fn init(config: &LogConfig) -> console::Server {
+    let subscriber = tracing_subscriber::registry();
+
+    let (console_layer, server) = console::ConsoleLayer::new();
+    let subscriber = subscriber.with(console_layer);
+
     let filter = if let Some(ref filter) = config.filter {
         EnvFilter::new(filter.as_str())
     } else {
         EnvFilter::from_env("BFFH_LOG")
     };
 
-    let builder = tracing_subscriber::fmt().with_env_filter(filter);
-
     let format = config.format.to_lowercase();
-    match format.as_str() {
-        "compact" => builder.compact().init(),
-        "pretty" => builder.pretty().init(),
-        "full" => builder.init(),
-        _ => builder.init(),
+
+    let fmt_layer = tracing_subscriber::fmt::layer();
+
+    match format.as_ref() {
+        "pretty" => {
+            let fmt_layer = fmt_layer.pretty().with_filter(filter);
+            subscriber.with(fmt_layer).init();
+        }
+        "compact" => {
+            let fmt_layer = fmt_layer.compact().with_filter(filter);
+            subscriber.with(fmt_layer).init();
+        }
+        _ => {
+            let fmt_layer = fmt_layer.with_filter(filter);
+            subscriber.with(fmt_layer).init();
+        }
     }
-    tracing::info!(format = format.as_str(), "Logging initialized")
+
+    tracing::info!(format = format.as_str(), "Logging initialized");
+
+    server
 }

@@ -6,6 +6,7 @@ use std::sync::Arc;
 
 use crate::capnp::TlsListen;
 use futures_rustls::TlsAcceptor;
+use miette::IntoDiagnostic;
 use rustls::version::{TLS12, TLS13};
 use rustls::{Certificate, PrivateKey, ServerConfig, SupportedCipherSuite};
 use tracing::Level;
@@ -74,26 +75,27 @@ impl TlsConfig {
         }
     }
 
-    pub fn make_tls_acceptor(&self, config: &TlsListen) -> anyhow::Result<TlsAcceptor> {
+    pub fn make_tls_acceptor(&self, config: &TlsListen) -> miette::Result<TlsAcceptor> {
         let span = tracing::debug_span!("tls");
         let _guard = span.enter();
 
         tracing::debug!(path = %config.certfile.as_path().display(), "reading certificates");
-        let mut certfp = BufReader::new(File::open(config.certfile.as_path())?);
-        let certs = rustls_pemfile::certs(&mut certfp)?
+        let mut certfp = BufReader::new(File::open(config.certfile.as_path()).into_diagnostic()?);
+        let certs = rustls_pemfile::certs(&mut certfp)
+            .into_diagnostic()?
             .into_iter()
             .map(Certificate)
             .collect();
 
         tracing::debug!(path = %config.keyfile.as_path().display(), "reading private key");
-        let mut keyfp = BufReader::new(File::open(config.keyfile.as_path())?);
-        let key = match rustls_pemfile::read_one(&mut keyfp)? {
+        let mut keyfp = BufReader::new(File::open(config.keyfile.as_path()).into_diagnostic()?);
+        let key = match rustls_pemfile::read_one(&mut keyfp).into_diagnostic()? {
             Some(rustls_pemfile::Item::PKCS8Key(key) | rustls_pemfile::Item::RSAKey(key)) => {
                 PrivateKey(key)
             }
             _ => {
                 tracing::error!("private key file invalid");
-                anyhow::bail!("private key file must contain a PEM-encoded private key")
+                miette::bail!("private key file must contain a PEM-encoded private key")
             }
         };
 
@@ -105,15 +107,17 @@ impl TlsConfig {
             match min.as_str() {
                 "tls12" => tls_builder.with_protocol_versions(&[&TLS12]),
                 "tls13" => tls_builder.with_protocol_versions(&[&TLS13]),
-                x => anyhow::bail!("TLS version {} is invalid", x),
+                x => miette::bail!("TLS version {} is invalid", x),
             }
         } else {
             tls_builder.with_safe_default_protocol_versions()
-        }?;
+        }
+        .into_diagnostic()?;
 
         let mut tls_config = tls_builder
             .with_no_client_auth()
-            .with_single_cert(certs, key)?;
+            .with_single_cert(certs, key)
+            .into_diagnostic()?;
 
         if let Some(keylog) = &self.keylog {
             tls_config.key_log = keylog.clone();

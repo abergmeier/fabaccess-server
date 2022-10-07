@@ -24,12 +24,16 @@ pub mod users;
 pub mod resources;
 
 pub mod actors;
+pub mod initiators;
 
 pub mod sensors;
 
 pub mod capnp;
 
 pub mod utils;
+
+// Store build information in the `env` module.
+shadow_rs::shadow!(env);
 
 mod audit;
 mod keylog;
@@ -39,9 +43,8 @@ mod tls;
 
 use std::sync::Arc;
 
-use anyhow::Context;
-
-use futures_util::StreamExt;
+use futures_util::{FutureExt, StreamExt};
+use miette::{Context, IntoDiagnostic, Report};
 use once_cell::sync::OnceCell;
 
 use crate::audit::AuditLog;
@@ -58,10 +61,9 @@ use crate::tls::TlsConfig;
 use crate::users::db::UserDB;
 use crate::users::Users;
 use executor::pool::Executor;
+use lightproc::recoverable_handle::RecoverableHandle;
 use signal_hook::consts::signal::*;
-
-pub const VERSION_STRING: &'static str = env!("BFFHD_VERSION_STRING");
-pub const RELEASE_STRING: &'static str = env!("BFFHD_RELEASE_STRING");
+use tracing::Span;
 
 pub struct Diflouroborane {
     config: Config,
@@ -70,28 +72,58 @@ pub struct Diflouroborane {
     pub users: Users,
     pub roles: Roles,
     pub resources: ResourcesHandle,
+    span: Span,
 }
 
 pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 
-impl Diflouroborane {
-    pub fn new(config: Config) -> anyhow::Result<Self> {
-        logging::init(&config.logging);
-        tracing::info!(version = VERSION_STRING, "Starting BFFH");
+struct SignalHandlerErr;
+impl error::Description for SignalHandlerErr {
+    const CODE: &'static str = "signals::new";
+}
 
-        let span = tracing::info_span!("setup");
-        let _guard = span.enter();
+impl Diflouroborane {
+    pub fn setup() {}
+
+    pub fn new(config: Config) -> miette::Result<Self> {
+        let mut server = logging::init(&config.logging);
+        let span = tracing::info_span!(
+            target: "bffh",
+            "bffh"
+        );
+        let span2 = span.clone();
+        let _guard = span2.enter();
+        tracing::info!(version = env::VERSION, "Starting BFFH");
 
         let executor = Executor::new();
 
-        let env = StateDB::open_env(&config.db_path)?;
-        let statedb =
-            StateDB::create_with_env(env.clone()).context("Failed to open state DB file")?;
+        if let Some(aggregator) = server.aggregator.take() {
+            executor.spawn(aggregator.run());
+        }
+        tracing::info!("Server is being spawned");
+        let handle = executor.spawn(server.serve());
+        executor.spawn(handle.map(|result| match result {
+            Some(Ok(())) => {
+                tracing::info!("console server finished without error");
+            }
+            Some(Err(error)) => {
+                tracing::info!(%error, "console server finished with error");
+            }
+            None => {
+                tracing::info!("console server finished with panic");
+            }
+        }));
 
-        let users = Users::new(env.clone()).context("Failed to open users DB file")?;
+        let env = StateDB::open_env(&config.db_path)?;
+
+        let statedb = StateDB::create_with_env(env.clone())?;
+
+        let users = Users::new(env.clone())?;
         let roles = Roles::new(config.roles.clone());
 
-        let _audit_log = AuditLog::new(&config).context("Failed to initialize audit log")?;
+        let _audit_log = AuditLog::new(&config)
+            .into_diagnostic()
+            .wrap_err("Failed to initialize audit log")?;
 
         let resources = ResourcesHandle::new(config.machines.iter().map(|(id, desc)| {
             Resource::new(Arc::new(resources::Inner::new(
@@ -109,20 +141,30 @@ impl Diflouroborane {
             users,
             roles,
             resources,
+            span,
         })
     }
 
-    pub fn run(&mut self) -> anyhow::Result<()> {
+    pub fn run(&mut self) -> miette::Result<()> {
+        let _guard = self.span.enter();
         let mut signals = signal_hook_async_std::Signals::new(&[SIGINT, SIGQUIT, SIGTERM])
-            .context("Failed to construct signal handler")?;
-
-        actors::load(self.executor.clone(), &self.config, self.resources.clone())?;
-
-        let tlsconfig = TlsConfig::new(self.config.tlskeylog.as_ref(), !self.config.is_quiet())?;
-        let acceptor = tlsconfig.make_tls_acceptor(&self.config.tlsconfig)?;
+            .map_err(|ioerr| error::wrap::<SignalHandlerErr>(ioerr.into()))?;
 
         let sessionmanager = SessionManager::new(self.users.clone(), self.roles.clone());
         let authentication = AuthenticationHandle::new(self.users.clone());
+
+        initiators::load(
+            self.executor.clone(),
+            &self.config,
+            self.resources.clone(),
+            sessionmanager.clone(),
+            authentication.clone(),
+        );
+        actors::load(self.executor.clone(), &self.config, self.resources.clone())?;
+
+        let tlsconfig = TlsConfig::new(self.config.tlskeylog.as_ref(), !self.config.is_quiet())
+            .into_diagnostic()?;
+        let acceptor = tlsconfig.make_tls_acceptor(&self.config.tlsconfig)?;
 
         let apiserver = self.executor.run(APIServer::bind(
             self.executor.clone(),
@@ -148,5 +190,20 @@ impl Diflouroborane {
 
         self.executor.run(f);
         Ok(())
+    }
+}
+
+struct ShutdownHandler {
+    tasks: Vec<RecoverableHandle<()>>,
+}
+impl ShutdownHandler {
+    pub fn new(tasks: Vec<RecoverableHandle<()>>) -> Self {
+        Self { tasks }
+    }
+
+    pub fn shutdown(&mut self) {
+        for handle in self.tasks.drain(..) {
+            handle.cancel()
+        }
     }
 }

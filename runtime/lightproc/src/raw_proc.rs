@@ -15,17 +15,30 @@ use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::atomic::Ordering;
 
+use crate::GroupId;
 use std::task::{Context, Poll, RawWaker, RawWakerVTable, Waker};
+use tracing::Span;
 
 /// Raw pointers to the fields of a proc.
+// TODO: Make generic over the Allocator used!
+// TODO: The actual layout stored could be expressed as a struct w/ union. Maybe do that?
 pub(crate) struct RawProc<'a, F, R, S> {
     pub(crate) pdata: *const ProcData,
     pub(crate) schedule: *const S,
     pub(crate) future: *mut F,
+    // TODO: Replace with `*mut MaybeUninit`? And also, store the result in the handle if that's
+    //       still available, instead of copying it to the heap.
     pub(crate) output: *mut R,
 
     // Make the lifetime 'a of the future invariant
     _marker: PhantomData<&'a ()>,
+    // TODO: We should link a proc to a process group for scheduling and tracing
+    //    - sub-tasks should start in the same group by default
+    //    - that data needs to be available when calling `spawn` and to decide which task to run.
+    //      So there must be a thread-local reference to it that's managed by the executor, and
+    //      updated when a new task is being polled.
+    //      Additionally `schedule` must have a reference to it to be able to push to the right
+    //      queue? The `schedule` fn could just come from the group instead.
 }
 
 impl<'a, F, R, S> RawProc<'a, F, R, S>
@@ -37,7 +50,12 @@ where
     /// Allocates a proc with the given `future` and `schedule` function.
     ///
     /// It is assumed there are initially only the `LightProc` reference and the `ProcHandle`.
-    pub(crate) fn allocate(future: F, schedule: S) -> NonNull<()> {
+    pub(crate) fn allocate(
+        future: F,
+        schedule: S,
+        span: Span,
+        cgroup: Option<GroupId>,
+    ) -> NonNull<()> {
         // Compute the layout of the proc for allocation. Abort if the computation fails.
         let proc_layout = Self::proc_layout();
 
@@ -70,6 +88,8 @@ where
                     destroy: Self::destroy,
                     tick: Self::tick,
                 },
+                span,
+                cgroup,
             });
 
             // Write the schedule function as the third field of the proc.
@@ -128,6 +148,15 @@ where
     /// Wakes a waker.
     unsafe fn wake(ptr: *const ()) {
         let raw = Self::from_ptr(ptr);
+        let id = (&(*raw.pdata).span)
+            .id()
+            .map(|id| id.into_u64())
+            .unwrap_or(0);
+        tracing::trace!(
+            target: "executor::waker",
+            op = "waker.wake",
+            task.id = id,
+        );
 
         let mut state = (*raw.pdata).state.load(Ordering::Acquire);
 
@@ -191,6 +220,15 @@ where
     /// Wakes a waker by reference.
     unsafe fn wake_by_ref(ptr: *const ()) {
         let raw = Self::from_ptr(ptr);
+        let id = (&(*raw.pdata).span)
+            .id()
+            .map(|id| id.into_u64())
+            .unwrap_or(0);
+        tracing::trace!(
+            target: "executor::waker",
+            op = "waker.wake_by_ref",
+            task.id = id,
+        );
 
         let mut state = (*raw.pdata).state.load(Ordering::Acquire);
 
@@ -250,6 +288,16 @@ where
     /// Clones a waker.
     unsafe fn clone_waker(ptr: *const ()) -> RawWaker {
         let raw = Self::from_ptr(ptr);
+        let id = (&(*raw.pdata).span)
+            .id()
+            .map(|id| id.into_u64())
+            .unwrap_or(0);
+        tracing::trace!(
+            target: "executor::waker",
+            op = "waker.clone",
+            task.id = id,
+        );
+
         let raw_waker = &(*raw.pdata).vtable.raw_waker;
 
         // Increment the reference count. With any kind of reference-counted data structure,
@@ -271,6 +319,15 @@ where
     #[inline]
     unsafe fn decrement(ptr: *const ()) {
         let raw = Self::from_ptr(ptr);
+        let id = (&(*raw.pdata).span)
+            .id()
+            .map(|id| id.into_u64())
+            .unwrap_or(0);
+        tracing::trace!(
+            target: "executor::waker",
+            op = "waker.drop",
+            task.id = id,
+        );
 
         // Decrement the reference count.
         let new = (*raw.pdata).state.fetch_sub(1, Ordering::AcqRel);
@@ -310,10 +367,11 @@ where
         raw.output as *const ()
     }
 
-    /// Cleans up proc's resources and deallocates it.
+    /// Cleans up the procs resources and deallocates the associated memory.
     ///
-    /// If the proc has not been closed, then its future or the output will be dropped. The
-    /// schedule function gets dropped too.
+    /// The future or output stored will *not* be dropped, but its memory will be freed. Callers
+    /// must ensure that they are correctly dropped beforehand if either of those is still alive to
+    /// prevent use-after-free.
     #[inline]
     unsafe fn destroy(ptr: *const ()) {
         let raw = Self::from_ptr(ptr);
@@ -322,6 +380,9 @@ where
         // We need a safeguard against panics because destructors can panic.
         // Drop the schedule function.
         (raw.schedule as *mut S).drop_in_place();
+
+        // Drop the proc data containing the associated Span
+        (raw.pdata as *mut ProcData).drop_in_place();
 
         // Finally, deallocate the memory reserved by the proc.
         alloc::dealloc(ptr as *mut u8, proc_layout.layout);
@@ -332,9 +393,11 @@ where
     /// Ticking will call `poll` once and re-schedule the task if it returns `Poll::Pending`. If
     /// polling its future panics, the proc will be closed and the panic propagated into the caller.
     unsafe fn tick(ptr: *const ()) {
-        let raw = Self::from_ptr(ptr);
+        let mut raw = Self::from_ptr(ptr);
+        // Enter the span associated with the process to track execution time if enabled.
+        let _guard = (&(*raw.pdata).span).enter();
 
-        // Create a context from the raw proc pointer and the vtable inside the its pdata.
+        // Create a context from the raw proc pointer and the vtable inside its pdata.
         let waker = ManuallyDrop::new(Waker::from_raw(RawWaker::new(
             ptr,
             &(*raw.pdata).vtable.raw_waker,
@@ -380,9 +443,9 @@ where
 
         // Poll the inner future, but surround it with a guard that closes the proc in case polling
         // panics.
-        let guard = Guard(raw);
-        let poll = <F as Future>::poll(Pin::new_unchecked(&mut *raw.future), cx);
-        mem::forget(guard);
+        let drop_guard = Guard(&mut raw);
+        let poll = <F as Future>::poll(drop_guard.pin_future(), cx);
+        drop_guard.disable();
 
         match poll {
             Poll::Ready(out) => {
@@ -497,21 +560,43 @@ impl<'a, F, R, S> Clone for RawProc<'a, F, R, S> {
 }
 impl<'a, F, R, S> Copy for RawProc<'a, F, R, S> {}
 
+#[repr(transparent)]
 /// A guard that closes the proc if polling its future panics.
-struct Guard<'a, F, R, S>(RawProc<'a, F, R, S>)
+struct Guard<'guard, 'a, F, R, S>(&'guard mut RawProc<'a, F, R, S>)
 where
     F: Future<Output = R> + 'a,
     R: 'a,
     S: Fn(LightProc) + 'a;
 
-impl<'a, F, R, S> Drop for Guard<'a, F, R, S>
+impl<'guard, 'a, F, R, S> Guard<'guard, 'a, F, R, S>
+where
+    F: Future<Output = R> + 'a,
+    R: 'a,
+    S: Fn(LightProc) + 'a,
+{
+    #[inline(always)]
+    /// Disable the guard again.
+    ///
+    /// This does essentially nothing but prevents the Drop implementation from being called
+    fn disable(self) {
+        // Put `self` in a ManuallyDrop telling the compiler to explicitly not call Drop::drop
+        let _ = ManuallyDrop::new(self);
+    }
+
+    #[inline(always)]
+    unsafe fn pin_future(&self) -> Pin<&mut F> {
+        Pin::new_unchecked(&mut *self.0.future)
+    }
+}
+
+impl<'a, F, R, S> Drop for Guard<'_, 'a, F, R, S>
 where
     F: Future<Output = R> + 'a,
     R: 'a,
     S: Fn(LightProc) + 'a,
 {
     fn drop(&mut self) {
-        let raw = self.0;
+        let raw = &self.0;
         let ptr = raw.pdata as *const ();
 
         unsafe {

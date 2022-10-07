@@ -3,8 +3,49 @@ use crate::state::*;
 use crossbeam_utils::Backoff;
 use std::cell::Cell;
 use std::fmt::{self, Debug, Formatter};
+use std::num::NonZeroU64;
 use std::sync::atomic::Ordering;
 use std::task::Waker;
+use tracing::Span;
+
+#[derive(Clone, Debug, Eq, PartialEq, Hash)]
+#[repr(transparent)]
+/// Opaque id of the group this proc belongs to
+pub struct GroupId(NonZeroU64);
+
+impl GroupId {
+    /// Construct an ID from an u64
+    ///
+    /// # Panics
+    /// - if the provided `u64` is `0`.
+    pub fn from_u64(i: u64) -> Self {
+        Self(NonZeroU64::new(i).expect("group id must be > 0"))
+    }
+
+    #[inline]
+    /// Construct an ID from a NonZeroU64
+    ///
+    /// This method can't fail
+    pub const fn from_non_zero_u64(i: NonZeroU64) -> Self {
+        Self(i)
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    //noinspection RsSelfConvention
+    #[inline]
+    /// Convert a GroupId into a u64
+    pub const fn into_u64(&self) -> u64 {
+        self.0.get()
+    }
+
+    #[allow(clippy::wrong_self_convention)]
+    //noinspection RsSelfConvention
+    #[inline]
+    /// Convert a GroupId into a NonZeroU64
+    pub const fn into_non_zero_u64(&self) -> NonZeroU64 {
+        self.0
+    }
+}
 
 /// The pdata of a proc.
 ///
@@ -25,6 +66,17 @@ pub(crate) struct ProcData {
     /// In addition to the actual waker virtual table, it also contains pointers to several other
     /// methods necessary for bookkeeping the heap-allocated proc.
     pub(crate) vtable: &'static ProcVTable,
+
+    /// The span assigned to this process.
+    ///
+    /// A lightproc has a tracing span associated that allow recording occurances of vtable calls
+    /// for this process.
+    pub(crate) span: Span,
+
+    /// Control group assigned to this process.
+    ///
+    /// The control group links this process to its supervision tree
+    pub(crate) cgroup: Option<GroupId>,
 }
 
 impl ProcData {
@@ -61,7 +113,7 @@ impl ProcData {
         }
     }
 
-    /// Notifies the proc blocked on the proc.
+    /// Notifies the proc blocked on this proc, if any.
     ///
     /// If there is a registered waker, it will be removed from the pdata and woken.
     #[inline]

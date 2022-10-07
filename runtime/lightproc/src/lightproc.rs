@@ -31,11 +31,13 @@ use crate::proc_ext::ProcFutureExt;
 use crate::proc_handle::ProcHandle;
 use crate::raw_proc::RawProc;
 use crate::recoverable_handle::RecoverableHandle;
+use crate::GroupId;
 use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
-use std::mem;
+use std::mem::ManuallyDrop;
 use std::panic::AssertUnwindSafe;
 use std::ptr::NonNull;
+use tracing::Span;
 
 /// Shared functionality for both Send and !Send LightProc
 pub struct LightProc {
@@ -45,8 +47,8 @@ pub struct LightProc {
 
 // LightProc is both Sync and Send because it explicitly handles synchronization internally:
 // The state of a `LightProc` is only modified atomically guaranteeing a consistent view from all
-// threads. Existing handles are atomically reference counted so the proc itself will not be dropped
-// until all pointers to it are themselves dropped.
+// threads. Existing wakers (and the proc_handle) are atomically reference counted so the proc
+// itself will not be dropped until all pointers to it are themselves dropped.
 // However, if the future or result inside the LightProc is !Send the executor must ensure that
 // the `schedule` function does not move the LightProc to a different thread.
 unsafe impl Send for LightProc {}
@@ -76,14 +78,19 @@ impl LightProc {
     ///     println!("future panicked!: {}", &reason);
     /// });
     /// ```
-    pub fn recoverable<'a, F, R, S>(future: F, schedule: S) -> (Self, RecoverableHandle<R>)
+    pub fn recoverable<'a, F, R, S>(
+        future: F,
+        schedule: S,
+        span: Span,
+        cgroup: Option<GroupId>,
+    ) -> (Self, RecoverableHandle<R>)
     where
         F: Future<Output = R> + 'a,
         R: 'a,
         S: Fn(LightProc) + 'a,
     {
         let recovery_future = AssertUnwindSafe(future).catch_unwind();
-        let (proc, handle) = Self::build(recovery_future, schedule);
+        let (proc, handle) = Self::build(recovery_future, schedule, span, cgroup);
         (proc, RecoverableHandle::new(handle))
     }
 
@@ -92,6 +99,7 @@ impl LightProc {
     ///
     /// # Example
     /// ```rust
+    /// # use tracing::Span;
     /// # use lightproc::prelude::*;
     /// #
     /// # // ... future that does work
@@ -113,15 +121,22 @@ impl LightProc {
     /// let standard = LightProc::build(
     ///     future,
     ///     schedule_function,
+    ///     Span::current(),
+    ///     None,
     /// );
     /// ```
-    pub fn build<'a, F, R, S>(future: F, schedule: S) -> (Self, ProcHandle<R>)
+    pub fn build<'a, F, R, S>(
+        future: F,
+        schedule: S,
+        span: Span,
+        cgroup: Option<GroupId>,
+    ) -> (Self, ProcHandle<R>)
     where
         F: Future<Output = R> + 'a,
         R: 'a,
         S: Fn(LightProc) + 'a,
     {
-        let raw_proc = RawProc::allocate(future, schedule);
+        let raw_proc = RawProc::allocate(future, schedule, span, cgroup);
         let proc = LightProc { raw_proc };
         let handle = ProcHandle::new(raw_proc);
         (proc, handle)
@@ -130,9 +145,9 @@ impl LightProc {
     ///
     /// Schedule the lightweight process with passed `schedule` function at the build time.
     pub fn schedule(self) {
-        let ptr = self.raw_proc.as_ptr();
+        let this = ManuallyDrop::new(self);
+        let ptr = this.raw_proc.as_ptr();
         let pdata = ptr as *const ProcData;
-        mem::forget(self);
 
         unsafe {
             ((*pdata).vtable.schedule)(ptr);
@@ -144,9 +159,9 @@ impl LightProc {
     /// "Running" a lightproc means ticking it once and if it doesn't complete
     /// immediately re-scheduling it as soon as it's Waker wakes it back up.
     pub fn run(self) {
-        let ptr = self.raw_proc.as_ptr();
+        let this = ManuallyDrop::new(self);
+        let ptr = this.raw_proc.as_ptr();
         let pdata = ptr as *const ProcData;
-        mem::forget(self);
 
         unsafe {
             ((*pdata).vtable.tick)(ptr);

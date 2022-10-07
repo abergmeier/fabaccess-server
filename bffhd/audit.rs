@@ -10,6 +10,7 @@ use serde_json::Serializer;
 
 pub static AUDIT: OnceCell<AuditLog> = OnceCell::new();
 
+// TODO: Make the audit log a tracing layer
 #[derive(Debug)]
 pub struct AuditLog {
     writer: Mutex<LineWriter<File>>,
@@ -51,7 +52,7 @@ impl AuditLog {
         let mut ser = Serializer::new(&mut writer);
         line.serialize(&mut ser)
             .expect("failed to serialize audit log line");
-        writer.write("\n".as_bytes())?;
+        writer.write_all("\n".as_bytes())?;
         Ok(())
     }
 }

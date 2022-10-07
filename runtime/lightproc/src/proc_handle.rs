@@ -6,6 +6,7 @@ use crate::state::*;
 use std::fmt::{self, Debug, Formatter};
 use std::future::Future;
 use std::marker::{PhantomData, Unpin};
+use std::mem::MaybeUninit;
 use std::pin::Pin;
 use std::ptr::NonNull;
 use std::sync::atomic::Ordering;
@@ -22,7 +23,9 @@ pub struct ProcHandle<R> {
     pub(crate) raw_proc: NonNull<()>,
 
     /// A marker capturing the generic type `R`.
-    pub(crate) result: PhantomData<R>,
+    // TODO: Instead of writing the future output to the RawProc on heap, put it in the handle
+    //       (if still available).
+    pub(crate) marker: PhantomData<R>,
 }
 
 unsafe impl<R: Send> Send for ProcHandle<R> {}
@@ -34,7 +37,7 @@ impl<R> ProcHandle<R> {
     pub(crate) fn new(raw_proc: NonNull<()>) -> Self {
         Self {
             raw_proc,
-            result: PhantomData,
+            marker: PhantomData,
         }
     }
 
@@ -48,6 +51,13 @@ impl<R> ProcHandle<R> {
         let pdata = ptr as *const ProcData;
 
         unsafe {
+            let id = (&(*pdata).span).id().map(|id| id.into_u64()).unwrap_or(0);
+            tracing::trace!(
+                target: "executor::handle",
+                op = "handle.cancel",
+                task.id = id,
+            );
+
             let mut state = (*pdata).state.load(Ordering::Acquire);
 
             loop {
@@ -189,6 +199,14 @@ impl<R> Drop for ProcHandle<R> {
         let mut output = None;
 
         unsafe {
+            // Record dropping the handle for this task
+            let id = (&(*pdata).span).id().map(|id| id.into_u64()).unwrap_or(0);
+            tracing::trace!(
+                target: "executor::handle",
+                op = "handle.drop",
+                task.id = id,
+            );
+
             // Optimistically assume the `ProcHandle` is being dropped just after creating the
             // proc. This is a common case so if the handle is not used, the overhead of it is only
             // one compare-exchange operation.

@@ -160,7 +160,7 @@ impl FabFire {
             card_info: None,
             key_info: None,
             auth_info: None,
-            app_id: 1,
+            app_id: 0x464142,
             local_urn: "urn:fabaccess:lab:innovisionlab".to_string(),
             desfire: Desfire {
                 card: None,

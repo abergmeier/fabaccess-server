@@ -2,7 +2,7 @@ use lmdb::{DatabaseFlags, Environment, RwTransaction, Transaction, WriteFlags};
 use rkyv::Infallible;
 use std::collections::HashMap;
 
-use anyhow::Context;
+use miette::{Context, IntoDiagnostic};
 use std::sync::Arc;
 
 use crate::db;
@@ -27,19 +27,25 @@ pub struct User {
     pub userdata: UserData,
 }
 
+fn hash_pw(pw: &[u8]) -> argon2::Result<String> {
+    let config = argon2::Config::default();
+    let salt: [u8; 16] = rand::random();
+    argon2::hash_encoded(pw, &salt, &config)
+}
+
 impl User {
-    pub fn check_password(&self, pwd: &[u8]) -> anyhow::Result<bool> {
+    pub fn check_password(&self, pwd: &[u8]) -> miette::Result<bool> {
         if let Some(ref encoded) = self.userdata.passwd {
-            argon2::verify_encoded(encoded, pwd).context("Stored password is an invalid string")
+            argon2::verify_encoded(encoded, pwd)
+                .into_diagnostic()
+                .wrap_err("Stored password is an invalid string")
         } else {
             Ok(false)
         }
     }
 
     pub fn new_with_plain_pw(username: &str, password: impl AsRef<[u8]>) -> Self {
-        let config = argon2::Config::default();
-        let salt: [u8; 16] = rand::random();
-        let hash = argon2::hash_encoded(password.as_ref(), &salt, &config)
+        let hash = hash_pw(password.as_ref())
             .expect(&format!("Failed to hash password for {}: ", username));
         tracing::debug!("Hashed pw for {} to {}", username, hash);
 
@@ -50,6 +56,13 @@ impl User {
                 ..Default::default()
             },
         }
+    }
+
+    pub fn set_pw(&mut self, password: impl AsRef<[u8]>) {
+        self.userdata.passwd = Some(hash_pw(password.as_ref()).expect(&format!(
+            "failed to update hashed password for {}",
+            &self.id
+        )));
     }
 }
 
@@ -109,7 +122,7 @@ impl UserDB {
     // TODO: Make an userdb-specific Transaction newtype to make this safe
     pub unsafe fn get_rw_txn(&self) -> Result<RwTransaction, db::Error> {
         // The returned transaction is only valid for *this* environment.
-        self.env.begin_rw_txn()
+        Ok(self.env.begin_rw_txn()?)
     }
 
     pub unsafe fn new(env: Arc<Environment>, db: RawDB) -> Self {
@@ -174,15 +187,15 @@ impl UserDB {
         Ok(())
     }
 
-    pub fn get_all(&self) -> Result<Vec<(String, User)>, db::Error> {
+    pub fn get_all(&self) -> Result<HashMap<String, UserData>, db::Error> {
         let txn = self.env.begin_ro_txn()?;
         let iter = self.db.get_all(&txn)?;
-        let mut out = Vec::new();
+        let mut out = HashMap::new();
         for (uid, user) in iter {
             let uid = unsafe { std::str::from_utf8_unchecked(uid).to_string() };
             let user: User =
                 Deserialize::<User, _>::deserialize(user.as_ref(), &mut Infallible).unwrap();
-            out.push((uid, user));
+            out.insert(uid, user.userdata);
         }
 
         Ok(out)
