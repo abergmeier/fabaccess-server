@@ -11,7 +11,6 @@ use crate::authentication::fabfire::FabFireCardKey;
 use crate::users::db::User;
 
 mod fabfire;
-mod fabfire_bin;
 
 struct Callback {
     users: Users,
