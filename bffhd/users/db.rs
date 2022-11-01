@@ -34,11 +34,9 @@ fn hash_pw(pw: &[u8]) -> argon2::Result<String> {
 }
 
 impl User {
-    pub fn check_password(&self, pwd: &[u8]) -> miette::Result<bool> {
+    pub fn check_password(&self, pwd: &[u8]) -> Result<bool, argon2::Error> {
         if let Some(ref encoded) = self.userdata.passwd {
             argon2::verify_encoded(encoded, pwd)
-                .into_diagnostic()
-                .wrap_err("Stored password is an invalid string")
         } else {
             Ok(false)
         }

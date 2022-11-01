@@ -3,7 +3,7 @@ use desfire::desfire::Desfire;
 use desfire::error::Error as DesfireError;
 use desfire::iso7816_4::apduresponse::APDUResponse;
 use rsasl::callback::SessionData;
-use rsasl::mechanism::{Authentication, MechanismError, MechanismErrorKind, State, ThisProvider};
+use rsasl::mechanism::{Authentication, MechanismData, MechanismError, MechanismErrorKind, State, ThisProvider};
 use rsasl::prelude::{MessageSent, SASLConfig, SASLError, SessionError};
 use rsasl::property::AuthId;
 use serde::{Deserialize, Serialize};
@@ -177,7 +177,7 @@ impl FabFire {
 impl Authentication for FabFire {
     fn step(
         &mut self,
-        session: &mut SessionData,
+        session: &mut MechanismData<'_>,
         input: Option<&[u8]>,
         writer: &mut dyn Write,
     ) -> Result<State, SessionError> {

@@ -937,9 +937,7 @@ dependencies = [
 
 [[package]]
 name = "desfire"
-version = "0.2.0-alpha2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "337f0fcd6ef888be0962aeff547f1b219f4190ea785b5c33328f071e91405411"
+version = "0.2.0-alpha1"
 dependencies = [
  "aes",
  "block-modes",
@@ -2506,8 +2504,9 @@ dependencies = [
 
 [[package]]
 name = "rsasl"
-version = "2.0.0-rc.2"
-source = "git+https://github.com/dequbed/rsasl.git?branch=development#19d2346dc76e5f3b449e3e3ab35c72205c6c4907"
+version = "2.0.0-rc.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "103603eacc28423095a1366653d823e5d2f4bac86bf7874b8f370d320b671207"
 dependencies = [
  "acid_io",
  "linkme",

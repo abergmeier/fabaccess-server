@@ -1,12 +1,14 @@
 use crate::users::Users;
-use miette::{Context, IntoDiagnostic};
+use miette::{IntoDiagnostic, WrapErr};
 use std::sync::Arc;
-use rsasl::callback::{CallbackError, Request, SessionCallback, SessionData};
+use rsasl::callback::{CallbackError, Request, SessionCallback, SessionData, Context};
 use rsasl::mechanism::SessionError;
-use rsasl::prelude::{Mechname, SASLConfig, SASLServer, Session};
-use rsasl::property::AuthId;
+use rsasl::prelude::{Mechname, SASLConfig, SASLServer, Session, Validation};
+use rsasl::property::{AuthId, AuthzId, Password};
+use rsasl::validate::{Validate, ValidationError};
 
 use crate::authentication::fabfire::FabFireCardKey;
+use crate::users::db::User;
 
 mod fabfire;
 
@@ -21,7 +23,7 @@ impl Callback {
     }
 }
 impl SessionCallback for Callback {
-    fn callback(&self, session_data: &SessionData, context: &rsasl::callback::Context, request: &mut Request) -> Result<(), SessionError> {
+    fn callback(&self, session_data: &SessionData, context: &Context, request: &mut Request) -> Result<(), SessionError> {
         if let Some(authid) = context.get_ref::<AuthId>() {
             request.satisfy_with::<FabFireCardKey, _>(|| {
                 let user = self.users.get_user(authid).ok_or(CallbackError::NoValue)?;
@@ -35,48 +37,51 @@ impl SessionCallback for Callback {
         Ok(())
     }
 
-    /*fn validate(
-        &self,
-        session: &mut SessionData,
-        validation: Validation,
-        _mechanism: &Mechname,
-    ) -> Result<(), SessionError> {
+    fn validate(&self, session_data: &SessionData, context: &Context, validate: &mut Validate<'_>) -> Result<(), ValidationError> {
         let span = tracing::info_span!(parent: &self.span, "validate");
         let _guard = span.enter();
-        match validation {
-            validations::SIMPLE => {
-                let authnid = session
-                    .get_property::<AuthId>()
-                    .ok_or(SessionError::no_property::<AuthId>())?;
-                tracing::debug!(authid=%authnid, "SIMPLE validation requested");
+        if validate.is::<V>() {
+            match session_data.mechanism().mechanism.as_str() {
+                "PLAIN" => {
+                    let authcid = context.get_ref::<AuthId>()
+                        .ok_or(ValidationError::MissingRequiredProperty)?;
+                    let authzid = context.get_ref::<AuthzId>();
+                    let password = context.get_ref::<Password>()
+                        .ok_or(ValidationError::MissingRequiredProperty)?;
 
-                if let Some(user) = self.users.get_user(authnid.as_str()) {
-                    let passwd = session
-                        .get_property::<Password>()
-                        .ok_or(SessionError::no_property::<Password>())?;
-
-                    if user
-                        .check_password(passwd.as_bytes())
-                        .map_err(|_e| SessionError::AuthenticationFailure)?
-                    {
-                        return Ok(());
-                    } else {
-                        tracing::warn!(authid=%authnid, "AUTH FAILED: bad password");
+                    if authzid.is_some() {
+                        return Ok(())
                     }
-                } else {
-                    tracing::warn!(authid=%authnid, "AUTH FAILED: no such user '{}'", authnid);
-                }
 
-                Err(SessionError::AuthenticationFailure)
-            }
-            _ => {
-                tracing::error!(?validation, "Unimplemented validation requested");
-                Err(SessionError::no_validate(validation))
+                    if let Some(user) = self.users.get_user(authcid) {
+                        match user.check_password(password) {
+                            Ok(true) => {
+                                validate.finalize::<V>(user)
+                            }
+                            Ok(false) => {
+                                tracing::warn!(authid=%authcid, "AUTH FAILED: bad password");
+                            }
+                            Err(error) => {
+                                tracing::warn!(authid=%authcid, "Bad DB entry: {}", error);
+                            }
+                        }
+                    } else {
+                        tracing::warn!(authid=%authcid, "AUTH FAILED: no such user");
+                    }
+                }
+                _ => {}
             }
         }
-    }*/
+        Ok(())
+    }
 }
 
+pub struct V;
+impl Validation for V {
+    type Value = User;
+}
+
+#[derive(Clone)]
 struct Inner {
     rsasl: Arc<SASLConfig>,
 }
@@ -101,7 +106,7 @@ impl AuthenticationHandle {
             .with_callback(Callback::new(userdb))
             .unwrap();
 
-        let mechs: Vec<&'static str> = SASLServer::new(config.clone())
+        let mechs: Vec<&'static str> = SASLServer::<V>::new(config.clone())
             .get_available()
             .into_iter()
             .map(|m| m.mechanism.as_str())
@@ -114,17 +119,14 @@ impl AuthenticationHandle {
         }
     }
 
-    pub fn start(&self, mechanism: &Mechname) -> miette::Result<Session> {
+    pub fn start(&self, mechanism: &Mechname) -> miette::Result<Session<V>> {
         Ok(SASLServer::new(self.inner.rsasl.clone())
             .start_suggested(mechanism)
             .into_diagnostic()
             .wrap_err("Failed to start a SASL authentication with the given mechanism")?)
     }
 
-    pub fn list_available_mechs(&self) -> impl IntoIterator<Item = &Mechname> {
+    pub fn sess(&self) -> SASLServer<V> {
         SASLServer::new(self.inner.rsasl.clone())
-            .get_available()
-            .into_iter()
-            .map(|m| m.mechanism)
     }
 }

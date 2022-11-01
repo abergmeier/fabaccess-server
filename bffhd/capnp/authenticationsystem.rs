@@ -16,6 +16,7 @@ use api::authenticationsystem_capnp::authentication::{
     AbortParams, AbortResults, Server as AuthenticationSystem, StepParams, StepResults,
 };
 use api::authenticationsystem_capnp::{response, response::Error as ErrorCode};
+use crate::authentication::V;
 
 const TARGET: &str = "bffh::api::authenticationsystem";
 
@@ -28,7 +29,7 @@ impl Authentication {
     pub fn new(
         parent: &Span,
         mechanism: &Mechname, /* TODO: this is stored in session as well, get it out of there. */
-        session: Session,
+        session: Session<V>,
         sessionmanager: SessionManager,
     ) -> Self {
         let span = tracing::info_span!(
@@ -93,7 +94,7 @@ enum State {
     InvalidMechanism,
     Finished,
     Aborted,
-    Running(Session, SessionManager),
+    Running(Session<V>, SessionManager),
 }
 
 impl AuthenticationSystem for Authentication {
@@ -122,36 +123,35 @@ impl AuthenticationSystem for Authentication {
         {
             let data: &[u8] = pry!(pry!(params.get()).get_data());
 
-            let mut out = Cursor::new(Vec::new());
+            let mut out = Vec::new();
             match session.step(Some(data), &mut out) {
                 Ok(SaslState::Finished(sent)) => {
                     self.state = State::Finished;
 
-                    let uid = pry!(session.get_property::<AuthId>().ok_or_else(|| {
-                        tracing::warn!("Authentication didn't provide an authid as required.");
-                        capnp::Error::failed(
-                            "Authentication didn't provide an authid as required".to_string(),
-                        )
-                    }));
-                    let session = pry!(manager.open(&self.span, uid.as_ref()).ok_or_else(|| {
-                        tracing::warn!(uid = uid.as_str(), "Failed to lookup the given user");
-                        capnp::Error::failed("Failed to lookup the given user".to_string())
-                    }));
+                    if let Some(user) = session.validation() {
+                        let session = manager.open(&self.span, user);
+                        response = Response {
+                            union_field: "successful",
+                        };
 
-                    response = Response {
-                        union_field: "successful",
-                    };
+                        let mut builder = builder.init_successful();
+                        if sent == MessageSent::Yes {
+                            builder.set_additional_data(out.as_slice());
+                        }
 
-                    let mut builder = builder.init_successful();
-                    if sent == MessageSent::Yes {
-                        builder.set_additional_data(out.into_inner().as_slice());
+                        APISession::build(session, builder)
+                    } else {
+                        let mut builder = builder.init_failed();
+                        builder.set_code(ErrorCode::InvalidCredentials);
+
+                        response = Response {
+                            union_field: "error",
+                        };
                     }
-
-                    APISession::build(session, builder)
                 }
                 Ok(SaslState::Running) => {
                     self.state = State::Running(session, manager);
-                    builder.set_challenge(out.into_inner().as_slice());
+                    builder.set_challenge(out.as_slice());
 
                     response = Response {
                         union_field: "challenge",

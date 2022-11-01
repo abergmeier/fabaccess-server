@@ -95,9 +95,10 @@ impl bootstrap::Server for BootCap {
         let builder = result.get();
         let mechs: Vec<_> = self
             .authentication
-            .list_available_mechs()
+            .sess()
+            .get_available()
             .into_iter()
-            .map(|m| m.as_str())
+            .map(|m| m.mechanism.as_str())
             .collect();
         let mut mechbuilder = builder.init_mechs(mechs.len() as u32);
         for (i, m) in mechs.iter().enumerate() {
@@ -146,7 +147,7 @@ impl bootstrap::Server for BootCap {
 
         tracing::trace!(params.mechanism = mechanism, "method call");
 
-        let mechname = Mechname::new(mechanism.as_bytes());
+        let mechname = Mechname::parse(mechanism.as_bytes());
         let auth = if let Ok(mechname) = mechname {
             if let Ok(session) = self.authentication.start(mechname) {
                 Authentication::new(&self.span, mechname, session, self.sessionmanager.clone())
