@@ -4,6 +4,7 @@ use crate::resources::Resource;
 use crate::users::{db, UserRef};
 use crate::Users;
 use tracing::Span;
+use crate::users::db::User;
 
 #[derive(Clone)]
 pub struct SessionManager {
@@ -16,25 +17,25 @@ impl SessionManager {
         Self { users, roles }
     }
 
+    pub fn try_open(&self, parent: &Span, uid: impl AsRef<str>) -> Option<SessionHandle> {
+        self.users.get_user(uid.as_ref()).map(|user| self.open(parent, user))
+    }
+
     // TODO: make infallible
-    pub fn open(&self, parent: &Span, uid: impl AsRef<str>) -> Option<SessionHandle> {
-        let uid = uid.as_ref();
-        if let Some(user) = self.users.get_user(uid) {
-            let span = tracing::info_span!(
-                target: "bffh::api",
-                parent: parent,
-                "session",
-                uid = uid,
-            );
-            tracing::trace!(parent: &span, uid, ?user, "opening session");
-            Some(SessionHandle {
-                span,
-                users: self.users.clone(),
-                roles: self.roles.clone(),
-                user: UserRef::new(user.id),
-            })
-        } else {
-            None
+    pub fn open(&self, parent: &Span, user: User) -> SessionHandle {
+        let uid = user.id.as_str();
+        let span = tracing::info_span!(
+            target: "bffh::api",
+            parent: parent,
+            "session",
+            uid,
+        );
+        tracing::trace!(parent: &span, uid, ?user, "opening session");
+        SessionHandle {
+            span,
+            users: self.users.clone(),
+            roles: self.roles.clone(),
+            user: UserRef::new(user.id),
         }
     }
 }

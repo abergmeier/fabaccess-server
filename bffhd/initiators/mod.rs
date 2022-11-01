@@ -56,7 +56,7 @@ impl InitiatorCallbacks {
     }
 
     pub fn open_session(&self, uid: &str) -> Option<SessionHandle> {
-        self.sessions.open(&self.span, uid)
+        self.sessions.try_open(&self.span, uid)
     }
 }
 
