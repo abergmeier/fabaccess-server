@@ -937,7 +937,9 @@ dependencies = [
 
 [[package]]
 name = "desfire"
-version = "0.2.0-alpha1"
+version = "0.2.0-alpha3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "6ab9ad4e1c8f7f5bdd3b407a1df8745bbf6a90d7a5b7435ca915889d12c40428"
 dependencies = [
  "aes",
  "block-modes",

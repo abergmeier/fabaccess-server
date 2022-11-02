@@ -84,8 +84,7 @@ capnp = "0.14"
 capnp-rpc = "0.14.1"
 
 # API Authentication
-#desfire = "0.2.0-alpha1"
-desfire = { path = "../nfc_rs" }
+desfire = "0.2.0-alpha3"
 
 hex = { version = "0.4.3", features = ["serde"] }
 
@@ -127,6 +126,3 @@ shadow-rs = "0.11"
 
 [workspace]
 members = ["runtime/*", "modules/*", "api"]
-
-[patch.crates-io]
-desfire = { path = "../nfc_rs" }
