@@ -17,7 +17,7 @@ pub struct StateDB {
     db: DB<AlignedAdapter<State>>,
 }
 
-#[derive(Debug, Error, Diagnostic)]
+#[derive(Clone, Debug, PartialEq, Eq, Error, Diagnostic)]
 pub enum StateDBError {
     #[error("opening the state db environment failed")]
     #[diagnostic(

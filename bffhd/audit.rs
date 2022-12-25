@@ -1,8 +1,10 @@
+use miette::Diagnostic;
 use once_cell::sync::OnceCell;
 use std::fs::{File, OpenOptions};
 use std::io;
 use std::io::{LineWriter, Write};
 use std::sync::Mutex;
+use thiserror::Error;
 
 use crate::Config;
 use serde::{Deserialize, Serialize};
@@ -23,8 +25,13 @@ pub struct AuditLogLine<'a> {
     state: &'a str,
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error(transparent)]
+#[repr(transparent)]
+pub struct Error(#[from] pub io::Error);
+
 impl AuditLog {
-    pub fn new(config: &Config) -> io::Result<&'static Self> {
+    pub fn new(config: &Config) -> Result<&'static Self, Error> {
         AUDIT.get_or_try_init(|| {
             tracing::debug!(path = %config.auditlog_path.display(), "Initializing audit log");
             let fd = OpenOptions::new()

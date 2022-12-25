@@ -11,6 +11,7 @@ use clap::ArgMatches;
 use miette::{Context, Diagnostic, IntoDiagnostic, SourceOffset, SourceSpan};
 use std::path::Path;
 use std::sync::Arc;
+
 use thiserror::Error;
 
 pub mod db;
@@ -69,17 +70,20 @@ pub struct Users {
     userdb: &'static UserDB,
 }
 
+#[derive(Clone, Debug, PartialEq, Eq, Error, Diagnostic)]
+#[error(transparent)]
+#[repr(transparent)]
+pub struct Error(#[from] pub db::Error);
+
 impl Users {
-    pub fn new(env: Arc<Environment>) -> miette::Result<Self> {
+    pub fn new(env: Arc<Environment>) -> Result<Self, Error> {
         let span = tracing::debug_span!("users", ?env, "Creating Users handle");
         let _guard = span.enter();
 
-        let userdb = USERDB
-            .get_or_try_init(|| {
-                tracing::debug!("Global resource not yet initialized, initializing…");
-                unsafe { UserDB::create(env) }
-            })
-            .wrap_err("Failed to open userdb")?;
+        let userdb = USERDB.get_or_try_init(|| {
+            tracing::debug!("Global resource not yet initialized, initializing…");
+            unsafe { UserDB::create(env) }
+        })?;
 
         Ok(Self { userdb })
     }

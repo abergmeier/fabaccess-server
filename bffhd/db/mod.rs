@@ -13,9 +13,9 @@ pub type ErrorO = lmdb::Error;
 
 pub type Result<T> = std::result::Result<T, Error>;
 
-#[repr(transparent)]
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, PartialEq, Eq, Error)]
 #[error(transparent)]
+#[repr(transparent)]
 pub struct Error(#[from] lmdb::Error);
 
 impl Diagnostic for Error {

@@ -12,9 +12,10 @@ use std::future::Future;
 
 use std::pin::Pin;
 
-use miette::IntoDiagnostic;
+use miette::{Diagnostic, IntoDiagnostic};
 use std::task::{Context, Poll};
 use std::time::Duration;
+use thiserror::Error;
 
 use once_cell::sync::Lazy;
 use rumqttc::ConnectReturnCode::Success;
@@ -111,11 +112,33 @@ static ROOT_CERTS: Lazy<RootCertStore> = Lazy::new(|| {
     store
 });
 
-pub fn load(executor: Executor, config: &Config, resources: ResourcesHandle) -> miette::Result<()> {
+#[derive(Debug, Error, Diagnostic)]
+pub enum ActorError {
+    #[error("failed to parse MQTT url")]
+    UrlParseError(
+        #[from]
+        #[source]
+        url::ParseError,
+    ),
+    #[error("MQTT config is invalid")]
+    InvalidConfig,
+    #[error("MQTT connection failed")]
+    ConnectionError(
+        #[from]
+        #[source]
+        rumqttc::ConnectionError,
+    ),
+}
+
+pub fn load(
+    executor: Executor,
+    config: &Config,
+    resources: ResourcesHandle,
+) -> Result<(), ActorError> {
     let span = tracing::info_span!("loading actors");
     let _guard = span;
 
-    let mqtt_url = Url::parse(config.mqtt_url.as_str()).into_diagnostic()?;
+    let mqtt_url = Url::parse(config.mqtt_url.as_str())?;
     let (transport, default_port) = match mqtt_url.scheme() {
         "mqtts" | "ssl" => (
             rumqttc::Transport::tls_with_config(
@@ -132,12 +155,12 @@ pub fn load(executor: Executor, config: &Config, resources: ResourcesHandle) -> 
 
         scheme => {
             tracing::error!(%scheme, "MQTT url uses invalid scheme");
-            miette::bail!("invalid config");
+            return Err(ActorError::InvalidConfig);
         }
     };
     let host = mqtt_url.host_str().ok_or_else(|| {
         tracing::error!("MQTT url must contain a hostname");
-        miette::miette!("invalid config")
+        ActorError::InvalidConfig
     })?;
     let port = mqtt_url.port().unwrap_or(default_port);
 
@@ -168,7 +191,7 @@ pub fn load(executor: Executor, config: &Config, resources: ResourcesHandle) -> 
                 }
                 Err(error) => {
                     tracing::error!(?error, "MQTT connection failed");
-                    miette::bail!("mqtt connection failed")
+                    return Err(ActorError::ConnectionError(error));
                 }
             }
 

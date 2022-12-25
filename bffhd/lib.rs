@@ -8,6 +8,10 @@
 //! This is the capnp component of the FabAccess project.
 //! The entry point of bffhd can be found in [bin/bffhd/main.rs](../bin/bffhd/main.rs)
 
+use miette::Diagnostic;
+use std::io;
+use thiserror::Error;
+
 pub mod config;
 
 /// Internal Databases build on top of LMDB, a mmap()'ed B-tree DB optimized for reads
@@ -82,10 +86,58 @@ impl error::Description for SignalHandlerErr {
     const CODE: &'static str = "signals::new";
 }
 
+#[derive(Debug, Error, Diagnostic)]
+pub enum BFFHError {
+    #[error("DB operation failed")]
+    DBError(
+        #[from]
+        #[source]
+        db::Error,
+    ),
+    #[error("failed to initialize global user store")]
+    UsersError(
+        #[from]
+        #[source]
+        users::Error,
+    ),
+    #[error("failed to initialize state database")]
+    StateDBError(
+        #[from]
+        #[source]
+        resources::state::db::StateDBError,
+    ),
+    #[error("audit log failed")]
+    AuditLogError(
+        #[from]
+        #[source]
+        audit::Error,
+    ),
+    #[error("Failed to initialize signal handler")]
+    SignalsError(#[source] std::io::Error),
+    #[error("error in actor subsystem")]
+    ActorError(
+        #[from]
+        #[source]
+        actors::ActorError,
+    ),
+    #[error("failed to initialize TLS config")]
+    TlsSetup(
+        #[from]
+        #[source]
+        tls::Error,
+    ),
+    #[error("API handler failed")]
+    ApiError(
+        #[from]
+        #[source]
+        capnp::Error,
+    ),
+}
+
 impl Diflouroborane {
     pub fn setup() {}
 
-    pub fn new(config: Config) -> miette::Result<Self> {
+    pub fn new(config: Config) -> Result<Self, BFFHError> {
         let mut server = logging::init(&config.logging);
         let span = tracing::info_span!(
             target: "bffh",
@@ -121,9 +173,7 @@ impl Diflouroborane {
         let users = Users::new(env.clone())?;
         let roles = Roles::new(config.roles.clone());
 
-        let _audit_log = AuditLog::new(&config)
-            .into_diagnostic()
-            .wrap_err("Failed to initialize audit log")?;
+        let _audit_log = AuditLog::new(&config)?;
 
         let resources = ResourcesHandle::new(config.machines.iter().map(|(id, desc)| {
             Resource::new(Arc::new(resources::Inner::new(
@@ -145,10 +195,10 @@ impl Diflouroborane {
         })
     }
 
-    pub fn run(&mut self) -> miette::Result<()> {
+    pub fn run(&mut self) -> Result<(), BFFHError> {
         let _guard = self.span.enter();
         let mut signals = signal_hook_async_std::Signals::new(&[SIGINT, SIGQUIT, SIGTERM])
-            .map_err(|ioerr| error::wrap::<SignalHandlerErr>(ioerr.into()))?;
+            .map_err(BFFHError::SignalsError)?;
 
         let sessionmanager = SessionManager::new(self.users.clone(), self.roles.clone());
         let authentication = AuthenticationHandle::new(self.users.clone());
@@ -162,8 +212,7 @@ impl Diflouroborane {
         );
         actors::load(self.executor.clone(), &self.config, self.resources.clone())?;
 
-        let tlsconfig = TlsConfig::new(self.config.tlskeylog.as_ref(), !self.config.is_quiet())
-            .into_diagnostic()?;
+        let tlsconfig = TlsConfig::new(self.config.tlskeylog.as_ref(), !self.config.is_quiet())?;
         let acceptor = tlsconfig.make_tls_acceptor(&self.config.tlsconfig)?;
 
         let apiserver = self.executor.run(APIServer::bind(

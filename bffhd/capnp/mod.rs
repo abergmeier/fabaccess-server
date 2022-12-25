@@ -1,5 +1,7 @@
-use async_net::TcpListener;
+use miette::Diagnostic;
+use thiserror::Error;
 
+use async_net::TcpListener;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::RpcSystem;
@@ -37,6 +39,10 @@ pub struct APIServer {
     authentication: AuthenticationHandle,
 }
 
+#[derive(Debug, Error, Diagnostic)]
+#[error("Reached Void error, this should not be possible")]
+pub enum Error {}
+
 impl APIServer {
     pub fn new(
         executor: Executor<'static>,
@@ -60,7 +66,7 @@ impl APIServer {
         acceptor: TlsAcceptor,
         sessionmanager: SessionManager,
         authentication: AuthenticationHandle,
-    ) -> miette::Result<Self> {
+    ) -> Result<Self, Error> {
         let span = tracing::info_span!("binding API listen sockets");
         let _guard = span.enter();
 

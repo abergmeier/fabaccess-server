@@ -66,9 +66,9 @@ impl SessionCallback for Callback {
                         .get_ref::<Password>()
                         .ok_or(ValidationError::MissingRequiredProperty)?;
 
-                    // if authzid.is_some() {
-                    //     return Ok(())
-                    // }
+                    if authzid.is_some() {
+                        return Ok(());
+                    }
 
                     if let Some(user) = self.users.get_user(authcid) {
                         match user.check_password(password) {

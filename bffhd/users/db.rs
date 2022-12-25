@@ -11,6 +11,8 @@ use rkyv::ser::serializers::AllocSerializer;
 use rkyv::ser::Serializer;
 use rkyv::Deserialize;
 
+pub use crate::db::Error;
+
 #[derive(
     Clone,
     PartialEq,
