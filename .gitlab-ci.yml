@@ -2,21 +2,28 @@
 # Additionally, lint the code before anything else to fail more quickly
 stages:
   - lint
+  - check
   - build
   - test
   - release
   - dockerify
 
 default:
-  image: "rust:latest"
+  image: "registry.gitlab.com/fabinfra/rust-builder:latest"
   tags:
     - linux
     - docker
+    - fabinfra
 
 variables:
   GIT_SUBMODULE_STRATEGY: recursive
   CARGO_HOME: $CI_PROJECT_DIR/cargo
   APT_CACHE_DIR: $CI_PROJECT_DIR/apt
+  FF_USE_FASTZIP: "true" # enable fastzip - a faster zip implementation that also supports level configuration.
+  ARTIFACT_COMPRESSION_LEVEL: fast # can also be set to fastest, fast, slow and slowest. If just enabling fastzip is not enough try setting this to fastest or fast.
+  CACHE_COMPRESSION_LEVEL: fastest # same as above, but for caches
+  TRANSFER_METER_FREQUENCY: 5s # will display transfer progress every 5 seconds for artifacts and remote caches.
+
 
 # cache dependencies and build environment to speed up setup
 cache:
@@ -26,10 +33,6 @@ cache:
     - cargo/
     - target/
 
-# install build dependencies
-before_script:
-  - apt-get update -yqq
-  - apt-get install -o dir::cache::archives="$APT_CACHE_DIR" -yqq --no-install-recommends capnproto build-essential cmake clang libclang-dev jq
 
 .lints:
   stage: lint
@@ -41,7 +44,6 @@ before_script:
 lint:clippy:
   extends: .lints
   script:
-    - rustup component add clippy
     - cargo clippy -V
     - echo -e "\e[0Ksection_start:`date +%s`:clippy_output\r\e[0Kcargo clippy output"
     - cargo clippy -- --no-deps
@@ -51,15 +53,14 @@ lint:clippy:
 lint:fmt:
   extends: .lints
   script:
-    - rustup component add rustfmt
     - cargo fmt --version
     - echo -e "\e[0Ksection_start:`date +%s`:rustfmt_output\r\e[0KChanges suggested by rustfmt"
     - cargo fmt --check -- -v
     - echo -e "\e[0Ksection_end:`date +%s`:rustfmt_output\r\e[0K"
 
 # Check if the code builds on rust stable
-stable:build:
-  stage: build
+stable:check:
+  stage: check
   only:
     - main
     - development
@@ -70,9 +71,94 @@ stable:build:
     - cargo check --verbose
     - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
 
+# Check if the code builds on rust stable on armv7
+stable:check:armhf:
+  stage: check
+  only:
+    - main
+    - development
+    - merge_requests
+  before_script:
+    - mkdir -p $CARGO_HOME
+    - cp cargo-cross-config $CARGO_HOME/config.toml
+  script:
+    - rustc +stable --version && cargo --version
+    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of cargo check with target armv7-unknown-linux-gnueabihf"
+    - cargo check --verbose --target armv7-unknown-linux-gnueabihf
+    - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
+
+  # Check if the code builds on rust stable on arm64
+stable:check:arm64:
+  stage: check
+  only:
+    - main
+    - development
+    - merge_requests
+  before_script:
+    - mkdir -p $CARGO_HOME
+    - cp cargo-cross-config $CARGO_HOME/config.toml
+  script:
+    - rustc +stable --version && cargo --version
+    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of cargo check with target aarch64-unknown-linux-gnu"
+    - cargo check --verbose --target aarch64-unknown-linux-gnu
+    - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
+
+# Check if the code builds on rust stable
+stable:build:amd64:
+  stage: build
+  only:
+    - main
+    - development
+    - merge_requests
+  script:
+    - rustc +stable --version && cargo --version
+    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of cargo build with target x86_64-unknown-linux-gnu"
+    - cargo build --release --target x86_64-unknown-linux-gnu
+    - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
+  artifacts:
+    paths:
+      - target/x86_64-unknown-linux-gnu/release/bffhd
+
+
+# Check if the code builds on rust stable on armv7
+stable:build:armhf:
+  stage: build
+  only:
+    - main
+    - development
+  before_script:
+    - mkdir -p $CARGO_HOME
+    - cp cargo-cross-config $CARGO_HOME/config.toml
+  script:
+    - rustc +stable --version && cargo --version
+    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of cargo build with target armv7-unknown-linux-gnueabihf"
+    - cargo build --release --target armv7-unknown-linux-gnueabihf
+    - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
+  artifacts:
+    paths:
+      - target/armv7-unknown-linux-gnueabihf/release/bffhd
+
+  # Check if the code builds on rust stable on arm64
+stable:build:arm64:
+  stage: build
+  only:
+    - main
+    - development
+  before_script:
+    - mkdir -p $CARGO_HOME
+    - cp cargo-cross-config $CARGO_HOME/config.toml
+  script:
+    - rustc +stable --version && cargo --version
+    - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of cargo build with target aarch64-unknown-linux-gnu"
+    - cargo build --release --target aarch64-unknown-linux-gnu
+    - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
+  artifacts:
+    paths:
+      - target/aarch64-unknown-linux-gnu/release/bffhd
+
 stable:test:
   stage: build
-  needs: ["stable:build"]
+  needs: ["stable:check"]
   only:
     - main
     - development
@@ -80,14 +166,12 @@ stable:test:
   script:
     - echo -e "\e[0Ksection_start:`date +%s`:build_output\r\e[0KOutput of cargo test --no-run"
     - cargo test --verbose --no-run --workspace
-    - echo -e "\e[0Ksection_end:`date +%s`:build_output\r\e[0K"
-    - cargo install --root $CARGO_HOME cargo2junit
 
 .tests:
   stage: test
   needs: ["stable:test"]
   script:
-    - cargo test --workspace $TEST_TARGET -- -Z unstable-options --format json --report-time | $CARGO_HOME/bin/cargo2junit > report.xml
+    - cargo test --workspace $TEST_TARGET -- -Z unstable-options --format json --report-time | cargo2junit > report.xml
   artifacts:
     when: always
     reports:
@@ -114,6 +198,23 @@ unit test 3:3:
     TEST_TARGET: "--examples"
   extends: .tests
 
+upload_binaries:
+  stage: release
+  image: curlimages/curl:latest
+  before_script: []
+  cache: []
+  dependencies:
+    - stable:build:amd64
+    - stable:build:armhf
+    - stable:build:arm64
+  script:
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file target/aarch64-unknown-linux-gnu/release/bffhd "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/bffhd/${CI_COMMIT_TAG}/bffhd_${VERSION}_linux_arm64"'
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file target/x86_64-unknown-linux-gnu/release/bffhd "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/bffhd/${CI_COMMIT_TAG}/bffhd_${VERSION}_linux_amd64"'
+    - 'curl --header "JOB-TOKEN: $CI_JOB_TOKEN" --upload-file target/armv7-unknown-linux-gnueabihf/release/bffhd "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/bffhd/${VERSION}/bffhd_${VERSION}_linux_arm"'
+  rules:
+    - if: $CI_COMMIT_TAG =~ "release/.*"
+      when: never
+    - if: $CI_COMMIT_BRANCH == "main"
 
 release_prepare:
   stage: release
@@ -144,32 +245,106 @@ release_job:
     name: "BFFH $VERSION"
     description: "GitLab CI auto-created release"
     tag_name: "release/$VERSION"
+    assets:
+      links:
+        - name: 'bffhd AMD64'
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/bffhd/${VERSION}/bffhd_${VERSION}_linux_amd64"
+        - name: 'bffhd ARMv7'
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/bffhd/${VERSION}/bffhd_${VERSION}_linux_arm"
+        - name: 'bffhd ARM64'
+          url: "${CI_API_V4_URL}/projects/${CI_PROJECT_ID}/packages/generic/bffhd/${VERSION}/bffhd_${VERSION}_linux_arm64"
 
 build:docker-releases:
   stage: dockerify
-  image:
-    name: gcr.io/kaniko-project/executor:v1.6.0-debug
-    entrypoint: [""]
+  image: jdrouet/docker-with-buildx:latest
+  dependencies:
+    - stable:build:amd64
+    - stable:build:armhf
+    - stable:build:arm64
+  tags:
+    - linux
+    - docker
+    - fabinfra
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_CACHE_DIR: ".trivycache/"
+  services:
+    - docker:dind
   before_script:
-    - ''
+    - export TRIVY_VERSION=$(wget -qO - "https://api.github.com/repos/aquasecurity/trivy/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+    - echo $TRIVY_VERSION
+    - wget --no-verbose https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz -O - | tar -zxvf -
   script:
-    - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
-    - /kaniko/executor --force --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - docker login $CI_REGISTRY -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD"
+    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+    - docker buildx create --name cibuilder --driver docker-container --use
+    - docker buildx ls
+    - docker buildx inspect --bootstrap
+    - docker buildx build --platform linux/arm/v7,linux/arm64,linux/amd64 -t $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG .
+    - docker buildx build --load --platform linux/amd64 -t $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG .
+    # Build report
+    - ./trivy image --exit-code 0 --format template --template "@contrib/gitlab.tpl" -o gl-container-scanning-report.json $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    # Print report
+    - ./trivy image --exit-code 0 --severity HIGH $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    # Fail on severe vulnerabilities
+    - ./trivy image --exit-code 1 --severity CRITICAL $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+    - docker push $CI_REGISTRY_IMAGE:$CI_COMMIT_TAG
+  cache:
+    paths:
+      - .trivycache/
+  artifacts:
+    reports:
+      container_scanning: gl-container-scanning-report.json
   rules:
     - if: $CI_COMMIT_TAG =~ "release/.*"
       when: never
 
 build:docker-development:
   stage: dockerify
-  image:
-    name: gcr.io/kaniko-project/executor:v1.6.0-debug
-    entrypoint: [""]
+  image: jdrouet/docker-with-buildx:latest
+  dependencies:
+    - stable:build:amd64
+    - stable:build:armhf
+    - stable:build:arm64
+  tags:
+    - linux
+    - docker
+    - fabinfra
+  variables:
+    DOCKER_HOST: tcp://docker:2375/
+    DOCKER_DRIVER: overlay2
+    DOCKER_TLS_CERTDIR: ""
+    TRIVY_NO_PROGRESS: "true"
+    TRIVY_CACHE_DIR: ".trivycache/"
+  services:
+    - docker:dind
   before_script:
-    - ''
+    - export TRIVY_VERSION=$(wget -qO - "https://api.github.com/repos/aquasecurity/trivy/releases/latest" | grep '"tag_name":' | sed -E 's/.*"v([^"]+)".*/\1/')
+    - echo $TRIVY_VERSION
+    - wget --no-verbose https://github.com/aquasecurity/trivy/releases/download/v${TRIVY_VERSION}/trivy_${TRIVY_VERSION}_Linux-64bit.tar.gz -O - | tar -zxvf -
   script:
-    - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"username\":\"$CI_REGISTRY_USER\",\"password\":\"$CI_REGISTRY_PASSWORD\"}}}" > /kaniko/.docker/config.json
-    - /kaniko/executor --force --context $CI_PROJECT_DIR --dockerfile $CI_PROJECT_DIR/Dockerfile --destination $CI_REGISTRY_IMAGE:dev-latest
+    - docker login $CI_REGISTRY -u "$CI_REGISTRY_USER" -p "$CI_REGISTRY_PASSWORD"
+    - docker run --rm --privileged multiarch/qemu-user-static --reset -p yes
+    - docker buildx create --name cibuilder --driver docker-container --use
+    - docker buildx ls
+    - docker buildx inspect --bootstrap
+    - docker buildx build --platform linux/arm/v7,linux/arm64,linux/amd64 -t $CI_REGISTRY_IMAGE:development . 
+    - docker buildx build --load --platform linux/amd64 -t $CI_REGISTRY_IMAGE:development .
+    # Build report
+    - ./trivy image --exit-code 0 --format template --template "@contrib/gitlab.tpl" -o gl-container-scanning-report.json $CI_REGISTRY_IMAGE:development
+    # Print report
+    - ./trivy image --exit-code 0 --severity HIGH $CI_REGISTRY_IMAGE:development
+    # Fail on severe vulnerabilities
+    - ./trivy image --exit-code 1 --severity CRITICAL $CI_REGISTRY_IMAGE:development
+    - docker push $CI_REGISTRY_IMAGE:development
+  cache:
+    paths:
+      - .trivycache/
+  artifacts:
+    reports:
+      container_scanning: gl-container-scanning-report.json
   only:
     - development

@@ -17,7 +17,8 @@ where
     let future = async move { fut.await };
 
     let schedule = move |t| sender.send(t).unwrap();
-    let (proc, handle) = LightProc::build(future, schedule);
+    let span = tracing::trace_span!("runtime.spawn", kind = "local");
+    let (proc, handle) = LightProc::build(future, schedule, span, None);
 
     proc.schedule();
 

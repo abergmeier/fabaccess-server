@@ -49,8 +49,7 @@ impl<R> RecoverableHandle<R> {
     ///
     /// ```rust
     /// # use std::any::Any;
-    /// use lightproc::proc_stack::ProcStack;
-    /// use lightproc::proc_state::EmptyProcState;
+    /// # use tracing::Span;
     /// # use lightproc::prelude::*;
     /// #
     /// # // ... future that does work
@@ -61,21 +60,16 @@ impl<R> RecoverableHandle<R> {
     /// # // ... basic schedule function with no waker logic
     /// # fn schedule_function(proc: LightProc) {;}
     /// #
-    /// # // ... process stack with a lifecycle callback
-    /// # let proc_stack =
-    /// #     ProcStack::default()
-    /// #         .with_after_panic(|s: &mut EmptyProcState| {
-    /// #             println!("After panic started!");
-    /// #         });
-    /// #
     /// // ... creating a recoverable process
     /// let (proc, recoverable) = LightProc::recoverable(
     ///     future,
     ///     schedule_function,
+    ///     Span::current(),
+    ///     None
     /// );
     ///
     /// recoverable
-    ///     .on_return(|_e: Box<dyn Any + Send>| {
+    ///     .on_panic(|_e: Box<dyn Any + Send>| {
     ///         println!("Inner future panicked");
     ///     });
     /// ```

@@ -9,6 +9,7 @@
 //! # Example Usage
 //!
 //! ```rust
+//! use tracing::Span;
 //! use lightproc::prelude::*;
 //!
 //! // ... future that does work
@@ -23,6 +24,8 @@
 //! let panic_recoverable = LightProc::recoverable(
 //!     future,
 //!     schedule_function,
+//!     Span::current(),
+//!     None,
 //! );
 //! ```
 
@@ -60,6 +63,7 @@ impl LightProc {
     /// # Example
     /// ```rust
     /// # use std::any::Any;
+    /// # use tracing::Span;
     /// # use lightproc::prelude::*;
     /// #
     /// # // ... basic schedule function with no waker logic
@@ -72,9 +76,11 @@ impl LightProc {
     /// let (proc, handle) = LightProc::recoverable(
     ///     future,
     ///     schedule_function,
+    ///     Span::current(),
+    ///     None
     /// );
-    /// let handle = handle.on_panic(|s: &mut EmptyProcState, e: Box<dyn Any + Send>| {
-    ///     let reason = e.downcast::<String>();
+    /// let handle = handle.on_panic(|e: Box<dyn Any + Send>| {
+    ///     let reason = e.downcast::<String>().unwrap();
     ///     println!("future panicked!: {}", &reason);
     /// });
     /// ```
@@ -109,13 +115,6 @@ impl LightProc {
     /// #
     /// # // ... basic schedule function with no waker logic
     /// # fn schedule_function(proc: LightProc) {;}
-    /// #
-    /// # // ... process stack with a lifecycle callback
-    /// # let proc_stack =
-    /// #     ProcStack::default()
-    /// #         .with_after_panic(|s: &mut EmptyProcState| {
-    /// #             println!("After panic started!");
-    /// #         });
     /// #
     /// // ... creating a standard process
     /// let standard = LightProc::build(

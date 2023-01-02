@@ -275,10 +275,6 @@ pub struct ImplDebugInfo {
 /// [statevalue_register](macro@crate::statevalue_register) macro with your OID as first and type
 /// as second parameter like so:
 ///
-/// ```no_run
-/// struct MyStruct;
-/// statevalue_register!(ObjectIdentifier::from_str("1.3.6.1.4.1.48398.612.1.14").unwrap(), MyStruct)
-/// ```
 pub struct ImplEntry<'a> {
     id: ImplId<'a>,
     data: ImplData<'a>,

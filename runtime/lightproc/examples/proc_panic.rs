@@ -30,7 +30,8 @@ where
     }
 
     let schedule = |t| (QUEUE.deref()).send(t).unwrap();
-    let (proc, handle) = LightProc::recoverable(future, schedule);
+    let span = tracing::trace_span!("runtime.spawn", kind = "local");
+    let (proc, handle) = LightProc::recoverable(future, schedule, span, None);
 
     let handle = handle.on_panic(
         |err: Box<dyn Any + Send>| match err.downcast::<&'static str>() {
