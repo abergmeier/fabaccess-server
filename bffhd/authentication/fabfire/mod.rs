@@ -2,7 +2,7 @@ mod server;
 pub use server::FabFire;
 
 use rsasl::mechname::Mechname;
-use rsasl::registry::{Mechanism, MECHANISMS, Side};
+use rsasl::registry::{Mechanism, Side, MECHANISMS};
 
 const MECHNAME: &'static Mechname = &Mechname::const_new_unchecked(b"X-FABFIRE");
 
@@ -10,8 +10,8 @@ const MECHNAME: &'static Mechname = &Mechname::const_new_unchecked(b"X-FABFIRE")
 pub static FABFIRE: Mechanism =
     Mechanism::build(MECHNAME, 300, None, Some(FabFire::new_server), Side::Client);
 
-use std::marker::PhantomData;
 use rsasl::property::SizedProperty;
+use std::marker::PhantomData;
 
 // All Property types must implement Debug.
 #[derive(Debug)]

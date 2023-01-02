@@ -1,5 +1,6 @@
 use super::Initiator;
 use super::InitiatorCallbacks;
+use crate::resources::modules::fabaccess::Status;
 use crate::resources::state::State;
 use crate::utils::linebuffer::LineBuffer;
 use async_process::{Child, ChildStderr, ChildStdout, Command, Stdio};
@@ -11,7 +12,6 @@ use std::future::Future;
 use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use crate::resources::modules::fabaccess::Status;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum InputMessage {
@@ -63,7 +63,12 @@ struct ProcessState {
 
 impl ProcessState {
     pub fn new(stdout: ChildStdout, stderr: ChildStderr, child: Child) -> Self {
-        Self { stdout, stderr, stderr_closed: false, child }
+        Self {
+            stdout,
+            stderr,
+            stderr_closed: false,
+            child,
+        }
     }
 
     fn try_process(&mut self, buffer: &[u8], callbacks: &mut InitiatorCallbacks) -> usize {
@@ -100,7 +105,9 @@ impl ProcessState {
                         let InputMessage::SetState(status) = state;
                         callbacks.set_status(status);
                     }
-                    Err(error) => tracing::warn!(%error, "process initiator did not send a valid line"),
+                    Err(error) => {
+                        tracing::warn!(%error, "process initiator did not send a valid line")
+                    }
                 }
             }
         }
@@ -202,8 +209,8 @@ impl Future for Process {
 
 impl Initiator for Process {
     fn new(params: &HashMap<String, String>, callbacks: InitiatorCallbacks) -> miette::Result<Self>
-        where
-            Self: Sized,
+    where
+        Self: Sized,
     {
         let cmd = params
             .get("cmd")

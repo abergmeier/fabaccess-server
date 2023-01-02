@@ -1,10 +1,10 @@
 use crate::authorization::permissions::Permission;
 use crate::authorization::roles::Roles;
 use crate::resources::Resource;
+use crate::users::db::User;
 use crate::users::{db, UserRef};
 use crate::Users;
 use tracing::Span;
-use crate::users::db::User;
 
 #[derive(Clone)]
 pub struct SessionManager {
@@ -18,7 +18,9 @@ impl SessionManager {
     }
 
     pub fn try_open(&self, parent: &Span, uid: impl AsRef<str>) -> Option<SessionHandle> {
-        self.users.get_user(uid.as_ref()).map(|user| self.open(parent, user))
+        self.users
+            .get_user(uid.as_ref())
+            .map(|user| self.open(parent, user))
     }
 
     // TODO: make infallible
