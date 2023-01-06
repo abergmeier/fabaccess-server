@@ -2,19 +2,34 @@ use crate::authorization::permissions::Permission;
 use crate::session::SessionHandle;
 use crate::users::{db, UserRef};
 use api::general_capnp::optional;
-use api::user_capnp::user::{self, admin, info, manage};
+use api::user_capnp::user::card_d_e_s_fire_e_v2::{
+    BindParams, BindResults, GenCardTokenParams, GenCardTokenResults, GetMetaInfoParams,
+    GetMetaInfoResults, GetSpaceInfoParams, GetSpaceInfoResults, GetTokenListParams,
+    GetTokenListResults, UnbindParams, UnbindResults,
+};
+use api::user_capnp::user::{self, admin, card_d_e_s_fire_e_v2, info, manage};
 use capnp::capability::Promise;
+use capnp::Error;
 use capnp_rpc::pry;
+use std::borrow::Cow;
+
+const TARGET: &str = "bffh::api::user";
 
 #[derive(Clone)]
 pub struct User {
+    span: tracing::Span,
     session: SessionHandle,
     user: UserRef,
 }
 
 impl User {
     pub fn new(session: SessionHandle, user: UserRef) -> Self {
-        Self { session, user }
+        let span = tracing::info_span!(target: TARGET, "User");
+        Self {
+            span,
+            session,
+            user,
+        }
     }
 
     pub fn new_self(session: SessionHandle) -> Self {
@@ -169,5 +184,184 @@ impl admin::Server for User {
             self.session.users.put_user(uid, &user);
         }
         Promise::ok(())
+    }
+}
+
+impl card_d_e_s_fire_e_v2::Server for User {
+    fn get_token_list(
+        &mut self,
+        _: GetTokenListParams,
+        mut results: GetTokenListResults,
+    ) -> Promise<(), Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+        tracing::trace!("method call");
+
+        // TODO: This only supports a sigle key per user
+        let user = pry!(self
+            .session
+            .users
+            .get_user(self.user.get_username())
+            .ok_or_else(|| Error::failed(format!(
+                "User API object with nonexisting user \"{}\"",
+                self.user.get_username()
+            ))));
+        let ck = user
+            .userdata
+            .kv
+            .get("cardkey")
+            .map(|ck| hex::decode(ck).ok())
+            .flatten()
+            .unwrap_or_else(|| {
+                tracing::debug!(user.id = &user.id, "no DESFire keys stored");
+                Vec::new()
+            });
+        if !ck.is_empty() {
+            let mut b = results.get();
+            let mut lb = b.init_token_list(1);
+            lb.set(0, &ck[..]);
+        }
+        Promise::ok(())
+    }
+
+    fn bind(&mut self, params: BindParams, _: BindResults) -> Promise<(), Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+        let params = pry!(params.get());
+        let card_key = pry!(params.get_auth_key());
+        let token = pry!(params.get_token());
+
+        let token: Cow<'_, str> = if let Ok(url) = std::str::from_utf8(token) {
+            Cow::Borrowed(url)
+        } else {
+            Cow::Owned(hex::encode(token))
+        };
+
+        tracing::trace!(
+            params.token = token.as_ref(),
+            params.auth_key = "<censored>",
+            "method call"
+        );
+
+        let card_key = hex::encode(card_key);
+
+        let mut user = pry!(self
+            .session
+            .users
+            .get_user(self.user.get_username())
+            .ok_or_else(|| Error::failed(format!(
+                "User API object with nonexisting user \"{}\"",
+                self.user.get_username()
+            ))));
+
+        let prev_token = user.userdata.kv.get("cardtoken");
+        let prev_cardk = user.userdata.kv.get("cardkey");
+
+        match (prev_token, prev_cardk) {
+            (Some(prev_token), Some(prev_cardk))
+                if prev_token.as_str() == &token && prev_cardk.as_str() == card_key.as_str() =>
+            {
+                tracing::info!(
+                    user.id, token = token.as_ref(),
+                    "new token and card key are identical, skipping no-op"
+                );
+                return Promise::ok(());
+            },
+            (Some(prev_token), Some(_))
+                if prev_token.as_str() == token /* above guard means prev_cardk != card_key */ =>
+            {
+                tracing::warn!(
+                    token = token.as_ref(),
+                    "trying to overwrite card key for existing token, ignoring!"
+                );
+                return Promise::ok(());
+            },
+            (Some(prev_token), None) => tracing::warn!(
+                user.id, prev_token,
+                "token already set for user but no card key, setting new pair unconditionally!"
+            ),
+            (None, Some(_)) => tracing::warn!(
+                user.id,
+                "card key already set for user but no token, setting new pair unconditionally!"
+            ),
+            (Some(_), Some(_)) | (None, None) => tracing::debug!(
+                user.id, token = token.as_ref(),
+                "Adding new card key/token pair"
+            ),
+        }
+
+        user.userdata
+            .kv
+            .insert("cardtoken".to_string(), token.to_string());
+        user.userdata.kv.insert("cardkey".to_string(), card_key);
+        Promise::ok(())
+    }
+
+    fn unbind(&mut self, params: UnbindParams, _: UnbindResults) -> Promise<(), Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+
+        let params = pry!(params.get());
+        let token = pry!(params.get_token());
+
+        let token: Cow<'_, str> = if let Ok(url) = std::str::from_utf8(token) {
+            Cow::Borrowed(url)
+        } else {
+            Cow::Owned(hex::encode(token))
+        };
+
+        tracing::trace!(params.token = token.as_ref(), "method call");
+
+        let mut user = pry!(self
+            .session
+            .users
+            .get_user(self.user.get_username())
+            .ok_or_else(|| Error::failed(format!(
+                "User API object with nonexisting user \"{}\"",
+                self.user.get_username()
+            ))));
+        if let Some(prev_token) = user.userdata.kv.get("cardtoken") {
+            if token.as_ref() == prev_token.as_str() {
+                user.userdata.kv.remove("cardtoken");
+                user.userdata.kv.remove("cardkey");
+            }
+        }
+
+        Promise::ok(())
+    }
+
+    fn gen_card_token(
+        &mut self,
+        _: GenCardTokenParams,
+        _: GenCardTokenResults,
+    ) -> Promise<(), Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+        tracing::trace!("method call");
+        Promise::err(Error::unimplemented(format!(
+            "Method get_token_list is not implemented yet"
+        )))
+    }
+
+    fn get_meta_info(&mut self, _: GetMetaInfoParams, _: GetMetaInfoResults) -> Promise<(), Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+        tracing::trace!("method call");
+        Promise::err(Error::unimplemented(format!(
+            "Method get_token_list is not implemented yet"
+        )))
+    }
+
+    fn get_space_info(
+        &mut self,
+        _: GetSpaceInfoParams,
+        _: GetSpaceInfoResults,
+    ) -> Promise<(), Error> {
+        let _guard = self.span.enter();
+        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+        tracing::trace!("method call");
+        Promise::err(Error::unimplemented(format!(
+            "Method get_token_list is not implemented yet"
+        )))
     }
 }
