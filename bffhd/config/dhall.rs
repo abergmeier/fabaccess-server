@@ -96,6 +96,12 @@ pub struct Config {
 
     #[serde(default, skip)]
     pub logging: LogConfig,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub spacename: Option<String>,
+
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub instanceurl: Option<String>,
 }
 
 impl Config {
@@ -164,6 +170,8 @@ impl Default for Config {
             tlskeylog: None,
             verbosity: 0,
             logging: LogConfig::default(),
+            instanceurl: None,
+            spacename: None,
         }
     }
 }

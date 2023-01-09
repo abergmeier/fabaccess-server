@@ -2,6 +2,7 @@ use crate::resources::Resource;
 use std::collections::HashMap;
 use std::sync::Arc;
 
+#[derive(Debug)]
 struct Inner {
     id: HashMap<String, Resource>,
 }
@@ -19,7 +20,7 @@ impl Inner {
     }
 }
 
-#[derive(Clone)]
+#[derive(Clone, Debug)]
 pub struct ResourcesHandle {
     inner: Arc<Inner>,
 }

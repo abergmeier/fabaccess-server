@@ -12,6 +12,9 @@ use capnp::capability::Promise;
 use capnp::Error;
 use capnp_rpc::pry;
 use std::borrow::Cow;
+use std::io::Write;
+use uuid::Uuid;
+use crate::CONFIG;
 
 const TARGET: &str = "bffh::api::user";
 
@@ -333,35 +336,54 @@ impl card_d_e_s_fire_e_v2::Server for User {
     fn gen_card_token(
         &mut self,
         _: GenCardTokenParams,
-        _: GenCardTokenResults,
+        mut results: GenCardTokenResults,
     ) -> Promise<(), Error> {
         let _guard = self.span.enter();
-        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+        let _span = tracing::trace_span!(target: TARGET, "get_card_token").entered();
         tracing::trace!("method call");
-        Promise::err(Error::unimplemented(format!(
-            "Method get_token_list is not implemented yet"
-        )))
+
+        results.get().set_token(Uuid::new_v4().as_bytes());
+
+        Promise::ok(())
     }
 
-    fn get_meta_info(&mut self, _: GetMetaInfoParams, _: GetMetaInfoResults) -> Promise<(), Error> {
+    fn get_meta_info(&mut self, _: GetMetaInfoParams, mut results: GetMetaInfoResults)
+        -> Promise<(), Error>
+    {
         let _guard = self.span.enter();
-        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+        let _span = tracing::trace_span!(target: TARGET, "get_meta_info").entered();
         tracing::trace!("method call");
-        Promise::err(Error::unimplemented(format!(
-            "Method get_token_list is not implemented yet"
-        )))
+
+        results.get().set_bytes(b"FABACCESS\x00DESFIRE\x001.0\x00");
+
+        Promise::ok(())
     }
 
     fn get_space_info(
         &mut self,
         _: GetSpaceInfoParams,
-        _: GetSpaceInfoResults,
+       mut results: GetSpaceInfoResults,
     ) -> Promise<(), Error> {
         let _guard = self.span.enter();
-        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+        let _span = tracing::trace_span!(target: TARGET, "get_space_info").entered();
         tracing::trace!("method call");
-        Promise::err(Error::unimplemented(format!(
-            "Method get_token_list is not implemented yet"
-        )))
+
+        let space = if let Some(space) = CONFIG.get().and_then(|c| c.spacename.as_ref()) {
+            space
+        } else {
+            return Promise::err(Error::failed("No space name configured".to_string()));
+        };
+
+        let url = if let Some(url) = CONFIG.get().and_then(|c| c.instanceurl.as_ref()) {
+            url
+        } else {
+            return Promise::err(Error::failed("No instance url configured".to_string()));
+        };
+
+        let mut data = Vec::new();
+        write!(&mut data, "urn:fabaccess:lab:{space}\x00{url}").unwrap();
+        results.get().set_bytes(&data);
+
+        Promise::ok(())
     }
 }

@@ -81,6 +81,8 @@ pub struct Diflouroborane {
 
 pub static RESOURCES: OnceCell<ResourcesHandle> = OnceCell::new();
 
+pub static CONFIG: OnceCell<Config> = OnceCell::new();
+
 struct SignalHandlerErr;
 impl error::Description for SignalHandlerErr {
     const CODE: &'static str = "signals::new";
@@ -182,7 +184,8 @@ impl Diflouroborane {
                 desc.clone(),
             )))
         }));
-        RESOURCES.set(resources.clone());
+        RESOURCES.set(resources.clone()).unwrap();
+        CONFIG.set(config.clone()).unwrap();
 
         Ok(Self {
             config,
