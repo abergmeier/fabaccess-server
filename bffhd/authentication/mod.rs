@@ -61,12 +61,14 @@ impl SessionCallback for Callback {
                     let authcid = context
                         .get_ref::<AuthId>()
                         .ok_or(ValidationError::MissingRequiredProperty)?;
-                    let authzid = context.get_ref::<AuthzId>();
+                    let authzid = context
+                        .get_ref::<AuthzId>()
+                        .ok_or(ValidationError::MissingRequiredProperty)?;
                     let password = context
                         .get_ref::<Password>()
                         .ok_or(ValidationError::MissingRequiredProperty)?;
 
-                    if authzid.is_some() {
+                    if !authzid.is_empty() {
                         return Ok(());
                     }
 

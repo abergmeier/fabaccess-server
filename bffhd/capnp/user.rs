@@ -1,6 +1,7 @@
 use crate::authorization::permissions::Permission;
 use crate::session::SessionHandle;
 use crate::users::{db, UserRef};
+use crate::CONFIG;
 use api::general_capnp::optional;
 use api::user_capnp::user::card_d_e_s_fire_e_v2::{
     BindParams, BindResults, GenCardTokenParams, GenCardTokenResults, GetMetaInfoParams,
@@ -14,7 +15,6 @@ use capnp_rpc::pry;
 use std::borrow::Cow;
 use std::io::Write;
 use uuid::Uuid;
-use crate::CONFIG;
 
 const TARGET: &str = "bffh::api::user";
 
@@ -347,9 +347,11 @@ impl card_d_e_s_fire_e_v2::Server for User {
         Promise::ok(())
     }
 
-    fn get_meta_info(&mut self, _: GetMetaInfoParams, mut results: GetMetaInfoResults)
-        -> Promise<(), Error>
-    {
+    fn get_meta_info(
+        &mut self,
+        _: GetMetaInfoParams,
+        mut results: GetMetaInfoResults,
+    ) -> Promise<(), Error> {
         let _guard = self.span.enter();
         let _span = tracing::trace_span!(target: TARGET, "get_meta_info").entered();
         tracing::trace!("method call");
@@ -362,7 +364,7 @@ impl card_d_e_s_fire_e_v2::Server for User {
     fn get_space_info(
         &mut self,
         _: GetSpaceInfoParams,
-       mut results: GetSpaceInfoResults,
+        mut results: GetSpaceInfoResults,
     ) -> Promise<(), Error> {
         let _guard = self.span.enter();
         let _span = tracing::trace_span!(target: TARGET, "get_space_info").entered();
