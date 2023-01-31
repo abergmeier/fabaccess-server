@@ -73,6 +73,7 @@ impl User {
         }
         if session.has_perm(Permission::new("bffh.users.admin")) {
             builder.set_admin(capnp_rpc::new_client(client.clone()));
+            builder.set_card_d_e_s_fire_e_v2(capnp_rpc::new_client(client));
         }
     }
 }
