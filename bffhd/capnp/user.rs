@@ -371,13 +371,13 @@ impl card_d_e_s_fire_e_v2::Server for User {
         let _span = tracing::trace_span!(target: TARGET, "get_space_info").entered();
         tracing::trace!("method call");
 
-        let space = if let Some(space) = CONFIG.get().and_then(|c| c.spacename.as_ref()) {
+        let space = if let Some(space) = CONFIG.get().map(|c| c.spacename.as_str()) {
             space
         } else {
             return Promise::err(Error::failed("No space name configured".to_string()));
         };
 
-        let url = if let Some(url) = CONFIG.get().and_then(|c| c.instanceurl.as_ref()) {
+        let url = if let Some(url) = CONFIG.get().map(|c| c.instanceurl.as_str()) {
             url
         } else {
             return Promise::err(Error::failed("No instance url configured".to_string()));

@@ -168,8 +168,8 @@ impl Default for Config {
             tlskeylog: None,
             verbosity: 0,
             logging: LogConfig::default(),
-            instanceurl: None,
-            spacename: None,
+            instanceurl: "".into(),
+            spacename: "".into(),
         }
     }
 }
