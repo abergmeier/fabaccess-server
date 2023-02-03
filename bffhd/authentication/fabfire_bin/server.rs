@@ -16,6 +16,7 @@ use std::io::Write;
 use std::sync::Arc;
 
 use crate::authentication::fabfire::FabFireCardKey;
+use crate::CONFIG;
 
 enum FabFireError {
     ParseError,
@@ -128,13 +129,20 @@ const MAGIC: &'static str = "FABACCESS\0DESFIRE\01.0\0";
 
 impl FabFire {
     pub fn new_server(_sasl: &SASLConfig) -> Result<Box<dyn Authentication>, SASLError> {
+        let space = if let Some(space) = CONFIG.get().map(|c| c.spacename.as_str()) {
+            space
+        } else {
+            tracing::error!("No space configured");
+            "generic"
+        };
+
         Ok(Box::new(Self {
             step: Step::New,
             card_info: None,
             key_info: None,
             auth_info: None,
             app_id: 0x464142,
-            local_urn: "urn:fabaccess:lab:innovisionlab".to_string(),
+            local_urn: "urn:fabaccess:lab:{space}".into(),
             desfire: Desfire {
                 card: None,
                 session_key: None,
