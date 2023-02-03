@@ -201,7 +201,7 @@ impl card_d_e_s_fire_e_v2::Server for User {
         let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
         tracing::trace!("method call");
 
-        // TODO: This only supports a sigle key per user
+        // TODO: This only supports a single token per user
         let user = pry!(self
             .session
             .users
@@ -210,27 +210,27 @@ impl card_d_e_s_fire_e_v2::Server for User {
                 "User API object with nonexisting user \"{}\"",
                 self.user.get_username()
             ))));
-        let ck = user
+        let tk = user
             .userdata
             .kv
-            .get("cardkey")
+            .get("cardtoken")
             .map(|ck| hex::decode(ck).ok())
             .flatten()
             .unwrap_or_else(|| {
-                tracing::debug!(user.id = &user.id, "no DESFire keys stored");
+                tracing::debug!(user.id = &user.id, "no tokens stored");
                 Vec::new()
             });
-        if !ck.is_empty() {
+        if !tk.is_empty() {
             let mut b = results.get();
             let mut lb = b.init_token_list(1);
-            lb.set(0, &ck[..]);
+            lb.set(0, &tk[..]);
         }
         Promise::ok(())
     }
 
     fn bind(&mut self, params: BindParams, _: BindResults) -> Promise<(), Error> {
         let _guard = self.span.enter();
-        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+        let _span = tracing::trace_span!(target: TARGET, "bind").entered();
         let params = pry!(params.get());
         let card_key = pry!(params.get_auth_key());
         let token = pry!(params.get_token());
@@ -298,12 +298,16 @@ impl card_d_e_s_fire_e_v2::Server for User {
             .kv
             .insert("cardtoken".to_string(), token.to_string());
         user.userdata.kv.insert("cardkey".to_string(), card_key);
+
+        self.session
+            .users
+            .put_user(self.user.get_username(), &user);
         Promise::ok(())
     }
 
     fn unbind(&mut self, params: UnbindParams, _: UnbindResults) -> Promise<(), Error> {
         let _guard = self.span.enter();
-        let _span = tracing::trace_span!(target: TARGET, "get_token_list").entered();
+        let _span = tracing::trace_span!(target: TARGET, "unbind").entered();
 
         let params = pry!(params.get());
         let token = pry!(params.get_token());
@@ -326,10 +330,18 @@ impl card_d_e_s_fire_e_v2::Server for User {
             ))));
         if let Some(prev_token) = user.userdata.kv.get("cardtoken") {
             if token.as_ref() == prev_token.as_str() {
+                tracing::debug!(
+                user.id, token = token.as_ref(),
+                "removing card key/token pair"
+            );
                 user.userdata.kv.remove("cardtoken");
                 user.userdata.kv.remove("cardkey");
             }
         }
+
+        self.session
+            .users
+            .put_user(self.user.get_username(), &user);
 
         Promise::ok(())
     }
@@ -340,7 +352,7 @@ impl card_d_e_s_fire_e_v2::Server for User {
         mut results: GenCardTokenResults,
     ) -> Promise<(), Error> {
         let _guard = self.span.enter();
-        let _span = tracing::trace_span!(target: TARGET, "get_card_token").entered();
+        let _span = tracing::trace_span!(target: TARGET, "gen_card_token").entered();
         tracing::trace!("method call");
 
         results.get().set_token(Uuid::new_v4().as_bytes());
