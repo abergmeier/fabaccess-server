@@ -142,7 +142,7 @@ impl FabFire {
             key_info: None,
             auth_info: None,
             app_id: 0x464142,
-            local_urn: "urn:fabaccess:lab:{space}".into(),
+            local_urn: format!("urn:fabaccess:lab:{space}"),
             desfire: Desfire {
                 card: None,
                 session_key: None,
