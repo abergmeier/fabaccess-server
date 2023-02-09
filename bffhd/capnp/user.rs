@@ -299,9 +299,7 @@ impl card_d_e_s_fire_e_v2::Server for User {
             .insert("cardtoken".to_string(), token.to_string());
         user.userdata.kv.insert("cardkey".to_string(), card_key);
 
-        self.session
-            .users
-            .put_user(self.user.get_username(), &user);
+        self.session.users.put_user(self.user.get_username(), &user);
         Promise::ok(())
     }
 
@@ -331,17 +329,16 @@ impl card_d_e_s_fire_e_v2::Server for User {
         if let Some(prev_token) = user.userdata.kv.get("cardtoken") {
             if token.as_ref() == prev_token.as_str() {
                 tracing::debug!(
-                user.id, token = token.as_ref(),
-                "removing card key/token pair"
-            );
+                    user.id,
+                    token = token.as_ref(),
+                    "removing card key/token pair"
+                );
                 user.userdata.kv.remove("cardtoken");
                 user.userdata.kv.remove("cardkey");
             }
         }
 
-        self.session
-            .users
-            .put_user(self.user.get_username(), &user);
+        self.session.users.put_user(self.user.get_username(), &user);
 
         Promise::ok(())
     }
