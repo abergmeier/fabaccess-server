@@ -229,6 +229,9 @@
     -- Linking up machines to initiators. Similar to actors a machine can have several initiators assigned but an
     -- initiator can only be assigned to one machine.
     -- The below is once again how you have to define *no* initiators.
-    init_connections = [] : List { machine : Text, initiator : Text }
+    init_connections = [] : List { machine : Text, initiator : Text },
     --init_connections = [{ machine = "Testmachine", initiator = "Initiator" }]
+
+    instanceurl = "https://example.com",
+    spacename = "examplespace"
 }
