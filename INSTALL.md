@@ -31,6 +31,7 @@ Diflouroborane uses Cargo, so compilation boils down to:
 ```shell
 $ cargo build --release
 ```
+https://www.geeksforgeeks.org/how-to-install-rust-on-raspberry-pi/ can show you how to install rust on your Linux computer.
 
 The compiled binary can then be found in `./target/release/bffhd`
 
