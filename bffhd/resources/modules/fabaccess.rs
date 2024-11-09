@@ -3,7 +3,6 @@ use crate::utils::oid::ObjectIdentifier;
 use once_cell::sync::Lazy;
 use rkyv::{Archive, Archived, Deserialize, Infallible};
 use std::fmt;
-use std::fmt::Write;
 use std::str::FromStr;
 
 //use crate::oidvalue;

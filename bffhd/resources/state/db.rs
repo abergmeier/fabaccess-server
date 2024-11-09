@@ -3,10 +3,8 @@ use thiserror::Error;
 use crate::db;
 use crate::db::{AlignedAdapter, ArchivedValue, RawDB, DB};
 use lmdb::{DatabaseFlags, Environment, EnvironmentFlags, Transaction, WriteFlags};
-use miette::{Diagnostic, LabeledSpan, Severity, SourceCode};
-use std::any::TypeId;
-use std::error::Error;
-use std::fmt::{Debug, Display, Formatter};
+use miette::Diagnostic;
+use std::fmt::Debug;
 use std::{path::Path, sync::Arc};
 
 use crate::resources::state::State;

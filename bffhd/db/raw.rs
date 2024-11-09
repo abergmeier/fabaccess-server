@@ -1,4 +1,3 @@
-use super::Result;
 use lmdb::{DatabaseFlags, Environment, RwTransaction, Transaction, WriteFlags};
 
 #[derive(Debug, Clone)]

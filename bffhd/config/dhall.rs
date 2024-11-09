@@ -1,8 +1,6 @@
 use std::collections::HashMap;
 use std::default::Default;
-use std::error::Error;
-use std::fmt::{Debug, Display};
-use std::marker::PhantomData;
+use std::fmt::Debug;
 use std::path::PathBuf;
 
 use serde::{Deserialize, Serialize};
@@ -12,7 +10,6 @@ use crate::authorization::roles::Role;
 use crate::capnp::{Listen, TlsListen};
 use crate::logging::LogConfig;
 
-use miette::IntoDiagnostic;
 use std::path::Path;
 
 #[derive(Debug)]

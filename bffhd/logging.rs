@@ -2,8 +2,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 use tracing_subscriber::fmt::format::Format;
 use tracing_subscriber::prelude::*;
-use tracing_subscriber::reload::Handle;
-use tracing_subscriber::{reload, EnvFilter};
+use tracing_subscriber::EnvFilter;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct LogConfig {

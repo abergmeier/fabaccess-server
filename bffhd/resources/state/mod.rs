@@ -1,5 +1,5 @@
 use std::fmt::{Debug, Display, Formatter};
-use std::{fmt, hash::Hasher};
+use std::fmt;
 
 use std::ops::Deref;
 

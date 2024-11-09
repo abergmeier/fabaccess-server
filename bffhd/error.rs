@@ -1,4 +1,4 @@
-use miette::{Diagnostic, LabeledSpan, Severity, SourceCode};
+use miette::{Diagnostic, Severity};
 use std::error;
 use std::fmt::{Display, Formatter};
 use std::io;

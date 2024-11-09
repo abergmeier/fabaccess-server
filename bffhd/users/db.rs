@@ -2,7 +2,6 @@ use lmdb::{DatabaseFlags, Environment, RwTransaction, Transaction, WriteFlags};
 use rkyv::Infallible;
 use std::collections::HashMap;
 
-use miette::{Context, IntoDiagnostic};
 use std::sync::Arc;
 
 use crate::db;

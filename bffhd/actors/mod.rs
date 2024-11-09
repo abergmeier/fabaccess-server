@@ -12,7 +12,7 @@ use std::future::Future;
 
 use std::pin::Pin;
 
-use miette::{Diagnostic, IntoDiagnostic};
+use miette::Diagnostic;
 use std::task::{Context, Poll};
 use std::time::Duration;
 use thiserror::Error;

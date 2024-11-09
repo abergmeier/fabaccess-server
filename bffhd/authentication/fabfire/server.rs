@@ -2,7 +2,6 @@ use desfire::desfire::desfire::MAX_BYTES_PER_TRANSACTION;
 use desfire::desfire::Desfire;
 use desfire::error::Error as DesfireError;
 use desfire::iso7816_4::apduresponse::APDUResponse;
-use rsasl::callback::SessionData;
 use rsasl::mechanism::{
     Authentication, Demand, DemandReply, MechanismData, MechanismError, MechanismErrorKind,
     Provider, State, ThisProvider,
@@ -13,7 +12,6 @@ use serde::{Deserialize, Serialize};
 use std::convert::TryFrom;
 use std::fmt::{Debug, Display, Formatter};
 use std::io::Write;
-use std::sync::Arc;
 
 use crate::authentication::fabfire::FabFireCardKey;
 

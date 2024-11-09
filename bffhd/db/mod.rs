@@ -2,9 +2,9 @@ use thiserror::Error;
 
 mod raw;
 
-use miette::{Diagnostic, LabeledSpan, Severity, SourceCode};
+use miette::{Diagnostic, Severity};
 pub use raw::RawDB;
-use std::fmt::{Debug, Display, Formatter};
+use std::fmt::{Debug, Display};
 
 mod typed;
 pub use typed::{Adapter, AlignedAdapter, ArchivedValue, DB};

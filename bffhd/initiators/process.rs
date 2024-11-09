@@ -1,10 +1,9 @@
 use super::Initiator;
 use super::InitiatorCallbacks;
 use crate::resources::modules::fabaccess::Status;
-use crate::resources::state::State;
 use crate::utils::linebuffer::LineBuffer;
 use async_process::{Child, ChildStderr, ChildStdout, Command, Stdio};
-use futures_lite::{ready, AsyncRead};
+use futures_lite::AsyncRead;
 use miette::{miette, IntoDiagnostic};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;

@@ -9,7 +9,6 @@
 //! The entry point of bffhd can be found in [bin/bffhd/main.rs](../bin/bffhd/main.rs)
 
 use miette::Diagnostic;
-use std::io;
 use thiserror::Error;
 
 pub mod config;
@@ -48,7 +47,6 @@ mod tls;
 use std::sync::Arc;
 
 use futures_util::{FutureExt, StreamExt};
-use miette::{Context, IntoDiagnostic, Report};
 use once_cell::sync::OnceCell;
 
 use crate::audit::AuditLog;

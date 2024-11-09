@@ -3,22 +3,15 @@ use crate::initiators::process::Process;
 use crate::resources::modules::fabaccess::Status;
 use crate::session::SessionHandle;
 use crate::{
-    AuthenticationHandle, Config, MachineState, Resource, ResourcesHandle, SessionManager,
+    AuthenticationHandle, Config, Resource, ResourcesHandle, SessionManager,
 };
-use async_compat::CompatExt;
 use executor::prelude::Executor;
 use futures_util::ready;
-use miette::IntoDiagnostic;
-use rumqttc::ConnectReturnCode::Success;
-use rumqttc::{AsyncClient, ConnectionError, Event, Incoming, MqttOptions};
 use std::collections::HashMap;
-use std::fmt::Display;
 use std::future::Future;
 use std::pin::Pin;
 use std::task::{Context, Poll};
-use std::time::Duration;
 use tracing::Span;
-use url::Url;
 
 mod dummy;
 mod process;

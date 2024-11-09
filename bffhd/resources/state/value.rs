@@ -14,8 +14,6 @@ use inventory;
 
 use rkyv::ser::{ScratchSpace, Serializer};
 
-use serde::ser::SerializeMap;
-
 use std::collections::HashMap;
 
 use std::ops::Deref;

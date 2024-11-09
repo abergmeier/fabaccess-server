@@ -1,4 +1,3 @@
-use crate::authorization::roles::Role;
 use crate::Roles;
 use api::permissionsystem_capnp::permission_system::info::{
     GetRoleListParams, GetRoleListResults, Server as PermissionSystem,

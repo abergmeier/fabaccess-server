@@ -4,10 +4,8 @@ use capnp_rpc::pry;
 use rsasl::mechname::Mechname;
 use rsasl::prelude::State as SaslState;
 use rsasl::prelude::{MessageSent, Session};
-use rsasl::property::AuthId;
 use std::fmt;
 use std::fmt::{Formatter, Write};
-use std::io::Cursor;
 use tracing::Span;
 
 use crate::authentication::V;

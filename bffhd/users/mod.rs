@@ -7,8 +7,7 @@ use std::collections::HashMap;
 use std::fmt::{Display, Formatter};
 use std::io::Write;
 
-use clap::ArgMatches;
-use miette::{Context, Diagnostic, IntoDiagnostic, SourceOffset, SourceSpan};
+use miette::{Diagnostic, IntoDiagnostic, SourceSpan};
 use std::path::Path;
 use std::sync::Arc;
 

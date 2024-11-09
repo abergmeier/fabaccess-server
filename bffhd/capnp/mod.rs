@@ -5,11 +5,11 @@ use async_net::TcpListener;
 use capnp_rpc::rpc_twoparty_capnp::Side;
 use capnp_rpc::twoparty::VatNetwork;
 use capnp_rpc::RpcSystem;
-use executor::prelude::{Executor, GroupId, SupervisionRegistry};
+use executor::prelude::{Executor, SupervisionRegistry};
 use futures_rustls::server::TlsStream;
 use futures_rustls::TlsAcceptor;
 use futures_util::stream::FuturesUnordered;
-use futures_util::{stream, AsyncRead, AsyncWrite, FutureExt, StreamExt};
+use futures_util::{stream, AsyncRead, AsyncWrite, StreamExt};
 
 use std::future::Future;
 use std::io;
