@@ -395,7 +395,7 @@ where
     unsafe fn tick(ptr: *const ()) {
         let mut raw = Self::from_ptr(ptr);
         // Enter the span associated with the process to track execution time if enabled.
-        let _guard = (&(*raw.pdata).span).enter();
+        let guard = (&(*raw.pdata).span).enter();
 
         // Create a context from the raw proc pointer and the vtable inside its pdata.
         let waker = ManuallyDrop::new(Waker::from_raw(RawWaker::new(
@@ -487,6 +487,8 @@ where
                                 (*raw.pdata).notify();
                             }
 
+                            // the tracing guard is inside the proc, so it must be dropped first
+                            drop(guard);
                             // Drop the proc reference.
                             Self::decrement(ptr);
                             break;
