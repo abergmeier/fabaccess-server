@@ -10,7 +10,6 @@ use futures_util::future::BoxFuture;
 use futures_util::ready;
 use std::collections::HashMap;
 use std::future::Future;
-use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
@@ -62,10 +61,7 @@ impl Future for Dummy {
             match &mut self.state {
                 DummyState::Empty => {
                     tracing::trace!("Dummy initiator is empty, initializing…");
-                    mem::replace(
-                        &mut self.state,
-                        DummyState::Sleeping(Self::timer(), Some(Status::Free)),
-                    );
+                    self.state = DummyState::Sleeping(Self::timer(), Some(Status::Free));
                 }
                 DummyState::Sleeping(timer, next) => {
                     tracing::trace!("Sleep timer exists, polling it.");
@@ -76,7 +72,7 @@ impl Future for Dummy {
 
                     let status = next.take().unwrap();
                     let f = self.flip(status);
-                    mem::replace(&mut self.state, DummyState::Updating(f));
+                    self.state = DummyState::Updating(f);
                 }
                 DummyState::Updating(f) => {
                     tracing::trace!("Update future exists, polling it .");
@@ -85,10 +81,7 @@ impl Future for Dummy {
 
                     tracing::trace!("Update future completed, sleeping!");
 
-                    mem::replace(
-                        &mut self.state,
-                        DummyState::Sleeping(Self::timer(), Some(next)),
-                    );
+                    self.state = DummyState::Sleeping(Self::timer(), Some(next));
                 }
             }
         }
