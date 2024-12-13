@@ -102,6 +102,7 @@ struct AuthInfo {
     iv: Vec<u8>,
 }
 
+#[allow(non_camel_case_types)]
 #[derive(Debug, Deserialize, Serialize)]
 #[serde(tag = "Cmd")]
 enum CardCommand {

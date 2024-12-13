@@ -26,7 +26,7 @@ impl Callback {
 impl SessionCallback for Callback {
     fn callback(
         &self,
-        session_data: &SessionData,
+        _session_data: &SessionData,
         context: &Context,
         request: &mut Request,
     ) -> Result<(), SessionError> {

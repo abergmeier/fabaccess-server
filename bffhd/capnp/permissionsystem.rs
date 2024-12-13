@@ -36,7 +36,7 @@ impl PermissionSystem for Permissions {
 
         tracing::trace!("method call");
         let roles = self.roles.list().collect::<Vec<&String>>();
-        let mut builder = results.get();
+        let builder = results.get();
         let mut b = builder.init_role_list(roles.len() as u32);
         for (i, role) in roles.into_iter().enumerate() {
             let mut role_builder = b.reborrow().get(i as u32);

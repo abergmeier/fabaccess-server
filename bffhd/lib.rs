@@ -229,13 +229,13 @@ impl Diflouroborane {
         self.executor.spawn(apiserver.handle_until(rx));
 
         let f = async {
-            let mut sig = None;
+            let mut sig;
             while {
                 sig = signals.next().await;
                 sig.is_none()
             } {}
             tracing::info!(signal = %sig.unwrap(), "Received signal");
-            tx.send(());
+            _ = tx.send(()); // ignore result, as an Err means that the executor we want to stop has already stopped
         };
 
         self.executor.run(f);

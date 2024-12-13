@@ -113,7 +113,7 @@ impl AuthenticationSystem for Authentication {
                 f.write_char(')')
             }
         }
-        let mut response;
+        let response;
 
         let mut builder = results.get();
         if let State::Running(mut session, manager) =

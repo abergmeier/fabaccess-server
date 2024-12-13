@@ -221,7 +221,7 @@ impl card_d_e_s_fire_e_v2::Server for User {
                 Vec::new()
             });
         if !tk.is_empty() {
-            let mut b = results.get();
+            let b = results.get();
             let mut lb = b.init_token_list(1);
             lb.set(0, &tk[..]);
         }
