@@ -100,7 +100,7 @@ pub fn load(
     config: &Config,
     resources: ResourcesHandle,
     sessions: SessionManager,
-    authentication: AuthenticationHandle,
+    _authentication: AuthenticationHandle,
 ) -> miette::Result<()> {
     let span = tracing::info_span!("loading initiators");
     let _guard = span.enter();

@@ -87,6 +87,7 @@ impl error::Description for SignalHandlerErr {
 }
 
 #[derive(Debug, Error, Diagnostic)]
+// TODO 0.5: #[non_exhaustive]
 pub enum BFFHError {
     #[error("DB operation failed")]
     DBError(
@@ -210,7 +211,9 @@ impl Diflouroborane {
             self.resources.clone(),
             sessionmanager.clone(),
             authentication.clone(),
-        );
+        ).expect("initializing initiators failed");
+        // TODO 0.5: error handling. Add variant to BFFHError
+
         actors::load(self.executor.clone(), &self.config, self.resources.clone())?;
 
         let tlsconfig = TlsConfig::new(self.config.tlskeylog.as_ref(), !self.config.is_quiet())?;
