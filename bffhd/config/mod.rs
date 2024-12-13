@@ -38,13 +38,15 @@ pub fn read(file: impl AsRef<Path>) -> Result<Config, ConfigError> {
     if !path.is_file() {
         return Err(ConfigError::NotAFile(path.to_string_lossy().to_string()));
     }
-    let mut config = dhall::read_config_file(file)?;
-    for (envvar, value) in std::env::vars() {
-        match envvar.as_str() {
-            // Do things like this?
-            // "BFFH_LOG" => config.logging.filter = Some(value),
-            _ => {}
-        }
-    }
+    let config = dhall::read_config_file(file)?;
+    // TODO: configuration by environment variables?
+    //       but rather in in a separate function
+    // for (envvar, value) in std::env::vars() {
+    //     match envvar.as_str() {
+    //         // Do things like this?
+    //         // "BFFH_LOG" => config.logging.filter = Some(value),
+    //         _ => {}
+    //     }
+    // }
     Ok(config)
 }
