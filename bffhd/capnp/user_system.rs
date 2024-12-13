@@ -84,7 +84,7 @@ impl manage::Server for Users {
             "method call"
         );
 
-        let mut builder = result.get();
+        let builder = result.get();
 
         if !username.is_empty() && !password.is_empty() {
             if self.session.users.get_user(username).is_none() {

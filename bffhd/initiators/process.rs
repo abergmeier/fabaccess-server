@@ -116,7 +116,7 @@ impl ProcessState {
 impl Future for Process {
     type Output = ();
 
-    fn poll(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         if let Process {
             state: Some(state),
             buffer,

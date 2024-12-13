@@ -211,7 +211,6 @@ impl ManageServer for Machine {
         mut result: manage::GetMachineInfoExtendedResults,
     ) -> Promise<(), ::capnp::Error> {
         let mut builder = result.get();
-        let user = User::new_self(self.session.clone());
         User::build_optional(
             &self.session,
             self.resource.get_current_user(),
