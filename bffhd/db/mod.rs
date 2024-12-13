@@ -1,5 +1,8 @@
 use thiserror::Error;
 
+// for converting a database error into a failed promise
+use capnp;
+
 mod raw;
 
 use miette::{Diagnostic, Severity};
@@ -77,5 +80,11 @@ impl Diagnostic for Error {
 
     fn url<'a>(&'a self) -> Option<Box<dyn Display + 'a>> {
         None
+    }
+}
+
+impl From<Error> for capnp::Error {
+    fn from(dberr: Error) -> capnp::Error {
+        capnp::Error::failed(format!("database error: {}", dberr.to_string()))
     }
 }

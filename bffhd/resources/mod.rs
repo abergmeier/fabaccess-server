@@ -85,10 +85,13 @@ impl Inner {
         self.db.put(&self.id.as_bytes(), &state).unwrap();
         tracing::trace!("Updated DB, sending update signal");
 
-        AUDIT
+        let res = AUDIT
             .get()
             .unwrap()
             .log(self.id.as_str(), &format!("{}", state));
+        if let Err(e) = res {
+            tracing::error!("Writing to the audit log failed for {} {}: {e}", self.id.as_str(), state);
+        }
 
         self.signal.set(state);
         tracing::trace!("Sent update signal");
@@ -161,7 +164,7 @@ impl Resource {
 
     fn set_state(&self, state: MachineState) {
         let mut serializer = AllocSerializer::<1024>::default();
-        serializer.serialize_value(&state);
+        serializer.serialize_value(&state).expect("serializing a MachineState shoud be infallible");
         let archived = ArchivedValue::new(serializer.into_serializer().into_inner());
         self.inner.set_state(archived)
     }

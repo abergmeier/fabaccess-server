@@ -52,8 +52,8 @@ impl StateDB {
     }
 
     pub fn open_with_env(env: Arc<Environment>) -> Result<Self, StateDBError> {
-        let db = unsafe { RawDB::open(&env, Some("state")) };
-        let db = db.map_err(|e| StateDBError::Open(e.into()))?;
+        let db = RawDB::open(&env, Some("state"))
+            .map_err(|e| StateDBError::Open(e.into()))?;
         Ok(Self::new(env, db))
     }
 
@@ -64,8 +64,8 @@ impl StateDB {
 
     pub fn create_with_env(env: Arc<Environment>) -> Result<Self, StateDBError> {
         let flags = DatabaseFlags::empty();
-        let db = unsafe { RawDB::create(&env, Some("state"), flags) };
-        let db = db.map_err(|e| StateDBError::Create(e.into()))?;
+        let db = RawDB::create(&env, Some("state"), flags)
+            .map_err(|e| StateDBError::Create(e.into()))?;
 
         Ok(Self::new(env, db))
     }

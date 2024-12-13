@@ -89,8 +89,8 @@ impl manage::Server for Users {
         if !username.is_empty() && !password.is_empty() {
             if self.session.users.get_user(username).is_none() {
                 let user = db::User::new_with_plain_pw(username, password);
-                self.session.users.put_user(username, &user);
-                let mut builder = builder.init_successful();
+                pry!(self.session.users.put_user(username, &user));
+                let builder = builder.init_successful();
                 User::fill(&self.session, user, builder);
             } else {
                 let mut builder = builder.init_failed();

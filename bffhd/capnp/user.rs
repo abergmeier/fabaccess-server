@@ -109,7 +109,7 @@ impl manage::Server for User {
         if let Some(mut user) = self.session.users.get_user(uid) {
             if let Ok(true) = user.check_password(old_pw.as_bytes()) {
                 user.set_pw(new_pw.as_bytes());
-                self.session.users.put_user(uid, &user);
+                pry!(self.session.users.put_user(uid, &user));
             }
         }
         Promise::ok(())
@@ -143,9 +143,9 @@ impl admin::Server for User {
             // Only update if needed
             if !target.userdata.roles.iter().any(|r| r.as_str() == rolename) {
                 target.userdata.roles.push(rolename.to_string());
-                self.session
+                pry!(self.session
                     .users
-                    .put_user(self.user.get_username(), &target);
+                    .put_user(self.user.get_username(), &target));
             }
         }
 
@@ -168,9 +168,9 @@ impl admin::Server for User {
             // Only update if needed
             if target.userdata.roles.iter().any(|r| r.as_str() == rolename) {
                 target.userdata.roles.retain(|r| r.as_str() != rolename);
-                self.session
+                pry!(self.session
                     .users
-                    .put_user(self.user.get_username(), &target);
+                    .put_user(self.user.get_username(), &target));
             }
         }
 
@@ -185,7 +185,7 @@ impl admin::Server for User {
         let uid = self.user.get_username();
         if let Some(mut user) = self.session.users.get_user(uid) {
             user.set_pw(new_pw.as_bytes());
-            self.session.users.put_user(uid, &user);
+            pry!(self.session.users.put_user(uid, &user));
         }
         Promise::ok(())
     }
@@ -299,7 +299,8 @@ impl card_d_e_s_fire_e_v2::Server for User {
             .insert("cardtoken".to_string(), token.to_string());
         user.userdata.kv.insert("cardkey".to_string(), card_key);
 
-        self.session.users.put_user(self.user.get_username(), &user);
+        pry!(self.session.users.put_user(self.user.get_username(), &user));
+
         Promise::ok(())
     }
 
@@ -338,7 +339,7 @@ impl card_d_e_s_fire_e_v2::Server for User {
             }
         }
 
-        self.session.users.put_user(self.user.get_username(), &user);
+        pry!(self.session.users.put_user(self.user.get_username(), &user));
 
         Promise::ok(())
     }

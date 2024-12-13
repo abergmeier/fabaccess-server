@@ -182,9 +182,8 @@ impl UserDB {
     }
 
     pub fn clear_txn(&self, txn: &mut RwTransaction) -> Result<(), db::Error> {
-        // TODO: why is the result ignored here?
-        self.db.clear(txn);
-        Ok(())
+        // TODO: why was the result ignored here?
+        self.db.clear(txn)
     }
 
     pub fn get_all(&self) -> Result<HashMap<String, UserData>, db::Error> {
