@@ -1,6 +1,6 @@
-# FabAccess Diflouroborane
+# FabAccess Difluoroborane
 
-Diflouroborane (shorter: BFFH, the chemical formula for Diflouroborane) is the server part of
+Difluoroborane (shorter: BFFH, the chemical formula for Difluoroborane) is the server part of
 FabAccess.
 It provides a server-side implementation of the [FabAccess API](https://gitlab.com/fabinfra/fabaccess/fabaccess-api).
 

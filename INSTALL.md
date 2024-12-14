@@ -1,10 +1,10 @@
 # Installation
 
 Currently there are no distribution packages available.
-However installation is reasonably straight-forward, since Diflouroborane compiles into a single
+However installation is reasonably straight-forward, since Difluoroborane compiles into a single
 mostly static binary with few dependencies.
 
-At the moment only Linux is supported. If you managed to compile Diflouroborane please open an issue
+At the moment only Linux is supported. If you managed to compile Difluoroborane please open an issue
 outlining your steps or add a merge request expanding this part. Thanks!
 
 ## Requirements
@@ -12,7 +12,7 @@ outlining your steps or add a merge request expanding this part. Thanks!
 General requirements; scroll down for distribution-specific instructions
 
 - GNU SASL (libgsasl).
-  * If you want to compile Diflouroborane from source you will potentially also need development
+  * If you want to compile Difluoroborane from source you will potentially also need development
       headers
 - capnproto
 - rustc stable / nightly >= 1.48
@@ -26,7 +26,7 @@ $ pacman -S gsasl rust capnproto
 
 ## Compiling from source
 
-Diflouroborane uses Cargo, so compilation boils down to:
+Difluoroborane uses Cargo, so compilation boils down to:
 
 ```shell
 $ cargo build --release

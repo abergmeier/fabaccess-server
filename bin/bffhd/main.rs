@@ -1,5 +1,5 @@
 use clap::{Arg, Command, ValueHint};
-use diflouroborane::{config, Diflouroborane};
+use difluoroborane::{config, Difluoroborane};
 
 use std::str::FromStr;
 use std::{env, io, io::Write, path::PathBuf};
@@ -15,12 +15,12 @@ fn main() -> miette::Result<()> {
             FabAccess {apiver}\n\
             \t[{build_kind} build built on {build_time}]\n\
             \t  {rustc_version}\n\t  {cargo_version}",
-            version=diflouroborane::env::PKG_VERSION,
+            version=difluoroborane::env::PKG_VERSION,
             apiver="0.3",
-            rustc_version=diflouroborane::env::RUST_VERSION,
-            cargo_version=diflouroborane::env::CARGO_VERSION,
-            build_time=diflouroborane::env::BUILD_TIME_3339,
-            build_kind=diflouroborane::env::BUILD_RUST_CHANNEL))
+            rustc_version=difluoroborane::env::RUST_VERSION,
+            cargo_version=difluoroborane::env::CARGO_VERSION,
+            build_time=difluoroborane::env::BUILD_TIME_3339,
+            build_kind=difluoroborane::env::BUILD_RUST_CHANNEL))
         .about(clap::crate_description!())
         .arg(Arg::new("config")
                 .help("Path to the config file to use")
@@ -98,7 +98,7 @@ fn main() -> miette::Result<()> {
 
     let configpath = matches
         .value_of("config")
-        .unwrap_or("/etc/diflouroborane.dhall");
+        .unwrap_or("/etc/difluoroborane.dhall");
 
     // Check for the --print-default option first because we don't need to do anything else in that
     // case.
@@ -140,7 +140,7 @@ fn main() -> miette::Result<()> {
     if matches.is_present("dump") {
         return Err(miette::miette!("DB Dumping is currently not implemented, except for the users db, using `--dump-users`"));
     } else if matches.is_present("dump-users") {
-        let bffh = Diflouroborane::new(config)?;
+        let bffh = Difluoroborane::new(config)?;
 
         let number = bffh.users.dump_file(
             matches.value_of("dump-users").unwrap(),
@@ -151,7 +151,7 @@ fn main() -> miette::Result<()> {
 
         return Ok(());
     } else if matches.is_present("load") {
-        let bffh = Diflouroborane::new(config)?;
+        let bffh = Difluoroborane::new(config)?;
 
         bffh.users.load_file(matches.value_of("load").unwrap())?;
 
@@ -179,7 +179,7 @@ fn main() -> miette::Result<()> {
         }
         config.logging.format = matches.value_of("log format").unwrap_or("full").to_string();
 
-        let mut bffh = Diflouroborane::new(config)?;
+        let mut bffh = Difluoroborane::new(config)?;
         bffh.run()?;
     }
 

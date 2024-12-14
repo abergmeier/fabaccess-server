@@ -56,7 +56,7 @@ But before you open an issue in this repo for a feature request, please first ch
 
 ## Contributing Code
 
-To help develop Diflouroborane you will need a Rust toolchain. I heavily recommend installing
+To help develop Difluoroborane you will need a Rust toolchain. I heavily recommend installing
 [rustup](https://rustup.rs) even if your distribution provides a recent enough rustc, simply because
 it allows to easily switch compilers between several versions of both stable and nightly. It also
 allows you to download the respective stdlib crate, giving you the option of an offline reference.

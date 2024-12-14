@@ -3,7 +3,7 @@
 //#![warn(missing_docs)]
 //#![warn(missing_crate_level_docs)]
 
-//! Diflouroborane
+//! Difluoroborane
 //!
 //! This is the capnp component of the FabAccess project.
 //! The entry point of bffhd can be found in [bin/bffhd/main.rs](../bin/bffhd/main.rs)
@@ -67,7 +67,7 @@ use lightproc::recoverable_handle::RecoverableHandle;
 use signal_hook::consts::signal::*;
 use tracing::Span;
 
-pub struct Diflouroborane {
+pub struct Difluoroborane {
     config: Config,
     executor: Executor<'static>,
     pub statedb: StateDB,
@@ -135,7 +135,7 @@ pub enum BFFHError {
     ),
 }
 
-impl Diflouroborane {
+impl Difluoroborane {
     pub fn setup() {}
 
     pub fn new(config: Config) -> Result<Self, BFFHError> {
