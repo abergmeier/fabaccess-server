@@ -8,4 +8,4 @@ edition = "2021"
 [dependencies]
 sdk-proc = { path = "sdk_proc" }
 futures-util = "0.3"
-diflouroborane = { path = "../.." }
+difluoroborane = { path = "../.." }
