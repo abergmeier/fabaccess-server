@@ -10,6 +10,25 @@ machines and other equipment that is dangerous or expensive to use. It tries to 
 to be used for all other things one would like to give exclusive access to even when they are not
 dangerous or expensive to use (think 3D printers, smart lightbulbs, meeting rooms).
 
+## Details
+
+```mermaid
+flowchart TD
+  subgraph fabaccessd
+    subgraph DB
+      LMDB
+    end
+    subgraph REST
+      USERs
+      ROLES
+      RESSOURCES
+    end
+    USERs --> DB
+    ROLES --> DB
+    RESSOURCES --> DB
+  end
+```
+
 
 ## History
 
