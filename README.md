@@ -1,8 +1,6 @@
-# FabAccess Difluoroborane
+# FabAccess Server
 
-Difluoroborane (shorter: BFFH, the chemical formula for Difluoroborane) is the server part of
-FabAccess.
-It provides a server-side implementation of the [FabAccess API](https://gitlab.com/fabinfra/fabaccess/fabaccess-api).
+Binary is named **fabaccessd**.
 
 ## What is this?
 
@@ -12,16 +10,9 @@ machines and other equipment that is dangerous or expensive to use. It tries to 
 to be used for all other things one would like to give exclusive access to even when they are not
 dangerous or expensive to use (think 3D printers, smart lightbulbs, meeting rooms).
 
-FabAccess uses a Client/Server architecture with a [Cap'n Proto](https://capnproto.org/) API. You
-can find the API schema files over [in their own repository](https://gitlab.com/fabinfra/fabaccess/fabaccess-api).
-The reference client is [Borepin](https://gitlab.com/fabinfra/fabaccess/borepin), written in C#/Xamarin to be able to
-be ported to as many platforms as possible.
 
+## History
 
-## Installation
+### Previous name
 
-See [INSTALL.md](INSTALL.md)
-
-## Contributing
-
-See [CONTRIBUTING.md](CONTRIBUTING.md). Thanks!
+Previously a more academic name was used for the server (Difluoroborane, short BFFH). In the effort to get development more straight forward - a more straight forward name was chosen.
